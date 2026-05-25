@@ -606,16 +606,17 @@ body.hotel-print-mode #_hpm{display:block!important;}
 
 /* Hotel nav — mobile */
 @media(max-width:640px){
-  #hotelApp nav{height:auto;padding:8px 10px;flex-wrap:wrap;gap:8px;}
-  #hotelApp .hotel-brand{flex-shrink:0;}
+  #hotelApp nav{height:auto;}
+  #hotelApp .hotel-nav-inner{flex-wrap:wrap;padding:6px 10px;min-height:auto;gap:4px;}
+  #hotelApp .hotel-brand{flex-shrink:0;padding-right:8px!important;border-right:none!important;}
   #hotelApp .hotel-nav-tabs{
     order:3;width:100%;overflow-x:auto;
     scrollbar-width:none;padding:3px;gap:1px;
     background:rgba(0,0,0,.2);border-radius:9px;
   }
   #hotelApp .hotel-nav-tabs::-webkit-scrollbar{display:none;}
-  #hotelApp [id^="htab-"]{padding:5px 9px;font-size:10px;flex-shrink:0;}
-  #hotelApp .hotel-nav-right{gap:5px;}
+  #hotelApp [id^="htab-"]{padding:5px 9px;font-size:10px;flex-shrink:0;height:38px!important;}
+  #hotelApp .hotel-nav-right{gap:5px;margin-left:auto;padding-left:8px!important;border-left:none!important;}
   #hotelApp .hotel-nav-right button{padding:5px 8px;font-size:10px;}
   #hotelApp .content,#hotelApp [style*="padding:20px 24px"]{padding:12px 10px!important;}
   #hotelApp .metrics{grid-template-columns:1fr 1fr!important;gap:10px!important;}
@@ -2484,16 +2485,16 @@ select:focus, textarea:focus {
 
 <!-- HOTEL TOP NAV -->
 <nav id="hotelNav" style="background:#0d1b2e;position:sticky;top:0;z-index:100;border-bottom:1px solid rgba(201,168,76,.25);box-shadow:0 2px 20px rgba(0,0,0,.5);">
-  <div style="display:grid;grid-template-columns:auto 1fr auto;align-items:stretch;height:54px;padding:0 16px;gap:0;">
-    <div style="display:flex;align-items:center;gap:10px;padding-right:16px;border-right:1px solid rgba(201,168,76,.2);">
+  <div class="hotel-nav-inner" style="display:flex;align-items:stretch;min-height:54px;padding:0 16px;gap:0;">
+    <div class="hotel-brand" style="display:flex;align-items:center;gap:10px;padding-right:16px;border-right:1px solid rgba(201,168,76,.2);flex-shrink:0;">
       <div style="width:36px;height:36px;background:linear-gradient(135deg,#C9A84C,#E8C96A);border-radius:8px;display:flex;align-items:center;justify-content:center;font-family:'Playfair Display',serif;font-size:14px;font-weight:700;color:#0d1b2e;flex-shrink:0;">GA</div>
       <div class="hotel-brand-text" style="line-height:1.2;">
         <div style="font-size:8px;color:#C9A84C;letter-spacing:2.5px;text-transform:uppercase;font-weight:600;">Hotel</div>
         <div style="font-family:'Playfair Display',serif;font-size:14px;font-weight:700;color:#fff;white-space:nowrap;">The Grand Alayna</div>
       </div>
     </div>
-    <div style="display:flex;align-items:center;justify-content:center;overflow:hidden;">
-      <div style="display:flex;align-items:center;height:100%;overflow-x:auto;scrollbar-width:none;">
+    <div class="hotel-nav-tabs" style="display:flex;align-items:center;flex:1;min-width:0;overflow:hidden;">
+      <div style="display:flex;align-items:center;height:100%;overflow-x:auto;scrollbar-width:none;width:100%;">
         <button id="htab-frontdesk" onclick="h_switchTab('frontdesk')" style="display:flex;align-items:center;gap:5px;padding:0 16px;height:54px;border:none;border-bottom:3px solid #C9A84C;background:rgba(201,168,76,.08);color:#E8C96A;font-size:12px;font-family:'DM Sans',sans-serif;cursor:pointer;font-weight:700;white-space:nowrap;flex-shrink:0;"><i class="ti ti-home-2"></i><span class="htab-label">Desk</span></button>
         <button id="htab-bookings" onclick="h_switchTab('bookings')" style="display:flex;align-items:center;gap:5px;padding:0 16px;height:54px;border:none;border-bottom:3px solid transparent;background:transparent;color:rgba(255,255,255,.8);font-size:12px;font-family:'DM Sans',sans-serif;cursor:pointer;font-weight:500;white-space:nowrap;flex-shrink:0;"><i class="ti ti-calendar-event"></i><span class="htab-label">Bookings</span></button>
         <button id="htab-crm" onclick="h_switchTab('crm')" style="display:flex;align-items:center;gap:5px;padding:0 16px;height:54px;border:none;border-bottom:3px solid transparent;background:transparent;color:rgba(255,255,255,.8);font-size:12px;font-family:'DM Sans',sans-serif;cursor:pointer;font-weight:500;white-space:nowrap;flex-shrink:0;"><i class="ti ti-heart"></i><span class="htab-label">CRM</span></button>
@@ -2506,7 +2507,7 @@ select:focus, textarea:focus {
         <button id="htab-settings" onclick="h_switchTab('settings')" style="display:flex;align-items:center;gap:5px;padding:0 16px;height:54px;border:none;border-bottom:3px solid transparent;background:transparent;color:rgba(255,255,255,.8);font-size:12px;font-family:'DM Sans',sans-serif;cursor:pointer;font-weight:500;white-space:nowrap;flex-shrink:0;"><i class="ti ti-settings-2"></i><span class="htab-label">Admin</span></button>
       </div>
     </div>
-    <div style="display:flex;align-items:center;gap:8px;padding-left:16px;border-left:1px solid rgba(201,168,76,.2);">
+    <div class="hotel-nav-right" style="display:flex;align-items:center;gap:8px;padding-left:16px;border-left:1px solid rgba(201,168,76,.2);flex-shrink:0;">
       <div id="pending-pill" class="pending-pill" onclick="h_switchTab('bookings')" style="cursor:pointer;font-size:10px;padding:3px 8px;white-space:nowrap;"><i class="ti ti-alert-triangle"></i><span id="pending-count">0</span></div>
       <div style="display:flex;align-items:center;gap:5px;padding:4px 9px;background:rgba(201,168,76,.1);border:1px solid rgba(201,168,76,.25);border-radius:7px;">
         <i class="ti ti-user-circle" style="color:#C9A84C;font-size:14px;flex-shrink:0;"></i>
@@ -2589,7 +2590,7 @@ select:focus, textarea:focus {
         <button class="seg-btn" id="seg-new" onclick="setCrmSeg('new')">New</button>
         <button class="seg-btn" id="seg-inactive" onclick="setCrmSeg('inactive')">Inactive</button>
         <button class="seg-btn" id="seg-birthday" onclick="setCrmSeg('birthday')">&#127874; Birthday</button>
-        <input id="crm-search" placeholder="Search guest..." oninput="renderCRM()" style="width:auto;flex:1;max-width:200px">
+        <input id="crm-search" placeholder="Search guest..." oninput="h_renderCRM()" style="width:auto;flex:1;max-width:200px">
         <button class="btn sm gold" onclick="h_switchTab('marketing')"><i class="ti ti-speakerphone"></i> Marketing Hub</button>
         <button class="btn sm" onclick="exportGuestCSV()"><i class="ti ti-download"></i> Export</button>
       </div>
@@ -2777,7 +2778,7 @@ select:focus, textarea:focus {
           <!-- MODE TOGGLE -->
           <div style="display:flex;gap:0;background:var(--bg3);border:1px solid var(--border);border-radius:9px;padding:3px;margin-bottom:14px;">
             <button id="invmode-room" onclick="switchInvMode('room')" style="flex:1;padding:9px 12px;border:none;border-radius:6px;background:var(--navy);color:#E8C96A;font-size:12px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;display:flex;align-items:center;justify-content:center;gap:6px;"><i class="ti ti-home-2"></i> Room Invoice</button>
-            <button id="invmode-extras" onclick="switchInvMode('extras')" style="flex:1;padding:9px 12px;border:none;border-radius:6px;background:transparent;color:var(--text3);font-size:12px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;display:flex;align-items:center;justify-content:center;gap:6px;"><i class="ti ti-plus"></i> Extras Invoice</button>
+            <button id="invmode-extras" onclick="switchInvMode('extras')" style="flex:1;padding:9px 12px;border:none;border-radius:6px;background:transparent;color:var(--text3);font-size:12px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;display:flex;align-items:center;justify-content:center;gap:6px;"><i class="ti ti-receipt-2"></i> Service Invoice</button>
           </div>
 
           <!-- ROOM PANEL -->
@@ -2815,8 +2816,8 @@ select:focus, textarea:focus {
           <div id="invpanel-extras" style="display:none;">
             <div style="border:1px solid var(--border);border-radius:9px;overflow:hidden;margin-bottom:12px;">
               <div style="background:linear-gradient(135deg,#5a3000,#7a4500);padding:9px 14px;display:flex;align-items:center;justify-content:space-between;">
-                <div style="display:flex;align-items:center;gap:7px;"><i class="ti ti-plus" style="color:#f5d99a;font-size:14px;"></i><span style="font-size:11px;font-weight:700;color:#fff;text-transform:uppercase;letter-spacing:.8px;">Extra Charges</span></div>
-                <button onclick="addExtra()" style="padding:3px 10px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);border-radius:6px;color:#fff;font-size:11px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;"><i class="ti ti-plus"></i> Add Item</button>
+                <div style="display:flex;align-items:center;gap:7px;"><i class="ti ti-room-service" style="color:#f5d99a;font-size:14px;"></i><span style="font-size:11px;font-weight:700;color:#fff;text-transform:uppercase;letter-spacing:.8px;">Additional Service Charge</span></div>
+                <button id="inv-add-extra-btn" onclick="addExtra()" style="padding:3px 10px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);border-radius:6px;color:#fff;font-size:11px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;"><i class="ti ti-plus"></i> Add Item</button>
               </div>
               <div style="padding:12px 14px;display:flex;flex-direction:column;gap:10px;">
                 <div id="inv-extras"></div>
@@ -2851,23 +2852,29 @@ select:focus, textarea:focus {
             <div id="inv-pay-summary-rows" style="background:var(--bg2);padding:11px 14px;"></div>
           </div>
 
+          <!-- LOCK BANNER -->
+          <div id="inv-lock-banner" style="display:none;margin-bottom:8px;"></div>
           <!-- ACTIONS -->
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:8px;">
             <button class="btn gold" onclick="syncInvoice()" style="justify-content:center;"><i class="ti ti-eye"></i> Preview</button>
-            <button class="btn" onclick="saveInvoiceChanges()" style="background:#1a7040;color:#fff;border-color:#1a7040;font-weight:700;justify-content:center;"><i class="ti ti-device-floppy"></i> Save</button>
+            <button id="inv-save-btn" class="btn" onclick="saveInvoiceChanges()" style="background:#1a7040;color:#fff;border-color:#1a7040;font-weight:700;justify-content:center;"><i class="ti ti-device-floppy"></i> Save</button>
           </div>
 
           <!-- PRINT -->
           <div style="border:1px solid var(--border);border-radius:9px;overflow:hidden;">
             <div style="background:var(--bg3);padding:7px 12px;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;display:flex;align-items:center;gap:5px;"><i class="ti ti-printer" style="font-size:12px;"></i> Print Invoice</div>
             <div style="padding:8px 10px;display:flex;flex-direction:column;gap:6px;">
-              <button onclick="printAndSaveInvoice()" style="display:flex;align-items:center;gap:10px;padding:9px 12px;border:1px solid var(--border);border-radius:7px;background:var(--bg2);cursor:pointer;width:100%;font-family:'DM Sans',sans-serif;text-align:left;">
+              <button onclick="printRoomOnlyInvoice()" style="display:flex;align-items:center;gap:10px;padding:9px 12px;border:1px solid var(--border);border-radius:7px;background:var(--bg2);cursor:pointer;width:100%;font-family:'DM Sans',sans-serif;text-align:left;">
                 <div style="width:30px;height:30px;background:rgba(10,22,40,.1);border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0;"><i class="ti ti-home-2" style="color:var(--navy);font-size:14px;"></i></div>
-                <div><div style="font-size:12px;font-weight:700;color:var(--text);">Room Invoice</div><div style="font-size:10px;color:var(--text3);">Room charge + payment status</div></div>
+                <div><div style="font-size:12px;font-weight:700;color:var(--text);">Room Invoice</div><div style="font-size:10px;color:var(--text3);">Room charges only</div></div>
               </button>
               <button onclick="printExtrasInvoice()" style="display:flex;align-items:center;gap:10px;padding:9px 12px;border:1px solid var(--border);border-radius:7px;background:var(--bg2);cursor:pointer;width:100%;font-family:'DM Sans',sans-serif;text-align:left;">
                 <div style="width:30px;height:30px;background:rgba(201,168,76,.1);border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0;"><i class="ti ti-receipt" style="color:var(--gold2);font-size:14px;"></i></div>
-                <div><div style="font-size:12px;font-weight:700;color:var(--text);">Extras Invoice</div><div style="font-size:10px;color:var(--text3);">Only extras, no room</div></div>
+                <div><div style="font-size:12px;font-weight:700;color:var(--text);">Service Invoice</div><div style="font-size:10px;color:var(--text3);">Additional service charges only</div></div>
+              </button>
+              <button onclick="printAndSaveInvoice()" style="display:flex;align-items:center;gap:10px;padding:9px 12px;border:1px solid var(--border);border-radius:7px;background:var(--bg2);cursor:pointer;width:100%;font-family:'DM Sans',sans-serif;text-align:left;">
+                <div style="width:30px;height:30px;background:rgba(26,112,64,.12);border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0;"><i class="ti ti-file-invoice" style="color:#1a7040;font-size:14px;"></i></div>
+                <div><div style="font-size:12px;font-weight:700;color:var(--text);">Full Invoice</div><div style="font-size:10px;color:var(--text3);">Room + all service charges</div></div>
               </button>
             </div>
           </div>
@@ -2941,6 +2948,8 @@ select:focus, textarea:focus {
         <button id="hAdminTab-rooms" onclick="switchHotelAdminTab('rooms')" style="flex:1;padding:8px 10px;border-radius:7px;border:none;font-size:11px;font-weight:600;cursor:pointer;background:transparent;color:var(--text3);font-family:'DM Sans',sans-serif;display:flex;align-items:center;justify-content:center;gap:5px;"><i class="ti ti-building"></i> Rooms</button>
         <button id="hAdminTab-staff" onclick="switchHotelAdminTab('staff')" style="flex:1;padding:8px 10px;border-radius:7px;border:none;font-size:11px;font-weight:600;cursor:pointer;background:transparent;color:var(--text3);font-family:'DM Sans',sans-serif;display:flex;align-items:center;justify-content:center;gap:5px;"><i class="ti ti-users"></i> Staff</button>
         <button id="hAdminTab-data" onclick="switchHotelAdminTab('data')" style="flex:1;padding:8px 10px;border-radius:7px;border:none;font-size:11px;font-weight:600;cursor:pointer;background:transparent;color:var(--text3);font-family:'DM Sans',sans-serif;display:flex;align-items:center;justify-content:center;gap:5px;"><i class="ti ti-database"></i> Data</button>
+        <button id="hAdminTab-security" onclick="switchHotelAdminTab('security')" style="flex:1;padding:8px 10px;border-radius:7px;border:none;font-size:11px;font-weight:600;cursor:pointer;background:transparent;color:var(--text3);font-family:'DM Sans',sans-serif;display:flex;align-items:center;justify-content:center;gap:5px;"><i class="ti ti-shield-lock"></i> Security</button>
+        <button id="hAdminTab-guide" onclick="switchHotelAdminTab('guide')" style="flex:1;padding:8px 10px;border-radius:7px;border:none;font-size:11px;font-weight:600;cursor:pointer;background:transparent;color:var(--text3);font-family:'DM Sans',sans-serif;display:flex;align-items:center;justify-content:center;gap:5px;"><i class="ti ti-book-2"></i> Guide</button>
       </div>
 
       <div id="hAdminPanel-finance">
@@ -2968,6 +2977,433 @@ select:focus, textarea:focus {
           <div class="setting-card"><div style="font-size:14px;font-weight:700;margin-bottom:4px;color:var(--gold);display:flex;align-items:center;gap:8px"><i class="ti ti-file-spreadsheet" style="color:var(--gold)"></i> Export CSV</div><div style="font-size:12px;color:var(--text3);margin-bottom:12px">Export all bookings.</div><button class="btn gold" onclick="exportCSV()"><i class="ti ti-file-spreadsheet"></i> Export CSV</button></div>
           <div class="setting-card" id="h-danger-zone"><div style="font-size:14px;font-weight:700;margin-bottom:4px;color:var(--red2);display:flex;align-items:center;gap:8px"><i class="ti ti-trash" style="color:var(--red2)"></i> Danger Zone</div><div style="font-size:12px;color:var(--text3);margin-bottom:12px">Delete all hotel data.</div><button class="btn danger" onclick="hotelClearAll()"><i class="ti ti-trash"></i> Clear All Data</button></div>
         </div></div>
+      </div>
+
+      <div id="hAdminPanel-security" style="display:none;">
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-title"><i class="ti ti-shield-lock"></i> Invoice Security</div>
+          </div>
+          <div style="display:grid;gap:12px;padding:4px 0;">
+            <div class="setting-card">
+              <div style="font-size:14px;font-weight:700;margin-bottom:4px;color:var(--navy2);display:flex;align-items:center;gap:8px;"><i class="ti ti-lock" style="color:var(--gold)"></i> Override PIN</div>
+              <div style="font-size:12px;color:var(--text3);margin-bottom:12px;">Staff cannot edit locked invoices. When a genuine correction is needed, they enter this PIN to temporarily unlock. You share it by phone — only when needed.</div>
+              <div style="display:flex;gap:8px;">
+                <button class="btn primary" onclick="showChangePinModal()"><i class="ti ti-key"></i> <span id="sec-pin-btn-label">Set Override PIN</span></button>
+                <button class="btn" onclick="showSecLog()"><i class="ti ti-list"></i> View Security Log</button>
+              </div>
+              <div id="sec-pin-status" style="margin-top:10px;font-size:11px;color:var(--text3);"></div>
+            </div>
+            <div class="setting-card">
+              <div style="font-size:14px;font-weight:700;margin-bottom:4px;color:var(--navy2);display:flex;align-items:center;gap:8px;"><i class="ti ti-info-circle" style="color:var(--gold)"></i> How it works</div>
+              <div style="font-size:12px;color:var(--text3);line-height:1.8;">
+                <b style="color:var(--text);">Lock trigger:</b> As soon as any payment is recorded (room advance or extras advance), the invoice locks automatically.<br>
+                <b style="color:var(--text);">What staff cannot do:</b> Delete or edit extra charges, change discount, or modify amounts once locked.<br>
+                <b style="color:var(--text);">Override:</b> Staff clicks the lock banner and enters the PIN you share by phone. One edit session — re-locks on Save.<br>
+                <b style="color:var(--text);">Checked-out bookings:</b> Always locked regardless of payment.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="hAdminPanel-guide" style="display:none;">
+        <div style="max-width:860px;margin:0 auto;">
+
+          <!-- Header -->
+          <div style="background:linear-gradient(135deg,var(--navy2),var(--navy3));border-radius:14px;padding:24px 28px;margin-bottom:18px;display:flex;align-items:center;gap:18px;">
+            <div style="width:52px;height:52px;background:linear-gradient(135deg,#C9A84C,#E8C96A);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:800;color:var(--navy2);flex-shrink:0;">GA</div>
+            <div>
+              <div style="font-family:'Playfair Display',serif;font-size:20px;font-weight:700;color:#fff;">Staff Training Guide</div>
+              <div style="font-size:12px;color:#E8C96A;margin-top:3px;letter-spacing:.5px;">Hotel The Grand Alayna · Management System</div>
+            </div>
+            <button onclick="window.print()" style="margin-left:auto;padding:8px 16px;background:rgba(201,168,76,.2);border:1px solid rgba(201,168,76,.4);border-radius:8px;color:#E8C96A;font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px;font-family:'DM Sans',sans-serif;"><i class="ti ti-printer"></i> Print Guide</button>
+          </div>
+
+          <!-- Quick Nav chips -->
+          <div style="display:flex;flex-wrap:wrap;gap:7px;margin-bottom:20px;">
+            <a href="#guide-login" style="text-decoration:none;"><span style="display:inline-flex;align-items:center;gap:5px;padding:5px 13px;background:var(--bg2);border:1.5px solid var(--border);border-radius:20px;font-size:12px;font-weight:600;color:var(--text2);cursor:pointer;">🔑 Login</span></a>
+            <a href="#guide-desk" style="text-decoration:none;"><span style="display:inline-flex;align-items:center;gap:5px;padding:5px 13px;background:var(--bg2);border:1.5px solid var(--border);border-radius:20px;font-size:12px;font-weight:600;color:var(--text2);cursor:pointer;">🏠 Front Desk</span></a>
+            <a href="#guide-bookings" style="text-decoration:none;"><span style="display:inline-flex;align-items:center;gap:5px;padding:5px 13px;background:var(--bg2);border:1.5px solid var(--border);border-radius:20px;font-size:12px;font-weight:600;color:var(--text2);cursor:pointer;">📅 Bookings</span></a>
+            <a href="#guide-invoice" style="text-decoration:none;"><span style="display:inline-flex;align-items:center;gap:5px;padding:5px 13px;background:var(--bg2);border:1.5px solid var(--border);border-radius:20px;font-size:12px;font-weight:600;color:var(--text2);cursor:pointer;">🧾 Invoice</span></a>
+            <a href="#guide-payment" style="text-decoration:none;"><span style="display:inline-flex;align-items:center;gap:5px;padding:5px 13px;background:var(--bg2);border:1.5px solid var(--border);border-radius:20px;font-size:12px;font-weight:600;color:var(--text2);cursor:pointer;">💳 Payments</span></a>
+            <a href="#guide-crm" style="text-decoration:none;"><span style="display:inline-flex;align-items:center;gap:5px;padding:5px 13px;background:linear-gradient(135deg,var(--navy2),var(--navy3));border:1.5px solid var(--navy2);border-radius:20px;font-size:12px;font-weight:700;color:#E8C96A;cursor:pointer;">⭐ CRM</span></a>
+            <a href="#guide-rules" style="text-decoration:none;"><span style="display:inline-flex;align-items:center;gap:5px;padding:5px 13px;background:var(--bg2);border:1.5px solid var(--border);border-radius:20px;font-size:12px;font-weight:600;color:var(--text2);cursor:pointer;">📋 Rules</span></a>
+          </div>
+
+          <!-- Section: Login -->
+          <div id="guide-login" class="panel" style="margin-bottom:14px;">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--border);">
+              <div style="width:36px;height:36px;border-radius:9px;background:linear-gradient(135deg,var(--navy2),var(--navy3));display:flex;align-items:center;justify-content:center;flex-shrink:0;"><i class="ti ti-login" style="color:#E8C96A;font-size:16px;"></i></div>
+              <div style="font-family:'Playfair Display',serif;font-size:16px;font-weight:700;color:var(--navy2);">1. Login &amp; Navigation</div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+              <div>
+                <div style="font-size:12px;font-weight:700;color:var(--navy2);margin-bottom:8px;">How to log in</div>
+                <div style="font-size:12px;color:var(--text2);line-height:1.9;">
+                  1. Open the app in your browser.<br>
+                  2. Select <b>Hotel</b> or <b>Convention Hall</b> from the welcome screen.<br>
+                  3. Enter your <b>username</b> and <b>password</b> given by admin.<br>
+                  4. Tap <b>Sign In</b>.
+                </div>
+                <div style="margin-top:10px;padding:9px 12px;background:var(--amber-bg);border:1px solid var(--amber-bd);border-radius:8px;font-size:11px;color:var(--amber);line-height:1.7;">
+                  ⚠️ Never share your password. If you forget it, ask the admin to reset it from Admin → Staff.
+                </div>
+              </div>
+              <div>
+                <div style="font-size:12px;font-weight:700;color:var(--navy2);margin-bottom:8px;">Top navigation tabs</div>
+                <div style="display:grid;gap:5px;font-size:12px;">
+                  <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--bg2);border-radius:7px;"><i class="ti ti-home-2" style="color:var(--gold);width:16px;text-align:center;"></i><span><b>Desk</b> — Daily room status &amp; arrivals/departures</span></div>
+                  <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--bg2);border-radius:7px;"><i class="ti ti-calendar-event" style="color:var(--blue2);width:16px;text-align:center;"></i><span><b>Bookings</b> — All reservations list</span></div>
+                  <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--bg2);border-radius:7px;"><i class="ti ti-heart" style="color:#be185d;width:16px;text-align:center;"></i><span><b>CRM</b> — Guest profiles &amp; marketing</span></div>
+                  <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--bg2);border-radius:7px;"><i class="ti ti-file-invoice" style="color:var(--green2);width:16px;text-align:center;"></i><span><b>Invoice</b> — Print &amp; manage invoices</span></div>
+                  <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--bg2);border-radius:7px;"><i class="ti ti-switch-horizontal" style="color:var(--gold);width:16px;text-align:center;"></i><span><b>⇄ Switch</b> — Go to Convention Hall</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Section: Front Desk -->
+          <div id="guide-desk" class="panel" style="margin-bottom:14px;">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--border);">
+              <div style="width:36px;height:36px;border-radius:9px;background:linear-gradient(135deg,var(--navy2),var(--navy3));display:flex;align-items:center;justify-content:center;flex-shrink:0;"><i class="ti ti-home-2" style="color:#E8C96A;font-size:16px;"></i></div>
+              <div style="font-family:'Playfair Display',serif;font-size:16px;font-weight:700;color:var(--navy2);">2. Front Desk — Daily Workflow</div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+              <div>
+                <div style="font-size:12px;font-weight:700;color:var(--navy2);margin-bottom:8px;display:flex;align-items:center;gap:6px;"><i class="ti ti-building" style="color:var(--gold);"></i> Room Map colours</div>
+                <div style="display:grid;gap:5px;font-size:12px;">
+                  <div style="display:flex;align-items:center;gap:9px;padding:6px 10px;background:#f0fff4;border:1px solid #bbf7d0;border-radius:7px;"><span style="width:11px;height:11px;background:#22C55E;border-radius:50%;flex-shrink:0;"></span><span><b style="color:#166534;">Green</b> = Vacant — room is free to book</span></div>
+                  <div style="display:flex;align-items:center;gap:9px;padding:6px 10px;background:#fff0f0;border:1px solid #fecaca;border-radius:7px;"><span style="width:11px;height:11px;background:#EF4444;border-radius:50%;flex-shrink:0;"></span><span><b style="color:#991b1b;">Red</b> = Occupied — guest is staying</span></div>
+                  <div style="display:flex;align-items:center;gap:9px;padding:6px 10px;background:#fffbeb;border:1px solid #fde68a;border-radius:7px;"><span style="width:11px;height:11px;background:#F59E0B;border-radius:50%;flex-shrink:0;"></span><span><b style="color:#92400e;">Orange</b> = Reserved — booking confirmed, not yet checked in</span></div>
+                </div>
+                <div style="font-size:12px;font-weight:700;color:var(--navy2);margin-top:14px;margin-bottom:8px;display:flex;align-items:center;gap:6px;"><i class="ti ti-moon" style="color:var(--navy2);"></i> Night Audit</div>
+                <div style="font-size:12px;color:var(--text2);line-height:1.8;">The Night Audit panel shows all in-house guests, their remaining balance, and nights left. Print it at the end of each day for the shift record.</div>
+              </div>
+              <div>
+                <div style="font-size:12px;font-weight:700;color:var(--navy2);margin-bottom:8px;display:flex;align-items:center;gap:6px;"><i class="ti ti-calendar-check" style="color:var(--green2);"></i> Morning checklist</div>
+                <div style="font-size:12px;color:var(--text2);line-height:2;">
+                  ☐ Check <b>Today Arrivals</b> — who is checking in today?<br>
+                  ☐ Check <b>Today Departures</b> — who is checking out today?<br>
+                  ☐ Confirm advance payment for new arrivals<br>
+                  ☐ Process any pending checkouts<br>
+                  ☐ Review the In-House Guests table for any balance due
+                </div>
+                <div style="font-size:12px;font-weight:700;color:var(--navy2);margin-top:14px;margin-bottom:8px;display:flex;align-items:center;gap:6px;"><i class="ti ti-login" style="color:var(--green2);"></i> Check-in a guest</div>
+                <div style="font-size:12px;color:var(--text2);line-height:1.9;">
+                  Find the booking in the Arrivals list → click <b>Check In</b>.<br>
+                  The room colour changes to Red automatically.
+                </div>
+                <div style="font-size:12px;font-weight:700;color:var(--navy2);margin-top:14px;margin-bottom:8px;display:flex;align-items:center;gap:6px;"><i class="ti ti-logout" style="color:var(--red2);"></i> Check-out a guest</div>
+                <div style="font-size:12px;color:var(--text2);line-height:1.9;">
+                  Find the guest in In-House Guests → click <b>Checkout</b>.<br>
+                  If there is an outstanding balance, you will be asked to confirm if money was collected. Room changes to Green.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Section: Bookings -->
+          <div id="guide-bookings" class="panel" style="margin-bottom:14px;">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--border);">
+              <div style="width:36px;height:36px;border-radius:9px;background:linear-gradient(135deg,var(--navy2),var(--navy3));display:flex;align-items:center;justify-content:center;flex-shrink:0;"><i class="ti ti-calendar-event" style="color:#E8C96A;font-size:16px;"></i></div>
+              <div style="font-family:'Playfair Display',serif;font-size:16px;font-weight:700;color:var(--navy2);">3. Bookings</div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+              <div>
+                <div style="font-size:12px;font-weight:700;color:var(--navy2);margin-bottom:8px;">Create a new booking</div>
+                <div style="font-size:12px;color:var(--text2);line-height:1.9;">
+                  1. Click the gold <b>+ Booking</b> button at the top-right of any screen.<br>
+                  2. Fill in: Guest name, phone, room, check-in &amp; check-out dates, source, and advance amount.<br>
+                  3. Click <b>Save Booking</b>.<br>
+                  4. Status starts as <b>Confirmed</b> until the guest arrives.
+                </div>
+                <div style="font-size:12px;font-weight:700;color:var(--navy2);margin-top:14px;margin-bottom:8px;">Booking status flow</div>
+                <div style="display:grid;gap:4px;font-size:11px;">
+                  <div style="padding:5px 10px;border-radius:6px;background:#e8f4fd;color:#1a56cb;font-weight:600;">Pending Payment → Waiting for advance</div>
+                  <div style="padding:5px 10px;border-radius:6px;background:#eafaf1;color:#1a7040;font-weight:600;">Confirmed → Advance paid, waiting for arrival</div>
+                  <div style="padding:5px 10px;border-radius:6px;background:#fff8e1;color:#7a5c00;font-weight:600;">Checked In → Guest is in the hotel now</div>
+                  <div style="padding:5px 10px;border-radius:6px;background:#f3f4f6;color:#4b5563;font-weight:600;">Checked Out → Stay completed</div>
+                  <div style="padding:5px 10px;border-radius:6px;background:#fff0f0;color:#c0392b;font-weight:600;">Cancelled → Booking was cancelled</div>
+                </div>
+              </div>
+              <div>
+                <div style="font-size:12px;font-weight:700;color:var(--navy2);margin-bottom:8px;">Search &amp; filter bookings</div>
+                <div style="font-size:12px;color:var(--text2);line-height:1.9;">
+                  • Use the <b>Search</b> box to find by guest name, phone, or room number.<br>
+                  • Use the <b>Status filter</b> to see only Confirmed, Checked In, etc.<br>
+                  • Click <b>Edit</b> (pencil icon) on any booking to update details.<br>
+                  • Click <b>Pay</b> to record a payment directly from the bookings list.
+                </div>
+                <div style="font-size:12px;font-weight:700;color:var(--navy2);margin-top:14px;margin-bottom:8px;">⚠️ Important rules for bookings</div>
+                <div style="padding:10px 13px;background:#fff0f0;border:1.5px solid #fecaca;border-radius:8px;font-size:12px;color:#7f1d1d;line-height:1.8;">
+                  • Never delete a booking that has a payment recorded.<br>
+                  • Do not change the room number after check-in without admin approval.<br>
+                  • Always record the correct source (Walk-in / Phone / WhatsApp / Referral) — this helps the admin see how guests find us.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Section: Invoice -->
+          <div id="guide-invoice" class="panel" style="margin-bottom:14px;">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--border);">
+              <div style="width:36px;height:36px;border-radius:9px;background:linear-gradient(135deg,var(--navy2),var(--navy3));display:flex;align-items:center;justify-content:center;flex-shrink:0;"><i class="ti ti-file-invoice" style="color:#E8C96A;font-size:16px;"></i></div>
+              <div style="font-family:'Playfair Display',serif;font-size:16px;font-weight:700;color:var(--navy2);">4. Invoice</div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+              <div>
+                <div style="font-size:12px;font-weight:700;color:var(--navy2);margin-bottom:8px;">How to open an invoice</div>
+                <div style="font-size:12px;color:var(--text2);line-height:1.9;">
+                  1. Go to the <b>Invoice</b> tab.<br>
+                  2. Select the guest's booking from the dropdown at the top.<br>
+                  3. Click <b>Preview Invoice</b> — the full invoice appears below.<br>
+                  4. The invoice shows: room charges, discount, additional services, payment history, and balance due.
+                </div>
+                <div style="font-size:12px;font-weight:700;color:var(--navy2);margin-top:14px;margin-bottom:8px;">Adding a service charge</div>
+                <div style="font-size:12px;color:var(--text2);line-height:1.9;">
+                  1. In the invoice, click <b>+ Add Service</b>.<br>
+                  2. Type the service name (e.g. "BBQ Night"), Quantity, and Rate.<br>
+                  3. The date is set automatically to today — no need to change it.<br>
+                  4. Click <b>Save Changes</b> to apply.
+                </div>
+                <div style="font-size:12px;font-weight:700;color:var(--navy2);margin-top:14px;margin-bottom:8px;">Printing the invoice</div>
+                <div style="font-size:12px;color:var(--text2);line-height:1.9;">
+                  Three print options are available:<br>
+                  🏠 <b>Room Invoice</b> — room charges only<br>
+                  🛎 <b>Service Invoice</b> — service charges only<br>
+                  📄 <b>Full Invoice</b> — everything combined
+                </div>
+              </div>
+              <div>
+                <div style="font-size:12px;font-weight:700;color:var(--navy2);margin-bottom:8px;">Collecting a payment</div>
+                <div style="font-size:12px;color:var(--text2);line-height:1.9;">
+                  1. Click <b>Collect Payment</b> in the invoice panel.<br>
+                  2. Enter the amount, choose method (Cash / bKash / Bank), and add a note if needed.<br>
+                  3. Specify type: <b>Room</b> payment or <b>Service</b> payment.<br>
+                  4. Click <b>Confirm Payment</b>.<br>
+                  5. The payment appears in the invoice table and in the revenue report automatically.
+                </div>
+                <div style="margin-top:10px;padding:10px 13px;background:linear-gradient(135deg,#f0fff4,#e6fff0);border:1.5px solid #bbf7d0;border-radius:8px;font-size:12px;color:#166534;line-height:1.8;">
+                  ✅ Every payment you record goes directly into the admin revenue report. Nothing is lost.
+                </div>
+                <div style="font-size:12px;font-weight:700;color:var(--navy2);margin-top:14px;margin-bottom:8px;">Payment history</div>
+                <div style="font-size:12px;color:var(--text2);line-height:1.8;">
+                  All payments are shown in the invoice with date, time, amount, method, and who recorded it. The invoice shows <b style="color:#1a7040;">✔ Fully Paid</b> or <b style="color:#c0392b;">Balance Due</b> at the bottom.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Section: Payment Lock -->
+          <div id="guide-payment" class="panel" style="margin-bottom:14px;">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--border);">
+              <div style="width:36px;height:36px;border-radius:9px;background:linear-gradient(135deg,var(--navy2),var(--navy3));display:flex;align-items:center;justify-content:center;flex-shrink:0;"><i class="ti ti-lock" style="color:#E8C96A;font-size:16px;"></i></div>
+              <div style="font-family:'Playfair Display',serif;font-size:16px;font-weight:700;color:var(--navy2);">5. Payment Lock System</div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+              <div>
+                <div style="font-size:12px;font-weight:700;color:var(--navy2);margin-bottom:8px;">What is the lock?</div>
+                <div style="font-size:12px;color:var(--text2);line-height:1.9;">
+                  Once any payment is recorded on an invoice, it automatically <b>locks</b>. This prevents staff from modifying amounts after money has been collected — protecting the guest and the business.
+                </div>
+                <div style="font-size:12px;font-weight:700;color:var(--navy2);margin-top:14px;margin-bottom:8px;">What you cannot do when locked</div>
+                <div style="display:grid;gap:4px;font-size:12px;color:var(--text2);">
+                  <div style="padding:5px 10px;background:#fff0f0;border-radius:6px;border-left:3px solid var(--red2);">❌ Delete a service charge</div>
+                  <div style="padding:5px 10px;background:#fff0f0;border-radius:6px;border-left:3px solid var(--red2);">❌ Change the discount amount</div>
+                  <div style="padding:5px 10px;background:#fff0f0;border-radius:6px;border-left:3px solid var(--red2);">❌ Edit service charge amounts</div>
+                </div>
+                <div style="font-size:12px;font-weight:700;color:var(--navy2);margin-top:14px;margin-bottom:8px;">What you can still do</div>
+                <div style="display:grid;gap:4px;font-size:12px;color:var(--text2);">
+                  <div style="padding:5px 10px;background:#f0fff4;border-radius:6px;border-left:3px solid var(--green2);">✅ Add new service charges</div>
+                  <div style="padding:5px 10px;background:#f0fff4;border-radius:6px;border-left:3px solid var(--green2);">✅ Record additional payments</div>
+                  <div style="padding:5px 10px;background:#f0fff4;border-radius:6px;border-left:3px solid var(--green2);">✅ View and print the invoice</div>
+                </div>
+              </div>
+              <div>
+                <div style="font-size:12px;font-weight:700;color:var(--navy2);margin-bottom:8px;">If you need to edit a locked invoice</div>
+                <div style="font-size:12px;color:var(--text2);line-height:1.9;">
+                  1. Call the admin and explain what needs to be changed.<br>
+                  2. The admin will give you the <b>Override PIN</b> by phone.<br>
+                  3. Click the 🔒 lock banner at the top of the invoice.<br>
+                  4. Enter the PIN → the invoice unlocks for one editing session.<br>
+                  5. Make your changes and click <b>Save</b> — it locks again automatically.
+                </div>
+                <div style="margin-top:10px;padding:10px 13px;background:var(--amber-bg);border:1.5px solid var(--amber-bd);border-radius:8px;font-size:12px;color:#7a3c00;line-height:1.8;">
+                  ⚠️ The PIN override is logged with your name and timestamp. Admin can see every unlock in the Security Log.
+                </div>
+                <div style="font-size:12px;font-weight:700;color:var(--navy2);margin-top:14px;margin-bottom:8px;">Checked-out bookings</div>
+                <div style="font-size:12px;color:var(--text2);line-height:1.8;">
+                  After checkout, the invoice is <b>permanently locked</b>, even with the PIN. This is intentional — checked-out records are final.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Section: CRM — highlighted -->
+          <div id="guide-crm" class="panel" style="margin-bottom:14px;border-top:3px solid var(--gold);">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--border);">
+              <div style="width:36px;height:36px;border-radius:9px;background:linear-gradient(135deg,#C9A84C,#E8C96A);display:flex;align-items:center;justify-content:center;flex-shrink:0;"><i class="ti ti-heart" style="color:var(--navy2);font-size:16px;"></i></div>
+              <div>
+                <div style="font-family:'Playfair Display',serif;font-size:16px;font-weight:700;color:var(--navy2);">6. CRM — Guest Relationship System</div>
+                <div style="font-size:11px;color:var(--gold);font-weight:600;">Most important feature for building a loyal guest base</div>
+              </div>
+            </div>
+
+            <!-- What is CRM -->
+            <div style="padding:12px 16px;background:linear-gradient(135deg,var(--bg3),var(--bg2));border-radius:10px;margin-bottom:16px;font-size:12px;color:var(--text2);line-height:1.8;">
+              The CRM tab automatically builds a profile for <b>every guest who has ever booked</b>. You do not need to add them manually — they appear as soon as a booking is created. From here you can see their full stay history, contact them on WhatsApp, send marketing messages, and keep personal notes.
+            </div>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px;">
+              <div>
+                <div style="font-size:12px;font-weight:700;color:var(--navy2);margin-bottom:8px;display:flex;align-items:center;gap:6px;"><i class="ti ti-users" style="color:var(--gold);"></i> Guest segments explained</div>
+                <div style="display:grid;gap:5px;font-size:12px;">
+                  <div style="padding:7px 11px;border-radius:8px;background:linear-gradient(135deg,#fef9e7,#fdf6d3);border:1px solid rgba(201,152,58,.3);">
+                    <b style="color:var(--gold);">⭐ VIP</b> — spent ৳20,000+ total <i>or</i> stayed 3+ times. Treat with priority.
+                  </div>
+                  <div style="padding:7px 11px;border-radius:8px;background:var(--blue-bg);border:1px solid var(--blue-bd);">
+                    <b style="color:var(--blue2);">🔄 Regular</b> — stayed 2+ times within last 3 months.
+                  </div>
+                  <div style="padding:7px 11px;border-radius:8px;background:var(--green-bg);border:1px solid var(--green-bd);">
+                    <b style="color:var(--green2);">🆕 New</b> — first-time guest or recent visit.
+                  </div>
+                  <div style="padding:7px 11px;border-radius:8px;background:var(--bg3);border:1px solid var(--border);">
+                    <b style="color:var(--text3);">😴 Inactive</b> — no visit in over 6 months. Good target for re-engagement.
+                  </div>
+                  <div style="padding:7px 11px;border-radius:8px;background:#fdf2f8;border:1px solid #f9a8d4;">
+                    <b style="color:#be185d;">🎂 Birthday</b> — guest has a birthday this month. Send a wish!
+                  </div>
+                </div>
+              </div>
+              <div>
+                <div style="font-size:12px;font-weight:700;color:var(--navy2);margin-bottom:8px;display:flex;align-items:center;gap:6px;"><i class="ti ti-user-circle" style="color:var(--gold);"></i> Opening a guest profile</div>
+                <div style="font-size:12px;color:var(--text2);line-height:1.9;">
+                  Click on any guest card to open their full profile. Inside you can:<br>
+                  • Add their <b>birthday</b> and <b>anniversary</b> date<br>
+                  • Tick their <b>room preferences</b> (e.g. Non-smoking, High floor, Extra pillows)<br>
+                  • Write <b>staff notes</b> (e.g. "Prefers quiet room, allergic to feathers")<br>
+                  • Mark <b>Follow-up</b> with a reason — the guest card will show a follow-up badge<br>
+                  • Tick/untick <b>marketing messages OK</b><br>
+                  • See full <b>stay history</b> with room, dates, and amount
+                </div>
+                <div style="margin-top:10px;padding:9px 12px;background:var(--green-bg);border:1px solid var(--green-bd);border-radius:8px;font-size:12px;color:var(--green2);line-height:1.7;">
+                  ✅ Always click <b>Save Profile</b> after making changes — otherwise the notes will not be saved.
+                </div>
+              </div>
+            </div>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px;">
+              <div>
+                <div style="font-size:12px;font-weight:700;color:var(--navy2);margin-bottom:8px;display:flex;align-items:center;gap:6px;"><i class="ti ti-brand-whatsapp" style="color:#25d366;"></i> Sending WhatsApp to a guest</div>
+                <div style="font-size:12px;color:var(--text2);line-height:1.9;">
+                  Each guest card has a <b>WhatsApp button</b>. Clicking it opens WhatsApp directly with a pre-written greeting message. You can edit the message before sending.<br><br>
+                  You can also WhatsApp a guest from inside their profile with a review request or custom message.
+                </div>
+              </div>
+              <div>
+                <div style="font-size:12px;font-weight:700;color:var(--navy2);margin-bottom:8px;display:flex;align-items:center;gap:6px;"><i class="ti ti-speakerphone" style="color:var(--gold);"></i> Marketing Hub</div>
+                <div style="font-size:12px;color:var(--text2);line-height:1.9;">
+                  Click <b>Marketing Hub</b> button in the CRM filter bar to send a campaign:<br>
+                  1. Choose your <b>audience</b> (All guests, VIP only, Inactive, Birthdays).<br>
+                  2. Pick a <b>template</b> (Eid, Birthday, Welcome Back, Special Offer…) or write your own.<br>
+                  3. Click <b>Send Campaign</b> — each guest appears with a Send button.<br>
+                  4. Tap Send next to each guest — WhatsApp opens with their name inserted automatically.<br>
+                  5. Sent guests are marked ✓ green so you do not send twice.
+                </div>
+              </div>
+            </div>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+              <div>
+                <div style="font-size:12px;font-weight:700;color:var(--navy2);margin-bottom:8px;display:flex;align-items:center;gap:6px;"><i class="ti ti-star" style="color:var(--gold);"></i> Loyalty points</div>
+                <div style="font-size:12px;color:var(--text2);line-height:1.9;">
+                  Points are awarded <b>automatically</b> when a guest checks out — you do not need to do anything. Guests earn points per night stayed and per ৳1000 spent. Points are visible in the Admin → Insights tab. Guests can redeem points for discounts on their next stay — apply the discount manually in the booking form.
+                </div>
+              </div>
+              <div>
+                <div style="font-size:12px;font-weight:700;color:var(--navy2);margin-bottom:8px;display:flex;align-items:center;gap:6px;"><i class="ti ti-download" style="color:var(--navy2);"></i> Exporting the guest list</div>
+                <div style="font-size:12px;color:var(--text2);line-height:1.9;">
+                  Click <b>Export</b> in the CRM filter bar to download all guest data as a spreadsheet (CSV file). The file includes: name, phone, segment, total stays, total spent, last stay date, birthday, and preferences. Open it in Excel or Google Sheets.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Section: Guest Survey -->
+          <div class="panel" style="margin-bottom:14px;">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--border);">
+              <div style="width:36px;height:36px;border-radius:9px;background:linear-gradient(135deg,var(--navy2),var(--navy3));display:flex;align-items:center;justify-content:center;flex-shrink:0;"><i class="ti ti-star" style="color:#E8C96A;font-size:16px;"></i></div>
+              <div style="font-family:'Playfair Display',serif;font-size:16px;font-weight:700;color:var(--navy2);">7. Guest Survey at Checkout</div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+              <div>
+                <div style="font-size:12px;color:var(--text2);line-height:1.9;margin-bottom:10px;">
+                  After clicking Checkout, a popup appears with three options:
+                </div>
+                <div style="display:grid;gap:6px;font-size:12px;">
+                  <div style="padding:8px 12px;background:linear-gradient(135deg,#fef9e7,#fdf6d3);border:1.5px solid var(--gold);border-radius:8px;"><b>⭐ Guest Survey — Turn Screen to Guest</b><br><span style="color:var(--text3);">Tap this to open a full-screen star-rating survey. Hand the device to the guest. They tap their ratings. Results save automatically to Insights.</span></div>
+                  <div style="padding:8px 12px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;"><b>📱 Send Survey Link via WhatsApp</b><br><span style="color:var(--text3);">Sends a WhatsApp message with a survey link so the guest can rate from their own phone.</span></div>
+                  <div style="padding:8px 12px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;"><b>⭐ Send Google Review Request</b><br><span style="color:var(--text3);">Opens WhatsApp with a message asking the guest to leave a Google review.</span></div>
+                </div>
+              </div>
+              <div>
+                <div style="font-size:12px;font-weight:700;color:var(--navy2);margin-bottom:8px;">Best practice at checkout</div>
+                <div style="font-size:12px;color:var(--text2);line-height:2;">
+                  ☐ Process checkout first (collect any balance due)<br>
+                  ☐ If the guest is present, tap <b>Guest Survey</b> and hand them the screen<br>
+                  ☐ If the guest is in a hurry, send the <b>WhatsApp survey link</b><br>
+                  ☐ For VIP or happy guests, send the <b>Google Review Request</b>
+                </div>
+                <div style="margin-top:10px;padding:9px 12px;background:var(--blue-bg);border:1px solid var(--blue-bd);border-radius:8px;font-size:12px;color:var(--blue2);line-height:1.7;">
+                  ℹ️ Survey ratings appear in <b>Admin → Insights → Guest Surveys</b>. Admin reviews this to see service quality trends.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Section: Rules -->
+          <div id="guide-rules" class="panel" style="margin-bottom:14px;">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--border);">
+              <div style="width:36px;height:36px;border-radius:9px;background:linear-gradient(135deg,var(--navy2),var(--navy3));display:flex;align-items:center;justify-content:center;flex-shrink:0;"><i class="ti ti-clipboard-list" style="color:#E8C96A;font-size:16px;"></i></div>
+              <div style="font-family:'Playfair Display',serif;font-size:16px;font-weight:700;color:var(--navy2);">8. Staff Rules — Quick Reference</div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+              <div>
+                <div style="padding:12px 16px;background:#f0fff4;border:1.5px solid #bbf7d0;border-radius:10px;margin-bottom:10px;">
+                  <div style="font-size:12px;font-weight:700;color:#166534;margin-bottom:8px;">✅ Always do</div>
+                  <div style="font-size:12px;color:#166534;line-height:2;">
+                    ✔ Record every payment on the same day it is received<br>
+                    ✔ Check Today Arrivals every morning<br>
+                    ✔ Add the correct booking source for every new guest<br>
+                    ✔ Add guest birthday in CRM when they mention it<br>
+                    ✔ Write staff notes in CRM for special requests<br>
+                    ✔ Offer the survey to every checking-out guest<br>
+                    ✔ Log out when leaving the desk
+                  </div>
+                </div>
+              </div>
+              <div>
+                <div style="padding:12px 16px;background:#fff0f0;border:1.5px solid #fecaca;border-radius:10px;margin-bottom:10px;">
+                  <div style="font-size:12px;font-weight:700;color:#991b1b;margin-bottom:8px;">❌ Never do</div>
+                  <div style="font-size:12px;color:#991b1b;line-height:2;">
+                    ✗ Never share your login password with anyone<br>
+                    ✗ Never delete a booking that has payments recorded<br>
+                    ✗ Never use the PIN override without admin approval by phone<br>
+                    ✗ Never record a payment with the wrong amount<br>
+                    ✗ Never mark a guest as checked-out without collecting full payment or confirming with admin<br>
+                    ✗ Never clear or reset data — only admin can do this
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div style="padding:12px 16px;background:linear-gradient(135deg,var(--navy2),var(--navy3));border-radius:10px;text-align:center;">
+              <div style="font-size:12px;color:#E8C96A;font-weight:700;margin-bottom:3px;">Need help?</div>
+              <div style="font-size:12px;color:rgba(255,255,255,.7);">Call the admin or refer to this guide. This guide is always available under Admin → Guide.</div>
+            </div>
+          </div>
+
+        </div>
       </div>
 
     </div>
@@ -3021,7 +3457,7 @@ function doLogin(){
   var usr=USERS[u];
   if(!usr){G('loginErr').textContent='Invalid username or password.';return;}
   var p=G('loginPass').value;
-  var stored=(u==='admin')?localStorage.getItem('a_admin_pass'):localStorage.getItem('a_pass_'+u);
+  var stored=localStorage.getItem('a_pass_'+u);
   var checkPass=stored||usr.pass;
   if(checkPass===p){
     curUser=u; curRole=usr.role;
@@ -3116,7 +3552,7 @@ function fpSavePass(){
   if(np.length<6){err.textContent='Password must be at least 6 characters.';return;}
   if(np!==cp){err.textContent='Passwords do not match.';return;}
   /* Save new admin password */
-  localStorage.setItem('a_admin_pass',np);
+  localStorage.setItem('a_pass_admin',np);
   USERS['admin'].pass=np;
   err.textContent='';
   closeForgotPw();
@@ -3778,12 +4214,13 @@ function saveInvoice(){
   var sub=rows.reduce(function(s,r){return s+r.price;},0),disc=fv('disc');
   var grand=Math.max(0,sub+wWT+wHallAmt+hc+hwt-disc),adv=fv('advance'),bal=Math.max(0,grand-adv);
   var num=G('invNum').value;
-  var autoPayStatus=grand>0&&adv>=grand?'paid':adv>0&&adv<grand?'partial':'Unpaid';
-  /* If editing an existing invoice, reuse its original id/num/serial */
+  var autoPayStatus=grand>0&&adv>=grand?'paid':adv>0&&adv<grand?'partial':'unpaid';
+  /* If editing an existing invoice, reuse its original id/num/serial/invDate */
   var isEdit=!!_editingInvId;
   var invId=isEdit?_editingInvId.id:Date.now();
   var invSerial=isEdit?_editingInvId.serial:nextNum();
-  var inv={id:invId,num:num,serial:invSerial,invDate:new Date().toISOString().split('T')[0],client:name,phone:phone,phone2:G('cPhone2').value.trim(),phone3:G('cPhone3').value.trim(),email:email,address:addr,evType:selEvType,evGrp:selEvGrp,evDate:evDate,evStart:evStart,evEnd:evEnd,timeOfDay:tod,guests:guests,duration:dur,rows:rows,tables:wTables,waiters:wWaiters,waiterPrice:wWP,waitersTotal:wWT,wHallAmt:wHallAmt,stageAmt:0,stageType:'',stageImg:stageImgData,lightType:'',lightAmt:0,holud:holud,disc:disc,sub:sub,grand:grand,adv:adv,bal:bal,wedding:wedding,payMethod:pm,bankName:pm==='Bank Transfer'?G('bankName').value:'',payStatus:autoPayStatus,hearAbout:G('hearAbout')?G('hearAbout').value:'',notes:G('invNotes').value,by:(JSON.parse(localStorage.getItem('a_sess')||'{}')).user||'unknown',at:new Date().toISOString()};
+  var invDate=isEdit&&_editingInvId.invDate?_editingInvId.invDate:new Date().toISOString().split('T')[0];
+  var inv={id:invId,num:num,serial:invSerial,invDate:invDate,client:name,phone:phone,phone2:G('cPhone2').value.trim(),phone3:G('cPhone3').value.trim(),email:email,address:addr,evType:selEvType,evGrp:selEvGrp,evDate:evDate,evStart:evStart,evEnd:evEnd,timeOfDay:tod,guests:guests,duration:dur,rows:rows,tables:wTables,waiters:wWaiters,waiterPrice:wWP,waitersTotal:wWT,wHallAmt:wHallAmt,stageAmt:0,stageType:'',stageImg:stageImgData,lightType:'',lightAmt:0,holud:holud,disc:disc,sub:sub,grand:grand,adv:adv,bal:bal,wedding:wedding,payMethod:pm,bankName:pm==='Bank Transfer'?G('bankName').value:'',payStatus:autoPayStatus,hearAbout:G('hearAbout')?G('hearAbout').value:'',notes:G('invNotes').value,by:(JSON.parse(localStorage.getItem('a_sess')||'{}')).user||'unknown',at:new Date().toISOString()};
   var all=getInv();
   if(isEdit){
     var idx=all.findIndex(function(x){return x.id===invId;});
@@ -3864,13 +4301,11 @@ function confirmUpdatePay(){
   var newAdv=inv.adv+amt;
   var newBal=Math.max(0,inv.grand-newAdv);
   var newStatus=newAdv>=inv.grand?'paid':'partial';
-  var payNote='Payment of ৳'+fmt(amt)+' received on '+fmtD(new Date().toISOString().split('T')[0])+'.';
   all[idx].adv=newAdv;
   all[idx].bal=newBal;
   all[idx].payStatus=newStatus;
-  all[idx].notes=(all[idx].notes?all[idx].notes+'\n':'')+payNote;
   all[idx].payHistory=all[idx].payHistory||[];
-  all[idx].payHistory.push({amt:amt,date:new Date().toISOString().split('T')[0],newAdv:newAdv,newBal:newBal,by:curRole});
+  all[idx].payHistory.push({amt:amt,date:new Date().toISOString(),newAdv:newAdv,newBal:newBal,by:curUser||curRole});
   localStorage.setItem('a_inv',JSON.stringify(all));
 
   /* Refresh preview with updated invoice */
@@ -3958,7 +4393,7 @@ function renderPreview(inv){
   /* Always recalculate payStatus from actual numbers — never trust stored value */
   if(inv.grand>0&&inv.adv>=inv.grand) inv.payStatus='paid';
   else if(inv.adv>0&&inv.adv<inv.grand) inv.payStatus='partial';
-  else inv.payStatus='Unpaid';
+  else inv.payStatus='unpaid';
   /* Sync to stored invoice too */
   var all=getInv();var idx=all.findIndex(function(x){return x.id===inv.id;});
   if(idx>-1&&all[idx].payStatus!==inv.payStatus){all[idx].payStatus=inv.payStatus;localStorage.setItem('a_inv',JSON.stringify(all));}
@@ -4100,25 +4535,6 @@ function renderPreview(inv){
   } else {
     tableRows+=wItems+wExtras;
   }
-
-  /* ─── Totals footer rows inside table ─── */
-  var totalsHtml=
-    '<tfoot>'+
-    (inv.disc>0?'<tr style="background:#fff5f5"><td style="padding:5px 12px;font-size:11px;color:#900;font-weight:700">Discount</td><td style="padding:5px 12px;text-align:right;font-size:11px;font-weight:800;color:#900">– ৳ '+fmt(inv.disc)+'</td></tr>':'')+
-    '<tr style="background:#f5ede0;border-top:2px solid #c9a84c">'+
-      '<td style="padding:10px 12px;font-size:14px;font-weight:800;color:#7B1212;letter-spacing:.5px">Grand Total</td>'+
-      '<td style="padding:10px 12px;text-align:right;font-size:20px;font-weight:800;color:#7B1212;font-family:\'Playfair Display\',serif">৳ '+fmt(inv.grand)+'</td>'+
-    '</tr>'+
-    '<tr style="background:#f0faf4">'+
-      '<td style="padding:6px 12px;font-size:12px;font-weight:700;color:#1a5c30">Advance Paid</td>'+
-      '<td style="padding:6px 12px;text-align:right;font-size:13px;font-weight:800;color:#1a5c30">৳ '+fmt(inv.adv)+'</td>'+
-    '</tr>'+
-    '<tr style="background:#fff0f0;border-bottom:2px solid #7B1212">'+
-      '<td style="padding:6px 12px;font-size:12px;font-weight:700;color:#7a0000">Balance Due</td>'+
-      '<td style="padding:6px 12px;text-align:right;font-size:13px;font-weight:800;color:#7a0000">৳ '+fmt(inv.bal)+'</td>'+
-    '</tr>'+
-    '</tfoot>';
-
 
   var logoSvg='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 190 90" width="72" height="34">'+
     '<polygon points="8,78 19,78 46,18 35,18" fill="#f2dfc0"/>'+
@@ -4352,7 +4768,7 @@ function editFromPreview(){
     initForm(); /* resets form */
 
     /* ── Re-set editing identity AFTER initForm (initForm resets selEvType etc.) ── */
-    _editingInvId={id:inv.id, num:inv.num, serial:inv.serial};
+    _editingInvId={id:inv.id, num:inv.num, serial:inv.serial, invDate:inv.invDate};
     if(G('invNum'))G('invNum').value=inv.num;
 
     /* ── Client details ── */
@@ -4469,6 +4885,7 @@ function editFromPreview(){
     }
 
     /* ── Payment ── */
+    if(G('disc'))G('disc').value=inv.disc||0;
     if(G('advance'))G('advance').value=inv.adv||'';
     if(G('invNotes'))G('invNotes').value=inv.notes||'';
     if(G('hearAbout'))G('hearAbout').value=inv.hearAbout||'';
@@ -4501,36 +4918,67 @@ function onTcChk(){
   if(chk&&err) err.style.display=chk.checked?'none':'none'; /* reset on change */
 }
 function doPrint(){
-  /* Skip T&C page when reopening an existing invoice (not a fresh creation) */
   var isReprint=!_invoiceIsNew;
   _invoiceIsNew=false; /* reset after reading */
 
-  if(isReprint){
-    /* body.reprint-mode overrides the !important display:block on #invPage2 in print CSS */
-    document.body.classList.add('reprint-mode');
-    window.print();
-    document.body.classList.remove('reprint-mode');
-    return;
-  }
-  var chk=document.getElementById('tcChk');
-  var err=document.getElementById('tcErrMsg');
-  if(!chk||!chk.checked){
-    if(err){err.style.display='block';}
-    var row=document.getElementById('tcAcceptRow');
-    if(row){row.style.border='2px solid #c00';row.style.background='#fff0f0';}
-    if(chk) chk.scrollIntoView({behavior:'smooth',block:'center'});
-    return;
-  }
   var row=document.getElementById('tcAcceptRow');
   var stamp=document.getElementById('tcAcceptedStamp');
+  var err=document.getElementById('tcErrMsg');
+
+  /* ── Fresh invoice: require T&C acceptance before printing ── */
+  if(!isReprint){
+    var chk=document.getElementById('tcChk');
+    if(!chk||!chk.checked){
+      if(err) err.style.display='block';
+      if(row){row.style.border='2px solid #c00';row.style.background='#fff0f0';}
+      if(chk) chk.scrollIntoView({behavior:'smooth',block:'center'});
+      return;
+    }
+  }
+
+  /* Always hide the checkbox row and show the acceptance stamp on all prints
+     (both fresh invoices and reprints) so T&C page always prints correctly */
   if(row) row.style.display='none';
   if(stamp) stamp.style.display='block';
   if(err) err.style.display='none';
-  window.print();
+
+  /* Ensure T&C page is visible for printing regardless of preview state
+     (renderPreview hides #invPage2 for reprints via inline style — we override
+     that explicitly here so T&C always prints on every invoice) */
+  var p2=document.getElementById('invPage2');
+  var divider=document.querySelector('.page-divider');
+  var p2PrevDisplay=p2?p2.style.display:'';
+  var divPrevDisplay=divider?divider.style.display:'';
+  if(p2) p2.style.display='';
+  if(divider) divider.style.display='none'; /* divider is screen-only, not for print */
+
+  /* ── Fix: #previewModal lives inside #hallApp, which is a direct child of
+     <body>. The print CSS rule `body>*{display:none!important}` hides #hallApp,
+     and descendants of a display:none element are never rendered — even when
+     the child itself has display:block!important. Move #previewModal to be a
+     direct child of <body> before printing so the existing
+     `#previewModal{display:block!important}` rule can take effect, then restore
+     it to its original position after the print dialog closes. ── */
+  var pm=document.getElementById('previewModal');
+  var pmParent=pm.parentNode;
+  var pmNext=pm.nextSibling;
+  document.body.appendChild(pm);
+
   setTimeout(function(){
-    if(row) row.style.display='flex';
-    if(stamp) stamp.style.display='none';
-  },500);
+    var cleanup=function(){
+      /* Restore #previewModal to its original DOM position */
+      pmParent.insertBefore(pm,pmNext);
+      /* Restore T&C page and divider display to their pre-print state */
+      if(p2) p2.style.display=p2PrevDisplay;
+      if(divider) divider.style.display=divPrevDisplay;
+      /* Restore accept row and stamp */
+      if(row) row.style.display='flex';
+      if(stamp) stamp.style.display='none';
+      window.removeEventListener('afterprint',cleanup);
+    };
+    window.addEventListener('afterprint',cleanup);
+    window.print();
+  },300);
 }
 
 /* ════════════ WHATSAPP ════════════ */
@@ -4837,7 +5285,7 @@ function delExp(id){if(curRole!=='admin'){showToast('🔒 Admin only.');return;}
 function viewReceipt(id){var exp=getExp().find(function(e){return e.id===id;});if(!exp||!exp.fileData){showToast('No receipt.');return;}if(exp.fileType&&exp.fileType.startsWith('image/')){var w=window.open('','_blank');w.document.write('<html><body style="margin:0;background:#111;display:flex;align-items:center;justify-content:center;min-height:100vh"><img src="'+exp.fileData+'" style="max-width:100%;max-height:100vh"/></body></html>');}else{var a=document.createElement('a');a.href=exp.fileData;a.download=exp.fileName||'receipt.pdf';a.click();}}
 function populateExpMonths(){var all=getExp();var months=[];all.forEach(function(e){if(e.date&&months.indexOf(e.date.substring(0,7))===-1)months.push(e.date.substring(0,7));});months.sort().reverse();var sel=G('expFMonth');var cur=sel.value;sel.innerHTML='<option value="">All Months</option>'+months.map(function(m){var d=new Date(m+'-01');return'<option value="'+m+'"'+(m===cur?' selected':'')+'>'+(isNaN(d)?m:d.toLocaleDateString('en-GB',{month:'long',year:'numeric'}))+'</option>';}).join('');}
 function renderExp(){var all=getExp();if(curRole!=='admin')all=all.filter(function(e){return !e.personal;});var s=(G('expSearch')?G('expSearch').value:'').toLowerCase(),fc=G('expFCat')?G('expFCat').value:'',fm=G('expFMonth')?G('expFMonth').value:'';var f=all.filter(function(e){return(!fc||e.cat===fc)&&(!fm||e.date&&e.date.startsWith(fm))&&(!s||(e.cat&&e.cat.toLowerCase().includes(s))||(e.desc&&e.desc.toLowerCase().includes(s))||(e.employee&&e.employee.toLowerCase().includes(s)));}).sort(function(a,b){return(b.date||'').localeCompare(a.date||'');});var tm=new Date().toISOString().substring(0,7);var allS=getExp();if(curRole!=='admin')allS=allS.filter(function(e){return !e.personal;});G('expTotal').textContent='৳ '+fmt(allS.reduce(function(s,e){return s+e.amount;},0));G('expMonth').textContent='৳ '+fmt(allS.filter(function(e){return e.date&&e.date.startsWith(tm);}).reduce(function(s,e){return s+e.amount;},0));G('expFiltered').textContent='৳ '+fmt(f.reduce(function(s,e){return s+e.amount;},0));var ct={};allS.forEach(function(e){ct[e.cat]=(ct[e.cat]||0)+e.amount;});var top=Object.entries(ct).sort(function(a,b){return b[1]-a[1];})[0];G('expTopCat').textContent=top?(EXP_CATS[top[0]]?EXP_CATS[top[0]].i+' '+top[0]:top[0]):'—';var isA=curRole==='admin';var tb=G('expTbody');if(!f.length){tb.innerHTML='<tr><td colspan="7"><div class="empty">No expenses found.</div></td></tr>';return;}tb.innerHTML=f.map(function(e){var ci=EXP_CATS[e.cat]||EXP_CATS['Other'];var det='';if((e.cat==='Salary'||e.cat==='Personal Salary')&&e.employee)det='<br><span style="font-size:10px;color:var(--tdim)">'+e.employee+(e.role?' — '+e.role:'')+(e.period?' ('+e.period+')':'')+'</span>';else if(e.billPeriod)det='<br><span style="font-size:10px;color:var(--tdim)">'+e.billPeriod+'</span>';return'<tr><td><strong>'+fmtD(e.date)+'</strong></td><td><span class="ecat" style="background:'+ci.bg+';color:'+ci.c+'">'+ci.i+' '+e.cat+'</span>'+(e.personal?'<span class="pbadge">🔒</span>':'')+'</td><td>'+(e.desc||e.employee||e.billPeriod||'—')+det+'</td><td style="font-weight:700;color:var(--red);font-family:\'Playfair Display\',serif">৳ '+fmt(e.amount)+'</td><td style="font-size:11px;color:var(--tdim)">'+(e.payMethod||'—')+'</td><td style="text-align:center">'+(e.fileData?'<button class="ic-btn" onclick="viewReceipt(\''+e.id+'\')">📎</button>':'—')+'</td><td><div class="row-acts"><button class="ic-btn" onclick="editExp(\''+e.id+'\')">✏</button><button class="ic-btn dng" onclick="delExp(\''+e.id+'\')"'+(isA?'':' disabled')+'>🗑</button></div></td></tr>';}).join('');}
-function exportExpCSV(){var all=getExp();if(curRole!=='admin')all=all.filter(function(e){return !e.personal;});if(!all.length){showToast('No data.');return;}var csv=[['Date','Category','Description','Amount','Payment']].concat(all.map(function(e){return[e.date,e.cat,e.desc||'',e.amount,e.payMethod||''];})).map(function(r){return r.join(',');}).join('\n');var a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);a.download='amelia_expenses.csv';a.click();showToast('Exported!');}
+function exportExpCSV(){var all=getExp();if(curRole!=='admin')all=all.filter(function(e){return !e.personal;});if(!all.length){showToast('No data.');return;}function csvQ(v){return'"'+String(v===null||v===undefined?'':v).replace(/"/g,'""')+'"';}var csv=[['Date','Category','Description','Amount','Payment']].concat(all.map(function(e){return[e.date,e.cat,e.desc||'',e.amount,e.payMethod||''];})).map(function(r){return r.map(csvQ).join(',');}).join('\n');var a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);a.download='amelia_expenses.csv';a.click();showToast('Exported!');}
 
 /* ════════════ LANGUAGE ════════════ */
 var curLang = localStorage.getItem('a_lang') || 'en';
@@ -5077,11 +5525,11 @@ G('pinInp').addEventListener('keydown',function(e){if(e.key==='Enter')confirmPin
 var RECOVERY_EMAIL='mainulhasan86@gmail.com';
 
 function getAdminPass(){
-  try{var s=localStorage.getItem('a_adminPass');return s||USERS.admin.pass;}catch(e){return USERS.admin.pass;}
+  try{var s=localStorage.getItem('a_pass_admin');return s||USERS.admin.pass;}catch(e){return USERS.admin.pass;}
 }
 function setAdminPass(p){
   USERS.admin.pass=p;
-  try{localStorage.setItem('a_adminPass',p);}catch(e){}
+  try{localStorage.setItem('a_pass_admin',p);}catch(e){}
 }
 
 function changeAdminPass(){
@@ -5249,15 +5697,6 @@ function renderAdmin(){
   if(G('pnlSec'))G('pnlSec').style.display=isA?'block':'none';
   if(G('pwCard'))G('pwCard').style.display=isA?'block':'none';
   if(G('dangerCard'))G('dangerCard').style.display=isA?'block':'none';
-  /* Show restore button if backup exists */
-  if(isA){
-    var bkRaw=localStorage.getItem('a_inv_backup');
-    var restoreBtn=G('restoreInvBtn');
-    if(restoreBtn){
-      if(bkRaw){var bk=JSON.parse(bkRaw);restoreBtn.style.display='inline-flex';restoreBtn.textContent='↩ Restore '+bk.invoices.length+' Deleted Invoices';var note=G('restoreInvNote');if(note)note.textContent='Backup from '+new Date(bk.at).toLocaleString();}
-      else{restoreBtn.style.display='none';}
-    }
-  }
   var all=getInv();var tot=all.reduce(function(s,i){return s+i.grand;},0),rec=all.reduce(function(s,i){return s+i.adv;},0),pen=all.reduce(function(s,i){return s+i.bal;},0);
   var allE=getExp();var totE=allE.reduce(function(s,e){return s+e.amount;},0);
   G('statsGrid').innerHTML='<div class="stat-card"><div class="stat-lbl">Total Invoices</div><div class="stat-val">'+all.length+'</div></div>'+
@@ -5459,7 +5898,7 @@ function renderInvTable(){
   all.forEach(function(i){
     if(i.grand>0&&i.adv>=i.grand) i.payStatus='paid';
     else if(i.adv>0&&i.adv<i.grand) i.payStatus='partial';
-    else i.payStatus='Unpaid';
+    else i.payStatus='unpaid';
   });
   /* Month filter */
   var hasMonthFilter=Object.keys(_invSelMonths).length>0;
@@ -5501,7 +5940,7 @@ function renderInvTable(){
 }
 function viewInv(id){var i=getInv().find(function(x){return x.id===id;});if(i){buildWaMsg(i);renderPreview(i);}}
 function delInv(id){if(curRole!=='admin'){showToast('🔒 Admin only.');return;}openPin('Delete','Enter admin password.',function(){setInv(getInv().filter(function(i){return i.id!==id;}));renderAdmin();showToast('Deleted.');});}
-function exportInvCSV(){var all=getInv();if(!all.length){showToast('No data.');return;}var csv=[['Invoice#','Client','Event','Date','Guests','Grand','Advance','Balance','Status']].concat(all.map(function(i){return[i.num,i.client,i.evType,i.evDate,i.guests||0,i.grand,i.adv,i.bal,i.payStatus];})).map(function(r){return r.join(',');}).join('\n');var a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);a.download='amelia_invoices.csv';a.click();showToast('Exported!');}
+function exportInvCSV(){var all=getInv();if(!all.length){showToast('No data.');return;}function csvQ(v){return'"'+String(v===null||v===undefined?'':v).replace(/"/g,'""')+'"';}var csv=[['Invoice#','Client','Event','Date','Guests','Grand','Advance','Balance','Status']].concat(all.map(function(i){return[i.num,i.client,i.evType,i.evDate,i.guests||0,i.grand,i.adv,i.bal,i.payStatus];})).map(function(r){return r.map(csvQ).join(',');}).join('\n');var a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);a.download='amelia_invoices.csv';a.click();showToast('Exported!');}
 
 /* ══════════════════════════════════════
    CRM MODULE
@@ -5509,13 +5948,13 @@ function exportInvCSV(){var all=getInv();if(!all.length){showToast('No data.');r
 function getLeads(){try{return JSON.parse(localStorage.getItem('amelia_crm_leads')||'[]');}catch(e){return[];}}
 function setLeads(d){localStorage.setItem('amelia_crm_leads',JSON.stringify(d));}
 function crmNextId(){var all=getLeads();return all.length?Math.max.apply(null,all.map(function(l){return l.id;}))+1:1;}
-function crmNextNum(){var all=getLeads();var n=all.length+1;return 'LRD-'+String(n).padStart(4,'0');}
+function crmNextNum(){var all=getLeads();var n=all.length?Math.max.apply(null,all.map(function(l){return parseInt((l.num||'LRD-0000').split('-')[1])||0;}))+1:1;return 'LRD-'+String(n).padStart(4,'0');}
 
 function crmClearForm(){
   ['crmName','crmPhone','crmEvDate','crmGuests','crmNotes','crmFollowDate'].forEach(function(id){if(G(id))G(id).value='';})
   var td=new Date().toISOString().split('T')[0];
   ['crmEvDate','crmFollowDate'].forEach(function(fid){var e=G(fid);if(e)e.min=td;});
-  if(G('crmAvail'))G('crmAvail').style.display='none';;
+  if(G('crmAvail'))G('crmAvail').style.display='none';
   ['crmEvType','crmSource','crmAssigned'].forEach(function(id){if(G(id))G(id).selectedIndex=0;});
   if(G('crmStage'))G('crmStage').value='New Enquiry';
   if(G('crmSaveBtn'))G('crmSaveBtn').textContent='💾 Save Lead';
@@ -5765,12 +6204,12 @@ function renderCRM(){
     var stageOpts=['New Enquiry','Quoted','Follow Up','Confirmed','Lost'].map(function(s){
       return '<option value="'+s+'"'+(l.stage===s?' selected':'')+'>'+s+'</option>';
     }).join('');
-    var stageSel=locked
-      ? '<span class="stg stg-confirmed">✅ Confirmed</span>'
-      : '<select onchange="crmQuickStage('+l.id+',this.value)" style="padding:3px 6px;font-size:11px;font-weight:700;border-radius:8px;cursor:pointer;border:1.5px solid #ccc;background:#fff;">'+stageOpts+'</select>';
     var isConfirmed=l.stage==='Confirmed';
     var isAdmin=curRole==='admin';
     var locked=(isConfirmed||l.invoiced)&&!isAdmin;
+    var stageSel=locked
+      ? '<span class="stg stg-confirmed">✅ Confirmed</span>'
+      : '<select onchange="crmQuickStage('+l.id+',this.value)" style="padding:3px 6px;font-size:11px;font-weight:700;border-radius:8px;cursor:pointer;border:1.5px solid #ccc;background:#fff;">'+stageOpts+'</select>';
     var actBtns=locked
       ? '<span style="font-size:10px;color:#1a7a40;font-weight:700;padding:4px 8px;background:#eafaf1;border:1px solid #a0dbb0;border-radius:8px;">🧾 Invoiced</span>'
       : '<div class="row-acts">'+
@@ -6187,17 +6626,23 @@ function doCheckIn(id){
 }
 function doCheckOut(id){
   var b=bookings.find(function(x){return x.id===id;});if(!b)return;
-  b.status='checked-out';
-  var r=rooms.find(function(x){return x.number===b.room;});if(r)r.status='vacant';
   /* Use invoiceTotal if extras were added, otherwise use booking amount (already discounted) */
   var totalCharged=(b.invoiceTotal!=null?b.invoiceTotal:b.amount);
-  var outstanding=Math.max(0,totalCharged-(b.advance||0));
-  if(outstanding>0){var rid=revenues.length?Math.max.apply(null,revenues.map(function(r){return r.id;}))+1:1;revenues.push({id:rid,source:'Room Rent',amount:outstanding,date:todayStr(),note:b.guest+' Rm '+b.room+(b.discAmt?' (disc '+b.discAmt+')':'')});}
-  /* Also record extras separately if they exist and weren't in invoiceTotal */
-
+  var outstanding=Math.max(0,totalCharged-((b.advance||0)+(b.extrasAdvance||0)));
+  /* If there is an outstanding balance, ask staff whether the money was collected right now.
+     Only record revenue if they confirm — prevents phantom revenue entries. */
+  if(outstanding>0){
+    var collect=confirm('Guest has outstanding balance of '+money(outstanding)+'.\n\nWas this amount collected now at checkout?\n\nOK = Yes, collected — record in revenue\nCancel = No, skip revenue entry');
+    if(collect){
+      var rid=revenues.length?Math.max.apply(null,revenues.map(function(r){return r.id;}))+1:1;
+      revenues.push({id:rid,source:'Room Rent',amount:outstanding,date:todayStr(),note:b.guest+' Rm '+b.room+' — collected at checkout'+(b.discAmt?' (disc '+money(b.discAmt)+')':'')});
+    }
+  }
+  b.status='checked-out';
+  var r=rooms.find(function(x){return x.number===b.room;});if(r)r.status='vacant';
   awardLoyaltyPoints(b);
   save();renderFrontDesk();renderBookings();
-  notify(b.guest+' checked out ✓ · '+money(outstanding)+' due','success');
+  notify(b.guest+' checked out ✓'+(outstanding>0?' · '+money(outstanding)+' outstanding':''),'success');
   setTimeout(function(){postCheckoutActions(id);},400);
 }
 function cancelBooking(id){
@@ -6451,7 +6896,7 @@ function openAddExpense(){
   showModal('<div class="modal-header"><div><div class="modal-title">Add Expense</div></div><button class="modal-close" onclick="closeModal()"><i class="ti ti-x"></i></button></div>'+
     '<div class="form-row"><div class="form-group"><label>Category</label><select id="exp-cat"><option>Salaries</option><option>Utilities</option><option>Supplies</option><option>Maintenance</option><option>Food &amp; Beverage</option><option>Marketing</option><option>Laundry</option><option>Other</option></select></div><div class="form-group"><label>Amount</label><input type="number" id="exp-amt" placeholder="0"></div></div>'+
     '<div class="form-row"><div class="form-group"><label>Date</label><input type="date" id="exp-date" value="'+todayStr()+'"></div><div class="form-group"><label>Note</label><input id="exp-note" placeholder="Optional"></div></div>'+
-    '<div class="modal-actions"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn danger" onclick="saveExp()"><i class="ti ti-plus"></i> Add</button></div>');
+    '<div class="modal-actions"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn danger" onclick="h_saveExp()"><i class="ti ti-plus"></i> Add</button></div>');
 }
 function h_saveExp(){
   var amt=parseInt(document.getElementById('exp-amt').value)||0;
@@ -6463,8 +6908,6 @@ function h_saveExp(){
   if(document.getElementById('section-expenses').classList.contains('active')){hexpPopMonths();renderHExpenses();}
   notify('Expense added','success');
 }
-/* alias so the modal onclick="saveExp()" works */
-function saveExp(){h_saveExp();}
 function h_delExp(id){expenses=expenses.filter(function(e){return e.id!==id;});save();renderFinance();renderHExpenses();notify('Expense deleted','error');}
 
 /* ════ HOTEL EXPENSES TAB ════ */
@@ -6565,6 +7008,166 @@ function hexpExportCSV(){
 }
 function formatDate(s){if(!s)return'—';var d=new Date(s);return d.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});}
 
+// ── INVOICE LOCK & SECURITY ──────────────────────────────────────────────────
+var _secLog=[];try{_secLog=JSON.parse(localStorage.getItem('_ga_seclog')||'[]');}catch(e){}
+
+function isInvLocked(b){
+  return !!(b&&((b.advance||0)>0||(b.extrasAdvance||0)>0||b.status==='checked-out'));
+}
+
+function logSec(msg){
+  _secLog.push({t:new Date().toISOString(),u:curUser||'?',msg:msg});
+  if(_secLog.length>500)_secLog=_secLog.slice(-500);
+  try{localStorage.setItem('_ga_seclog',JSON.stringify(_secLog));}catch(e){}
+}
+
+function getOPin(){return localStorage.getItem('_ga_opin')||'';}
+
+function updateInvLockUI(){
+  var id=parseInt((document.getElementById('inv-select')||{}).value||0);
+  var b=id?bookings.find(function(x){return x.id===id;}):null;
+  var hardLocked=b&&isInvLocked(b)&&window._invAdminUnlocked!==id;
+  var adminActive=b&&isInvLocked(b)&&window._invAdminUnlocked===id;
+  var bannerEl=document.getElementById('inv-lock-banner');
+  if(bannerEl){
+    if(hardLocked){
+      bannerEl.innerHTML=
+        '<div style="display:flex;align-items:center;justify-content:space-between;background:#fff8e1;border:1.5px solid #e6a817;border-radius:8px;padding:9px 12px;">'+
+        '<div style="display:flex;align-items:center;gap:8px;">'+
+        '<i class="ti ti-lock" style="color:#b8860b;font-size:16px;flex-shrink:0;"></i>'+
+        '<div><div style="font-size:12px;font-weight:700;color:#7a5a00;">🔒 Invoice Locked</div>'+
+        '<div style="font-size:10px;color:#9a7520;margin-top:1px;">Payment recorded — editing disabled to protect records</div></div></div>'+
+        '<button onclick="invAdminOverride()" style="padding:5px 11px;background:#7a5a00;color:#fff;border:none;border-radius:6px;font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap;display:flex;align-items:center;gap:4px;flex-shrink:0;"><i class="ti ti-lock-open"></i> Admin Override</button>'+
+        '</div>';
+      bannerEl.style.display='block';
+    } else if(adminActive){
+      bannerEl.innerHTML=
+        '<div style="display:flex;align-items:center;gap:8px;background:#e8f5e9;border:1.5px solid #4caf50;border-radius:8px;padding:9px 12px;">'+
+        '<i class="ti ti-lock-open" style="color:#2e7d32;font-size:16px;flex-shrink:0;"></i>'+
+        '<div><div style="font-size:12px;font-weight:700;color:#2e7d32;">🔓 Admin Override Active</div>'+
+        '<div style="font-size:10px;color:#388e3c;margin-top:1px;">Editing allowed — will re-lock automatically when you Save</div></div></div>';
+      bannerEl.style.display='block';
+    } else {
+      bannerEl.innerHTML='';bannerEl.style.display='none';
+    }
+  }
+  var saveBtn=document.getElementById('inv-save-btn');
+  if(saveBtn){saveBtn.style.opacity=hardLocked?'0.45':'1';saveBtn.title=hardLocked?'Invoice locked — use Admin Override':'';}
+}
+
+function invAdminOverride(){
+  var id=parseInt((document.getElementById('inv-select')||{}).value||0);
+  if(!id)return;
+  var pin=getOPin();
+  if(!pin){
+    showModal(
+      '<div class="modal-header"><div><div class="modal-title">🔐 Set Override PIN</div>'+
+      '<div class="modal-sub">No PIN set yet. Go to Admin → Settings → Security to create one first.</div></div>'+
+      '<button class="modal-close" onclick="closeModal()"><i class="ti ti-x"></i></button></div>'+
+      '<div class="modal-actions"><button class="btn primary" onclick="closeModal();h_switchTab(\'settings\');switchHotelAdminTab(\'security\')">Go to Security Settings</button></div>'
+    );
+    return;
+  }
+  var b=bookings.find(function(x){return x.id===id;});
+  showModal(
+    '<div class="modal-header"><div><div class="modal-title">🔐 Admin Override</div>'+
+    '<div class="modal-sub">GA-'+String(id).padStart(4,'0')+(b?' · '+b.guest:'')+'</div></div>'+
+    '<button class="modal-close" onclick="closeModal()"><i class="ti ti-x"></i></button></div>'+
+    '<div style="margin:12px 0 6px;">'+
+    '<div class="form-group" style="margin-bottom:6px;"><label>Enter Override PIN</label>'+
+    '<input type="password" id="_ovpin" maxlength="6" placeholder="••••••" inputmode="numeric" pattern="[0-9]*" '+
+    'style="letter-spacing:6px;font-size:22px;text-align:center;" onkeydown="if(event.key===\'Enter\')_doOverride('+id+')"></div>'+
+    '<div id="_overr" style="display:none;color:#c0392b;font-size:11px;text-align:center;margin-top:4px;">Incorrect PIN. Try again.</div>'+
+    '</div>'+
+    '<div class="modal-actions"><button class="btn" onclick="closeModal()">Cancel</button>'+
+    '<button class="btn primary" onclick="_doOverride('+id+')"><i class="ti ti-lock-open"></i> Unlock</button></div>'
+  );
+  setTimeout(function(){var e=document.getElementById('_ovpin');if(e)e.focus();},120);
+}
+
+function _doOverride(id){
+  var entered=(document.getElementById('_ovpin')||{}).value||'';
+  if(entered!==getOPin()){
+    var e=document.getElementById('_overr');if(e)e.style.display='block';
+    if(document.getElementById('_ovpin'))document.getElementById('_ovpin').value='';
+    logSec('Failed override attempt on GA-'+String(id).padStart(4,'0'));
+    return;
+  }
+  var b=bookings.find(function(x){return x.id===id;});
+  logSec('Override granted: GA-'+String(id).padStart(4,'0')+(b?' ('+b.guest+')':''));
+  window._invAdminUnlocked=id;
+  closeModal();
+  notify('🔓 Unlocked — make changes then Save to re-lock','success');
+  renderExtras();updateInvLockUI();
+}
+
+function showChangePinModal(){
+  var has=!!getOPin();
+  showModal(
+    '<div class="modal-header"><div><div class="modal-title">🔐 '+(has?'Change':'Set')+' Override PIN</div>'+
+    (has?'<div class="modal-sub">Enter your current PIN to confirm</div>':'<div class="modal-sub">Choose a 4–6 digit PIN. Share it verbally when staff need an override.</div>')+
+    '</div><button class="modal-close" onclick="closeModal()"><i class="ti ti-x"></i></button></div>'+
+    '<div style="display:flex;flex-direction:column;gap:10px;margin:8px 0;">'+
+    (has?'<div class="form-group" style="margin-bottom:0;"><label>Current PIN</label>'+
+    '<input type="password" id="_cpold" maxlength="6" inputmode="numeric" pattern="[0-9]*" style="letter-spacing:4px;font-size:18px;text-align:center;"></div>':'')+
+    '<div class="form-group" style="margin-bottom:0;"><label>New PIN (4–6 digits)</label>'+
+    '<input type="password" id="_cpnew1" maxlength="6" inputmode="numeric" pattern="[0-9]*" style="letter-spacing:4px;font-size:18px;text-align:center;" placeholder="e.g. 4821"></div>'+
+    '<div class="form-group" style="margin-bottom:0;"><label>Confirm New PIN</label>'+
+    '<input type="password" id="_cpnew2" maxlength="6" inputmode="numeric" pattern="[0-9]*" style="letter-spacing:4px;font-size:18px;text-align:center;" placeholder="repeat"></div>'+
+    '<div id="_cperr" style="display:none;color:#c0392b;font-size:11px;text-align:center;"></div>'+
+    '</div>'+
+    '<div class="modal-actions"><button class="btn" onclick="closeModal()">Cancel</button>'+
+    '<button class="btn primary" onclick="_doChangePin()"><i class="ti ti-check"></i> Save PIN</button></div>'
+  );
+}
+
+function _doChangePin(){
+  var has=!!getOPin();
+  var errEl=document.getElementById('_cperr');
+  if(has){
+    var old=(document.getElementById('_cpold')||{}).value||'';
+    if(old!==getOPin()){if(errEl){errEl.textContent='Current PIN is incorrect.';errEl.style.display='block';}return;}
+  }
+  var n1=(document.getElementById('_cpnew1')||{}).value||'';
+  var n2=(document.getElementById('_cpnew2')||{}).value||'';
+  if(n1.length<4||!/^\d+$/.test(n1)){if(errEl){errEl.textContent='PIN must be 4–6 digits (numbers only).';errEl.style.display='block';}return;}
+  if(n1!==n2){if(errEl){errEl.textContent='PINs do not match.';errEl.style.display='block';}return;}
+  localStorage.setItem('_ga_opin',n1);
+  logSec('Override PIN '+(has?'changed':'set')+' by '+curUser);
+  closeModal();
+  notify('🔐 Override PIN saved','success');
+  renderSecurityPanel();
+}
+
+function renderSecurityPanel(){
+  var pin=getOPin();
+  var lbl=document.getElementById('sec-pin-btn-label');
+  if(lbl)lbl.textContent=pin?'Change Override PIN':'Set Override PIN';
+  var st=document.getElementById('sec-pin-status');
+  if(st)st.textContent=pin?'✔ PIN is set (••••)':'No PIN set yet — staff can request but cannot be granted overrides until you set one.';
+  if(st)st.style.color=pin?'var(--green2)':'var(--red)';
+}
+
+function showSecLog(){
+  var entries=_secLog.slice().reverse().slice(0,100);
+  if(!entries.length){notify('No security events logged yet.','success');return;}
+  var rows=entries.map(function(e){
+    var d=new Date(e.t);
+    var ds=d.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'})+
+           ' '+d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
+    return '<div style="display:grid;grid-template-columns:140px auto;gap:8px;padding:7px 0;border-bottom:1px solid var(--border);font-size:11px;">'+
+      '<span style="color:var(--text3);">'+ds+'</span>'+
+      '<span style="color:var(--text);">'+e.msg+'</span></div>';
+  }).join('');
+  showModal(
+    '<div class="modal-header"><div><div class="modal-title">🛡 Security Log</div>'+
+    '<div class="modal-sub">Last '+entries.length+' events (most recent first)</div></div>'+
+    '<button class="modal-close" onclick="closeModal()"><i class="ti ti-x"></i></button></div>'+
+    '<div style="max-height:420px;overflow-y:auto;padding:4px 0;">'+rows+'</div>'+
+    '<div class="modal-actions"><button class="btn" onclick="closeModal()">Close</button></div>'
+  );
+}
+
 // ── INVOICE ──
 function renderInvoiceSelect(){
   var sel=document.getElementById('inv-select');
@@ -6585,13 +7188,36 @@ function loadInvoice(){
   var discToShow=(savedDisc!==undefined&&savedDisc!==null)?savedDisc:bookingDisc;
   if(document.getElementById('inv-discount'))document.getElementById('inv-discount').value=discToShow;
   /* Payment statuses are now auto-computed in renderInvoice() from advance vs totals */
+  window._invAdminUnlocked=null;
+  window._invSavedExtrasCount=invExtras.length;
   renderExtras();renderInvoice();
+  updateInvLockUI();
 }
-function addExtra(){invExtras.push({desc:'',qty:1,rate:0});renderExtras();}
+function addExtra(){
+  if(!parseInt((document.getElementById('inv-select')||{}).value||0)){notify('Select a booking first.','error');return;}
+  invExtras.push({desc:'',qty:1,rate:0,date:todayStr()});renderExtras();
+}
 function renderExtras(){
   var el=document.getElementById('inv-extras');
   if(!invExtras.length){el.innerHTML='';return;}
+  var id=parseInt((document.getElementById('inv-select')||{}).value||0);
+  var b=id?bookings.find(function(x){return x.id===id;}):null;
+  var locked=b&&isInvLocked(b)&&window._invAdminUnlocked!==id;
+  /* savedCount = number of extras that existed when booking was loaded (protected) */
+  var savedCount=locked?(window._invSavedExtrasCount||0):0;
   el.innerHTML=invExtras.map(function(c,i){
+    var isProtected=locked&&i<savedCount;
+    if(isProtected){
+      /* Read-only row for already-saved charges */
+      var dStr=c.date?(' · '+formatDate(c.date)):'';
+      return '<div style="display:flex;align-items:center;gap:8px;padding:7px 10px;background:#fafafa;border:1px solid #eee;border-radius:6px;margin-bottom:4px;">'+
+        '<i class="ti ti-lock" style="color:#ccc;font-size:12px;flex-shrink:0;" title="Locked — payment recorded"></i>'+
+        '<span style="flex:1;font-size:12px;font-weight:600;color:#333;">'+c.desc+'</span>'+
+        '<span style="font-size:11px;color:#888;">'+c.qty+(dStr?dStr:'')+'</span>'+
+        '<span style="font-size:12px;font-weight:700;color:#B7770D;">'+money(c.qty*c.rate)+'</span>'+
+      '</div>';
+    }
+    /* Fully editable row for newly added items */
     return '<div style="display:grid;grid-template-columns:1fr 55px 85px auto;gap:5px;margin-bottom:5px;align-items:center">'+
       '<input placeholder="e.g. BBQ Night" value="'+c.desc+'" oninput="invExtras['+i+'].desc=this.value;renderInvoice()">'+
       '<input type="number" placeholder="Qty" value="'+c.qty+'" oninput="invExtras['+i+'].qty=+this.value;renderInvoice()">'+
@@ -6611,8 +7237,8 @@ function renderInvoice(){
   var grandTotal=roomTotal+extrasTotal;
   var advance=b.advance||0;
   var extrasAdvance=b.extrasAdvance||0;
-  /* Auto-compute room payment status from b.advance vs grandTotal */
-  var roomStatus=advance>=grandTotal&&grandTotal>0?'paid':advance>0&&advance<grandTotal?'partial':'unpaid';
+  /* Auto-compute room payment status from b.advance vs roomTotal only (not grandTotal) */
+  var roomStatus=advance>=roomTotal&&roomTotal>0?'paid':advance>0&&advance<roomTotal?'partial':'unpaid';
   /* Auto-compute extras payment status from its OWN extrasAdvance — independent of room */
   var extrasStatus=extras.length===0?'unpaid':extrasAdvance>=extrasTotal&&extrasTotal>0?'paid':extrasAdvance>0&&extrasAdvance<extrasTotal?'partial':'unpaid';
   /* Update hidden inputs */
@@ -6624,13 +7250,15 @@ function renderInvoice(){
   _applyBadge('inv-pay-status-badge',roomStatus);
   _applyBadge('inv-extras-status-badge',extrasStatus);
   /* Show/hide collect-payment panels */
-  var roomBalanceDue=Math.max(0,grandTotal-advance);
+  var roomBalanceDue=Math.max(0,roomTotal-advance);
   var extrasBalanceDue=Math.max(0,extrasTotal-extrasAdvance);
   var rcEl=document.getElementById('inv-room-collect');
   if(rcEl){rcEl.style.display=roomBalanceDue>0?'block':'none';var rbl=document.getElementById('inv-room-bal-label');if(rbl)rbl.textContent='Due: '+money(roomBalanceDue);}
   var ecEl=document.getElementById('inv-extras-collect');
   if(ecEl){ecEl.style.display=(extras.length>0&&extrasBalanceDue>0)?'block':'none';var ebl=document.getElementById('inv-extras-bal-label');if(ebl)ebl.textContent='Due: '+money(extrasBalanceDue);}
   var invNum='GA-'+String(b.id).padStart(4,'0');
+  /* Fix 6: use the persisted invoiceDate — never reset to today on reprint */
+  var invDate=b.invoiceDate||todayStr();
   var MONO='';
 
   function ico(path,col){col=col||'#888';return '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="'+col+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0">'+path+'</svg>';}
@@ -6675,7 +7303,7 @@ function renderInvoice(){
             '<span style="font-family:Georgia,serif;font-size:16px;font-weight:700;color:#1a1a2e;letter-spacing:4px;">INVOICE</span>'+
           '</div>'+
           '<div style="display:flex;flex-direction:column;gap:1px;">'+
-            mr('Invoice No.',invNum)+mr('Date',formatDate(todayStr()))+
+            mr('Invoice No.',invNum)+mr('Date',formatDate(invDate))+
           '</div>'+
         '</div>'+
       '</div>'+
@@ -6703,43 +7331,104 @@ function renderInvoice(){
     '<td colspan="2" style="border-bottom:1px solid #eee;"></td>'+
     '<td style="padding:7px 10px;border-bottom:1px solid #eee;text-align:right;color:#B7770D;font-weight:700;font-size:10px;">-'+money(addDisc)+'</td></tr>':'';
 
+  var thS='padding:8px 10px;color:#C9A84C;font-size:8px;letter-spacing:1.5px;text-transform:uppercase;font-weight:700;';
+  var theadRow=
+    '<thead><tr style="background:#eeeae2;border-bottom:2px solid #1a1a2e;">'+
+      '<th style="'+thS+'text-align:left;">Date</th>'+
+      '<th style="'+thS+'text-align:left;">Description</th>'+
+      '<th style="'+thS+'text-align:center;">Qty</th>'+
+      '<th style="'+thS+'text-align:right;">Rate (৳)</th>'+
+      '<th style="'+thS+'text-align:right;">Amount (৳)</th>'+
+    '</tr></thead>';
+
+  var roomRow=
+    '<tr><td style="padding:8px 10px;border-bottom:1px solid #eee;color:#777;font-size:10px;">'+formatDate(b.checkin)+'</td>'+
+    '<td style="padding:8px 10px;border-bottom:1px solid #eee;color:#222;font-size:10px;">Room '+b.room+' — Accommodation ('+b.nights+' Night'+(b.nights>1?'s':'')+')</td>'+
+    '<td style="padding:8px 10px;border-bottom:1px solid #eee;text-align:center;color:#555;font-size:10px;">'+b.nights+'</td>'+
+    '<td style="padding:8px 10px;border-bottom:1px solid #ddd;text-align:right;color:#333;font-size:10px;">'+(b.baseAmount?money(Math.round(b.baseAmount/b.nights)):money(b.amount))+'</td>'+
+    '<td style="padding:8px 10px;border-bottom:1px solid #ddd;text-align:right;color:#000;font-weight:700;font-size:10px;">'+money(b.baseAmount||b.amount)+'</td></tr>';
+
   var eRows=extras.map(function(ex){
-    return '<tr><td style="padding:7px 10px;border-bottom:1px solid #eee;color:#aaa;font-size:10px;">—</td>'+
+    var exDate=ex.date?formatDate(ex.date):formatDate(b.checkin);
+    return '<tr><td style="padding:7px 10px;border-bottom:1px solid #eee;color:#777;font-size:10px;">'+exDate+'</td>'+
       '<td style="padding:7px 10px;border-bottom:1px solid #eee;color:#222;font-size:10px;">'+ex.desc+'</td>'+
       '<td style="padding:7px 10px;border-bottom:1px solid #eee;text-align:center;color:#555;font-size:10px;">'+ex.qty+'</td>'+
       '<td style="padding:7px 10px;border-bottom:1px solid #eee;text-align:right;color:#555;font-size:10px;">'+money(ex.rate)+'</td>'+
       '<td style="padding:7px 10px;border-bottom:1px solid #eee;text-align:right;color:#B7770D;font-weight:700;font-size:10px;">'+money(ex.qty*ex.rate)+'</td></tr>';
   }).join('');
 
+  var sectionHdrRow=function(label){
+    return '<tr style="background:#f0ece2;"><td colspan="5" style="padding:5px 10px 4px;font-size:7.5px;font-weight:800;letter-spacing:1.8px;text-transform:uppercase;color:#1a1a2e;border-bottom:1px solid #ccc;border-top:2px solid #1a1a2e;">'+label+'</td></tr>';
+  };
+  var subTotalRow=function(label,amount){
+    return '<tr style="background:#faf8f4;"><td colspan="4" style="padding:5px 10px;font-size:9px;font-weight:700;color:#444;text-align:right;border-top:1px solid #ddd;">'+label+'</td>'+
+      '<td style="padding:5px 10px;font-size:10px;font-weight:800;color:#1a1a2e;text-align:right;border-top:1px solid #ddd;">'+money(amount)+'</td></tr>';
+  };
+
+  var tableBody;
+  if(extras.length>0){
+    tableBody=
+      sectionHdrRow('Accommodation Charges')+
+      roomRow+dRow+
+      subTotalRow('Accommodation Sub-total',roomTotal)+
+      sectionHdrRow('Additional Charges')+
+      eRows+
+      subTotalRow('Additional Charges Sub-total',extrasTotal);
+  } else {
+    tableBody=roomRow+dRow;
+  }
+
+  /* PAYMENTS RECEIVED — add each payment as its own row */
+  var _payHist=b.paymentHistory||[];
+  if(_payHist.length){
+    var _pTD='padding:7px 10px;border-bottom:1px solid #e0f0e8;font-size:10px;';
+    tableBody+=sectionHdrRow('Payments Received');
+    _payHist.forEach(function(h){
+      var _pd=new Date(h.ts||h.date||'');
+      var _hasTime=!!h.ts;
+      var _pDate=isNaN(_pd)?'—':_pd.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'})+(_hasTime?' '+_pd.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}):'');
+      var _pType=h.type==='service'?'Service':'Room';
+      var _pDesc=_pType+' Payment — '+h.method+(h.note?' · '+h.note:'');
+      tableBody+=
+        '<tr style="background:#f5fff8;">'+
+        '<td style="'+_pTD+'color:#555;">'+_pDate+'</td>'+
+        '<td style="'+_pTD+'color:#1a7040;font-style:italic;">'+_pDesc+'</td>'+
+        '<td colspan="2" style="'+_pTD+'"></td>'+
+        '<td style="'+_pTD+'text-align:right;color:#1a7040;font-weight:700;">-'+money(h.amount)+'</td>'+
+        '</tr>';
+    });
+    /* Balance row */
+    var _totAdv=(b.advance||0)+(b.extrasAdvance||0);
+    var _balRow=Math.max(0,grandTotal-_totAdv);
+    var _balClr=_balRow>0?'#c0392b':'#1a7040';
+    var _balBg=_balRow>0?'#fff0f0':'#f0fff4';
+    tableBody+=
+      '<tr style="background:'+_balBg+';border-top:2px solid '+_balClr+';">'+
+      '<td colspan="4" style="padding:9px 10px;font-size:9.5px;font-weight:800;letter-spacing:.8px;text-transform:uppercase;text-align:right;color:'+_balClr+';">'+
+        (_balRow>0?'Balance Due':'✔ Fully Paid')+
+      '</td>'+
+      '<td style="padding:9px 10px;font-size:13px;font-weight:800;text-align:right;color:'+_balClr+';">'+money(_balRow)+'</td>'+
+      '</tr>';
+  }
+
   var table=
     '<div style="padding:12px 24px;">'+
       '<table style="width:100%;border-collapse:collapse;">'+
-        '<thead><tr style="background:#eeeae2;border-bottom:2px solid #1a1a2e;">'+
-          '<th style="padding:8px 10px;text-align:left;color:#C9A84C;font-size:8px;letter-spacing:1.5px;text-transform:uppercase;font-weight:700;">Date</th>'+
-          '<th style="padding:8px 10px;text-align:left;color:#C9A84C;font-size:8px;letter-spacing:1.5px;text-transform:uppercase;font-weight:700;">Description</th>'+
-          '<th style="padding:8px 10px;text-align:center;color:#C9A84C;font-size:8px;letter-spacing:1.5px;text-transform:uppercase;font-weight:700;">Qty</th>'+
-          '<th style="padding:8px 10px;text-align:right;color:#C9A84C;font-size:8px;letter-spacing:1.5px;text-transform:uppercase;font-weight:700;">Rate (৳)</th>'+
-          '<th style="padding:8px 10px;text-align:right;color:#C9A84C;font-size:8px;letter-spacing:1.5px;text-transform:uppercase;font-weight:700;">Amount (৳)</th>'+
-        '</tr></thead>'+
-        '<tbody>'+
-          '<tr><td style="padding:8px 10px;border-bottom:1px solid #eee;color:#777;font-size:10px;">'+formatDate(b.checkin)+'</td>'+
-          '<td style="padding:8px 10px;border-bottom:1px solid #eee;color:#222;font-size:10px;">Room '+b.room+' — Accommodation ('+b.nights+' Night'+(b.nights>1?'s':'')+')</td>'+
-          '<td style="padding:8px 10px;border-bottom:1px solid #eee;text-align:center;color:#555;font-size:10px;">'+b.nights+'</td>'+
-          '<td style="padding:8px 10px;border-bottom:1px solid #ddd;text-align:right;color:#333;font-size:10px;">'+(b.baseAmount?money(Math.round(b.baseAmount/b.nights)):money(b.amount))+'</td>'+
-          '<td style="padding:8px 10px;border-bottom:1px solid #ddd;text-align:right;color:#000;font-weight:700;font-size:10px;">'+money(b.baseAmount||b.amount)+'</td></tr>'+
-          eRows+dRow+
-        '</tbody>'+
+        theadRow+
+        '<tbody>'+tableBody+'</tbody>'+
       '</table>'+
     '</div>';
 
   /* TOTALS + PAYMENT STATUS */
-  var balanceDue=Math.max(0,grandTotal-advance);
+  var extrasAdvance=b.extrasAdvance||0;
+  var totalAdvance=advance+extrasAdvance;
+  var balanceDue=Math.max(0,grandTotal-totalAdvance);
 
   var totals=
     '<div style="display:flex;flex-direction:column;gap:0;">'+
       (extras.length?
         '<div style="display:flex;justify-content:space-between;padding:5px 0;font-size:10px;border-bottom:1px solid #eee;color:#555;"><span>Room Total</span><span>'+money(roomTotal)+'</span></div>'+
-        '<div style="display:flex;justify-content:space-between;padding:5px 0;font-size:10px;border-bottom:1px solid #eee;color:#B7770D;"><span>Extras Total</span><span>'+money(extrasTotal)+'</span></div>'
+        '<div style="display:flex;justify-content:space-between;padding:5px 0;font-size:10px;border-bottom:1px solid #eee;color:#B7770D;"><span>Service Charges Total</span><span>'+money(extrasTotal)+'</span></div>'
       :'')+
       '<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 13px;background:#1a1a2e;border-radius:4px;margin-top:6px;">'+
         '<span style="font-size:8.5px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:#C9A84C;">Total Amount (৳)</span>'+
@@ -6747,7 +7436,11 @@ function renderInvoice(){
       '</div>'+
       (advance>0?
         '<div style="display:flex;justify-content:space-between;padding:5px 0;font-size:10px;border-bottom:1px solid #eee;color:#1a7040;margin-top:4px;">'+
-          '<span>\u2714 Advance Paid</span><span style="font-weight:700;">-'+money(advance)+'</span>'+
+          '<span>\u2714 Room Advance</span><span style="font-weight:700;">-'+money(advance)+'</span>'+
+        '</div>':'')+
+      (extrasAdvance>0?
+        '<div style="display:flex;justify-content:space-between;padding:5px 0;font-size:10px;border-bottom:1px solid #eee;color:#1a7040;">'+
+          '<span>\u2714 Service Advance</span><span style="font-weight:700;">-'+money(extrasAdvance)+'</span>'+
         '</div>':'')+
       '<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 13px;border-radius:4px;margin-top:4px;'+
         (balanceDue>0?'background:#fff0f0;border:1.5px solid #c0392b;':'background:#f0fff4;border:1.5px solid #1a7040;')+'">'+
@@ -6760,7 +7453,9 @@ function renderInvoice(){
 
   var mid=
     '<div style="padding:0 24px 12px;display:grid;grid-template-columns:1fr 1fr;gap:16px;">'+
-      '<div>'+statusBox(extras.length?extrasStatus:roomStatus)+'</div>'+
+      (extras.length>0?
+        '<div style="display:flex;flex-direction:column;gap:8px;">'+statusBox(roomStatus)+statusBox(extrasStatus)+'</div>':
+        '<div>'+statusBox(roomStatus)+'</div>')+
       '<div>'+totals+'</div>'+
     '</div>';
 
@@ -6825,7 +7520,7 @@ function renderInvoice(){
 
 
 function _hotelPrint(invHTML){
-  /* Exact same pattern as hall: add class to body, print, remove class */
+  /* Remove any leftover print container from a previous call */
   var old=document.getElementById('_hpm');if(old)old.remove();
   var d=document.createElement('div');
   d.id='_hpm';
@@ -6833,11 +7528,36 @@ function _hotelPrint(invHTML){
   d.style.display='none';
   document.body.appendChild(d);
   document.body.classList.add('hotel-print-mode');
-  window.print();
-  document.body.classList.remove('hotel-print-mode');
-  d.remove();
+  /* Delay print so the browser has time to repaint with the new CSS class
+     applied (hiding the app UI, showing #_hpm) before the dialog opens.
+     Clean up only AFTER the print dialog closes via the afterprint event —
+     calling window.print() on Windows/Chrome returns immediately, so removing
+     the element right away would empty the print preview. */
+  setTimeout(function(){
+    var cleanup=function(){
+      document.body.classList.remove('hotel-print-mode');
+      if(d.parentNode)d.remove();
+      window.removeEventListener('afterprint',cleanup);
+    };
+    window.addEventListener('afterprint',cleanup);
+    window.print();
+  },300);
 }
 
+function printRoomOnlyInvoice(){
+  var out=document.getElementById('inv-output');
+  if(!out||!out.innerHTML.trim()){notify('Click Preview first.','error');return;}
+  saveInvoiceChanges(true);
+  /* Temporarily suppress extras so renderInvoice() builds a room-only invoice */
+  var _saved=invExtras;
+  invExtras=[];
+  renderInvoice();
+  var html=out.innerHTML;
+  /* Restore full view */
+  invExtras=_saved;
+  renderInvoice();
+  _hotelPrint(html);
+}
 function printAndSaveInvoice(){
   var out=document.getElementById('inv-output');
   if(!out||!out.innerHTML.trim()){notify('Click Preview first.','error');return;}
@@ -6850,7 +7570,7 @@ function printExtrasInvoice(){
   if(!id){notify('Select a booking first.','error');return;}
   var b=bookings.find(function(x){return x.id===id;});if(!b)return;
   var extras=invExtras.filter(function(c){return c.desc&&c.rate>0;});
-  if(!extras.length){notify('No extra charges added yet.','error');return;}
+  if(!extras.length){notify('No additional service charges added yet.','error');return;}
   var extrasTotal=extras.reduce(function(s,c){return s+c.qty*c.rate;},0);
   var extrasAdvance=b.extrasAdvance||0;
   var extrasStatus=extrasAdvance>=extrasTotal&&extrasTotal>0?'paid':extrasAdvance>0?'partial':'unpaid';
@@ -6870,7 +7590,8 @@ function printExtrasInvoice(){
   var st=statusText[extrasStatus]||statusText.unpaid;
 
   var eRows=extras.map(function(ex){
-    return '<tr><td style="padding:8px 10px;border-bottom:1px solid #eee;color:#777;font-size:10px;">'+formatDate(b.checkin)+'</td>'+
+    var exDate=ex.date?formatDate(ex.date):formatDate(b.checkin);
+    return '<tr><td style="padding:8px 10px;border-bottom:1px solid #eee;color:#777;font-size:10px;">'+exDate+'</td>'+
       '<td style="padding:8px 10px;border-bottom:1px solid #eee;color:#222;font-size:10px;">'+ex.desc+'</td>'+
       '<td style="padding:8px 10px;border-bottom:1px solid #eee;text-align:center;color:#555;font-size:10px;">'+ex.qty+'</td>'+
       '<td style="padding:8px 10px;border-bottom:1px solid #ddd;text-align:right;color:#333;font-size:10px;">'+money(ex.rate)+'</td>'+
@@ -6897,13 +7618,14 @@ function printExtrasInvoice(){
         '<div style="font-size:7.5px;letter-spacing:3px;color:#aaa;text-transform:uppercase;">Luxury for all</div>'+
       '</div>'+
       '<div style="text-align:right;">'+
-        '<div style="font-family:Georgia,serif;font-size:22px;font-weight:700;color:#C9A84C;letter-spacing:3px;line-height:1;">EXTRA CHARGES</div>'+
+        '<div style="font-family:Georgia,serif;font-size:20px;font-weight:700;color:#C9A84C;letter-spacing:2px;line-height:1;">ADDITIONAL SERVICE CHARGE</div>'+
         '<div style="display:flex;align-items:center;justify-content:flex-end;gap:4px;margin:4px 0 9px;">'+
           '<span style="width:26px;height:0.8px;background:#C9A84C;display:inline-block;"></span>'+
           '<span style="color:#C9A84C;font-size:7px;">♦</span>'+
           '<span style="width:26px;height:0.8px;background:#C9A84C;display:inline-block;"></span>'+
         '</div>'+
-        mr('Invoice No.',invNum)+mr('Date',formatDate(todayStr()))+
+        mr('Invoice No.',invNum)+mr('Date',formatDate(b.invoiceDate||todayStr()))+
+        mr('Ref (Room Inv.)','GA-'+String(b.id).padStart(4,'0'))+
         mr('Guest Name',b.guest)+mr('Room No.',b.room)+
         mr('Check-In',formatDate(b.checkin))+mr('Check-Out',formatDate(b.checkout))+
       '</div>'+
@@ -6930,11 +7652,16 @@ function printExtrasInvoice(){
         '<div style="font-size:8.5px;color:#aaa;">'+HOTEL.name+'</div>'+
       '</div>'+
       '<div>'+
-        '<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 13px;background:#1a1a2e;border-radius:4px;">'+
+        '<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 13px;background:#1a1a2e;border-radius:4px;margin-bottom:4px;">'+
           '<span style="font-size:8.5px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:#C9A84C;">Total Amount (৳)</span>'+
           '<span style="font-size:17px;font-weight:800;color:#C9A84C;font-family:Georgia,serif;">'+money(extrasTotal)+'</span>'+
         '</div>'+
-      '</div>'+
+        (extrasAdvance>0?
+          '<div style="display:flex;justify-content:space-between;padding:5px 0;font-size:10px;color:#1a7040;border-bottom:1px solid #eee;">'+
+            '<span>✔ Advance Paid</span><span style="font-weight:700;">-'+money(extrasAdvance)+'</span>'+
+          '</div>':'')+
+        (function(){var extBal=Math.max(0,extrasTotal-extrasAdvance);return '<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 13px;border-radius:4px;margin-top:4px;'+(extBal>0?'background:#fff0f0;border:1.5px solid #c0392b;':'background:#f0fff4;border:1.5px solid #1a7040;')+'"><span style="font-size:8.5px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:'+(extBal>0?'#c0392b':'#1a7040')+';"> '+(extBal>0?'Balance Due (৳)':'Fully Paid ✔')+'</span><span style="font-size:17px;font-weight:800;color:'+(extBal>0?'#c0392b':'#1a7040')+';font-family:Georgia,serif;">'+money(extBal)+'</span></div>';})()
+      +'</div>'+
     '</div>'+
     /* SPACER + SIGNATURE */
     '<div style="flex:1;min-height:4px;"></div>'+
@@ -6975,6 +7702,11 @@ function saveInvoiceChanges(silent){
   var id=parseInt(document.getElementById('inv-select').value);
   if(!id){if(!silent)notify('Select a booking first.','error');return;}
   var idx=bookings.findIndex(function(b){return b.id===id;});if(idx===-1)return;
+  /* Lock guard */
+  if(isInvLocked(bookings[idx])&&window._invAdminUnlocked!==id){
+    if(!silent)notify('🔒 Invoice is locked. Use Admin Override to make changes.','error');
+    return;
+  }
   var extras=invExtras.filter(function(c){return c.desc&&c.rate>0;});
   bookings[idx].invoiceDiscount=parseFloat(document.getElementById('inv-discount').value)||0;
   bookings[idx].invoiceExtras=extras;
@@ -6982,9 +7714,18 @@ function saveInvoiceChanges(silent){
   bookings[idx].invoiceTotal=Math.max(0,_base+extras.reduce(function(s,c){return s+c.qty*c.rate;},0)-bookings[idx].invoiceDiscount);
   bookings[idx].payStatus=document.getElementById('inv-pay-status').value;
   bookings[idx].extrasPayStatus=(document.getElementById('inv-extras-status')||{}).value||'unpaid';
+  if(!bookings[idx].invoiceDate)bookings[idx].invoiceDate=todayStr();
+  /* If this was an admin override session, log it and re-lock */
+  if(window._invAdminUnlocked===id){
+    logSec('Admin override save: GA-'+String(id).padStart(4,'0')+' ('+bookings[idx].guest+')');
+    window._invAdminUnlocked=null;
+    notify('🔐 Saved & re-locked','success');
+  } else {
+    if(!silent)notify('Invoice saved — GA-'+String(id).padStart(4,'0'),'success');
+  }
   save();
-  renderInvoice();
-  if(!silent)notify('Invoice saved — GA-'+String(id).padStart(4,'0'),'success');
+  window._invSavedExtrasCount=invExtras.length;
+  renderExtras();renderInvoice();updatePaySummary();updateInvLockUI();
 }
 
 function invCollectPayment(type){
@@ -7011,19 +7752,19 @@ function invCollectPayment(type){
   if(type==='extras'){
     /* Extras tracked independently via b.extrasAdvance */
     var extrasBal=Math.max(0,extrasTotal-(b.extrasAdvance||0));
-    if(amt>extrasBal+0.01){notify('Amount exceeds extras balance due ('+money(extrasBal)+').','error');return;}
-    b.paymentHistory.push({date:todayStr(),amount:amt,method:method,note:'[Extras] '+(note||''),by:curUser});
+    if(amt>extrasBal+0.01){notify('Amount exceeds service charges balance due ('+money(extrasBal)+').','error');return;}
+    b.paymentHistory.push({ts:new Date().toISOString(),amount:amt,method:method,note:note||'',type:'service',by:curUser});
     b.extrasAdvance=(b.extrasAdvance||0)+amt;
     newBal=Math.max(0,extrasTotal-b.extrasAdvance);
     b.extrasPayStatus=newBal<=0?'paid':b.extrasAdvance>0?'partial':'unpaid';
     settled=newBal<=0;
     var rid2=revenues.length?Math.max.apply(null,revenues.map(function(r){return r.id;}))+1:1;
-    revenues.push({id:rid2,source:'Room Rent',amount:amt,date:todayStr(),note:b.guest+' Rm '+b.room+' (Extras) payment ('+method+')'+(note?' - '+note:'')});
+    revenues.push({id:rid2,source:'Service Charges',amount:amt,date:todayStr(),note:b.guest+' Rm '+b.room+' (Service) payment ('+method+')'+(note?' - '+note:'')});
   } else {
     /* Room — uses b.advance as before */
     var roomBal=Math.max(0,grandTotal-(b.advance||0));
     if(amt>roomBal+0.01){notify('Amount exceeds balance due ('+money(roomBal)+').','error');return;}
-    b.paymentHistory.push({date:todayStr(),amount:amt,method:method,note:note||'',by:curUser});
+    b.paymentHistory.push({ts:new Date().toISOString(),amount:amt,method:method,note:note||'',type:'room',by:curUser});
     b.advance=(b.advance||0)+amt;
     newBal=Math.max(0,grandTotal-b.advance);
     b.payStatus=newBal<=0?'paid':b.advance>0?'partial':'unpaid';
@@ -7036,9 +7777,10 @@ function invCollectPayment(type){
   bookings[idx].invoiceDiscount=disc;
   bookings[idx].invoiceTotal=grandTotal;
   save();
+  window._invSavedExtrasCount=invExtras.length;
   amtEl.value='';noteEl.value='';
   notify('\u2714 Payment '+money(amt)+' recorded'+(settled?' \u2014 Settled!':''),'success');
-  renderInvoice();renderFrontDesk();renderBookings();
+  renderExtras();renderInvoice();updatePaySummary();renderFrontDesk();renderBookings();updateInvLockUI();
 }
 
 function renderSettingsRooms(){
@@ -7149,7 +7891,7 @@ function postCheckoutActions(bookingId){
   h+='<div style="display:flex;flex-direction:column;gap:8px">';
   h+='<div style="background:var(--gold3);border:1.5px solid var(--gold);border-radius:11px;padding:13px;cursor:pointer" onclick="closeModal();launchGuestSurvey('+bookingId+')"><div style="font-weight:700;font-size:14px;color:var(--navy)">\u2b50 Guest Survey \u2014 Turn Screen to Guest</div><div style="font-size:12px;color:var(--text2);margin-top:2px">Full-screen survey. Guest taps stars. Auto-saves to Insights.</div></div>';
   h+='<div style="background:var(--bg2);border:1px solid var(--border);border-radius:11px;padding:13px;cursor:pointer" onclick="sendSurveyWhatsApp('+bookingId+')"><div style="font-weight:700;font-size:14px;color:var(--navy)">\ud83d\udcf1 Send Survey Link via WhatsApp</div><div style="font-size:12px;color:var(--text3);margin-top:2px">Guest fills on their phone.</div></div>';
-  h+='<div style="background:var(--bg2);border:1px solid var(--border);border-radius:11px;padding:13px;cursor:pointer" onclick="sendReviewRequest(\''+b.phone+'\',\''+b.guest+'\')"><div style="font-weight:700;font-size:14px;color:var(--navy)">\u2b50 Send Google Review Request</div><div style="font-size:12px;color:var(--text3);margin-top:2px">WhatsApp message with Google review link.</div></div>';
+  h+='<div style="background:var(--bg2);border:1px solid var(--border);border-radius:11px;padding:13px;cursor:pointer" onclick="h_sendReviewRequest(\''+b.phone+'\',\''+b.guest+'\')"><div style="font-weight:700;font-size:14px;color:var(--navy)">\u2b50 Send Google Review Request</div><div style="font-size:12px;color:var(--text3);margin-top:2px">WhatsApp message with Google review link.</div></div>';
   h+='<div style="background:var(--bg2);border:1px solid var(--border);border-radius:11px;padding:13px;cursor:pointer" onclick="closeModal();h_switchTab(\'invoice\');setTimeout(function(){document.getElementById(\'inv-select\').value=\''+b.id+'\';loadInvoice();},150)"><div style="font-weight:700;font-size:14px;color:var(--navy)">\ud83e\uddfe Generate Invoice</div><div style="font-size:12px;color:var(--text3);margin-top:2px">Print or save PDF invoice.</div></div>';
   h+='</div><div class="modal-actions"><button class="btn" onclick="closeModal()">Done</button></div>';
   showModal(h);
@@ -8148,7 +8890,7 @@ function confirmRecordPayment(id,bal){
   var idx=bookings.findIndex(function(b){return b.id===id;});if(idx<0)return;
   var b=bookings[idx];
   if(!b.paymentHistory)b.paymentHistory=[];
-  b.paymentHistory.push({date:todayStr(),amount:amt,method:method,note:note,by:curUser});
+  b.paymentHistory.push({ts:new Date().toISOString(),amount:amt,method:method,note:note||'',type:'room',by:curUser});
   b.advance=(b.advance||0)+amt;
   var total=(b.invoiceTotal!=null?b.invoiceTotal:b.amount);
   var newBal=Math.max(0,total-b.advance);
@@ -8290,7 +9032,7 @@ function deleteRoom(id){
 
 /* ADMIN PANEL */
 function switchHotelAdminTab(tab){
-  ['finance','rooms','staff','data'].forEach(function(t){
+  ['finance','rooms','staff','data','security','guide'].forEach(function(t){
     var p=document.getElementById('hAdminPanel-'+t);
     var b=document.getElementById('hAdminTab-'+t);
     if(p)p.style.display=t===tab?'block':'none';
@@ -8300,10 +9042,12 @@ function switchHotelAdminTab(tab){
   if(tab==='rooms'){renderSettingsRooms();try{renderPricingPanel();}catch(e){}}
   if(tab==='staff')renderHotelStaffPw();
   if(tab==='data'){var dz=document.getElementById('h-danger-zone');if(dz)dz.style.display=curRole==='admin'?'block':'none';}
+  if(tab==='security')renderSecurityPanel();
 }
 function renderHotelAdmin(){
   var isAdmin=curRole==='admin';
   var sb=document.getElementById('hAdminTab-staff');if(sb)sb.style.display=isAdmin?'flex':'none';
+  var secb=document.getElementById('hAdminTab-security');if(secb)secb.style.display=isAdmin?'flex':'none';
   switchHotelAdminTab(isAdmin?'finance':'rooms');
 }
 function renderSettings(){renderSettingsRooms();renderHotelAdmin();}
@@ -8416,30 +9160,51 @@ function updatePaySummary(){
   var rows='';
   if(mode==='room'){
     if(tEl)tEl.textContent='ROOM PAYMENT';
-    var advR=Math.min(advance,grandTotal);
-    var rBal=Math.max(0,grandTotal-advR);
+    var advR=Math.min(advance,roomTotal);
+    var rBal=Math.max(0,roomTotal-advance);
     rows+='<div style="display:flex;justify-content:space-between;padding:6px 0;font-size:12px;color:var(--text2);"><span>Room Charge</span><span style="font-weight:600;color:var(--text);">'+money(roomTotal)+'</span></div>';
-    if(extras.length)rows+='<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:11px;color:var(--text2);"><span>Extras Total</span><span style="color:var(--text);">'+money(extrasTotal)+'</span></div>';
+    if(extras.length)rows+='<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:11px;color:var(--text2);"><span>Service Charges</span><span style="color:var(--text);">'+money(extrasTotal)+'</span></div>';
     rows+='<div style="height:1px;background:var(--border);margin:4px 0;"></div>';
     if(advR>0)rows+='<div style="display:flex;justify-content:space-between;padding:5px 0;font-size:12px;color:var(--green2);"><span>\u2714 Advance Paid</span><span style="font-weight:700;">\u2212'+money(advR)+'</span></div>';
     rows+='<div style="height:1px;background:var(--border);margin:4px 0;"></div>';
     if(rBal<=0){rows+='<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;background:var(--green-bg);border:1.5px solid var(--green-bd);border-radius:7px;margin-top:6px;"><span style="font-size:12px;font-weight:800;color:var(--green2);text-transform:uppercase;letter-spacing:.8px;"><i class="ti ti-check"></i> Fully Settled</span><span style="font-size:15px;font-weight:800;color:var(--green2);">\u09f3 0</span></div>';}
     else{rows+='<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;background:rgba(192,57,43,.06);border:1.5px solid rgba(192,57,43,.3);border-radius:7px;margin-top:6px;"><span style="font-size:12px;font-weight:800;color:var(--red);text-transform:uppercase;letter-spacing:.8px;"><i class="ti ti-alert-circle"></i> Balance Due</span><span style="font-size:15px;font-weight:800;color:var(--red);">'+money(rBal)+'</span></div>';}
   } else {
-    if(tEl)tEl.textContent='EXTRAS PAYMENT';
-    if(!extras.length){rows='<div style="text-align:center;padding:12px;color:var(--text3);font-size:12px;"><i class="ti ti-package-off" style="font-size:20px;display:block;margin-bottom:5px;"></i>No extras added yet</div>';}
+    if(tEl)tEl.textContent='SERVICE PAYMENT';
+    if(!extras.length){rows='<div style="text-align:center;padding:12px;color:var(--text3);font-size:12px;"><i class="ti ti-package-off" style="font-size:20px;display:block;margin-bottom:5px;"></i>No service charges added yet</div>';}
     else{
       var extrasAdvance=b.extrasAdvance||0;
       var eBal=Math.max(0,extrasTotal-extrasAdvance);
       extras.forEach(function(x){rows+='<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:11px;color:var(--text2);"><span>'+x.desc+(x.qty>1?' \u00d7 '+x.qty:'')+'</span><span style="color:var(--text);">'+money(x.qty*x.rate)+'</span></div>';});
       rows+='<div style="height:1px;background:var(--border);margin:5px 0;"></div>';
-      rows+='<div style="display:flex;justify-content:space-between;padding:5px 0;font-size:12px;font-weight:700;"><span>Extras Total</span><span>'+money(extrasTotal)+'</span></div>';
+      rows+='<div style="display:flex;justify-content:space-between;padding:5px 0;font-size:12px;font-weight:700;"><span>Service Charges Total</span><span>'+money(extrasTotal)+'</span></div>';
       rows+='<div style="height:1px;background:var(--border);margin:4px 0;"></div>';
       if(extrasAdvance>0)rows+='<div style="display:flex;justify-content:space-between;padding:5px 0;font-size:12px;color:var(--green2);"><span>\u2714 Paid</span><span style="font-weight:700;">\u2212'+money(Math.min(extrasAdvance,extrasTotal))+'</span></div>';
       rows+='<div style="height:1px;background:var(--border);margin:4px 0;"></div>';
-      if(eBal<=0){rows+='<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;background:var(--green-bg);border:1.5px solid var(--green-bd);border-radius:7px;margin-top:6px;"><span style="font-size:12px;font-weight:800;color:var(--green2);text-transform:uppercase;letter-spacing:.8px;"><i class="ti ti-check"></i> Extras Settled</span><span style="font-size:15px;font-weight:800;color:var(--green2);">\u09f3 0</span></div>';}
-      else{rows+='<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;background:rgba(192,57,43,.06);border:1.5px solid rgba(192,57,43,.3);border-radius:7px;margin-top:6px;"><span style="font-size:12px;font-weight:800;color:var(--red);text-transform:uppercase;letter-spacing:.8px;"><i class="ti ti-alert-circle"></i> Extras Balance</span><span style="font-size:15px;font-weight:800;color:var(--red);">'+money(eBal)+'</span></div>';}
+      if(eBal<=0){rows+='<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;background:var(--green-bg);border:1.5px solid var(--green-bd);border-radius:7px;margin-top:6px;"><span style="font-size:12px;font-weight:800;color:var(--green2);text-transform:uppercase;letter-spacing:.8px;"><i class="ti ti-check"></i> Service Settled</span><span style="font-size:15px;font-weight:800;color:var(--green2);">\u09f3 0</span></div>';}
+      else{rows+='<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;background:rgba(192,57,43,.06);border:1.5px solid rgba(192,57,43,.3);border-radius:7px;margin-top:6px;"><span style="font-size:12px;font-weight:800;color:var(--red);text-transform:uppercase;letter-spacing:.8px;"><i class="ti ti-alert-circle"></i> Service Balance</span><span style="font-size:15px;font-weight:800;color:var(--red);">'+money(eBal)+'</span></div>';}
     }
+  }
+  /* Payment history */
+  var hist=(b.paymentHistory||[]).filter(function(h){
+    return mode==='room'?h.type==='room':h.type==='service';
+  });
+  if(hist.length){
+    rows+='<div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--border);">';
+    rows+='<div style="font-size:9px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase;color:var(--text3);margin-bottom:6px;">Payment History</div>';
+    hist.forEach(function(h){
+      var d=new Date(h.ts||h.date||'');
+      var hasTime=!!h.ts;
+      var ds=isNaN(d)?'—':d.toLocaleDateString('en-GB',{day:'2-digit',month:'short'})+(hasTime?' '+d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}):'');
+      rows+='<div style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid var(--border);font-size:11px;">'+
+        '<i class="ti ti-check" style="color:var(--green2);flex-shrink:0;font-size:11px;"></i>'+
+        '<span style="color:var(--text3);min-width:110px;font-size:10px;">'+ds+'</span>'+
+        '<span style="font-weight:700;color:var(--text);">'+money(h.amount)+'</span>'+
+        '<span style="color:var(--text3);font-size:10px;margin-left:4px;">'+h.method+'</span>'+
+        (h.note?'<span style="color:var(--text3);font-size:10px;flex:1;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="'+h.note+'">'+h.note+'</span>':'')+
+      '</div>';
+    });
+    rows+='</div>';
   }
   if(rowsEl)rowsEl.innerHTML=rows;
 }
