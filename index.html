@@ -645,6 +645,76 @@ body.hotel-print-mode #_hpm{display:block!important;}
   #hotelApp .room-grid{grid-template-columns:1fr 1fr!important;}
 }
 
+/* ════════════════════════════════════════
+   HOTEL CONTENT — MOBILE EXTENDED FIXES
+════════════════════════════════════════ */
+@media(max-width:640px){
+
+  /* 1. Admin tab buttons: 6-in-a-row → wrap into 3+3 */
+  #hotelApp #section-settings>div:first-child{flex-wrap:wrap!important;}
+  #hotelApp #section-settings>div:first-child>button{
+    flex:1 0 calc(33% - 3px)!important;min-width:0!important;
+    font-size:10px!important;padding:7px 4px!important;gap:3px!important;
+  }
+  #hotelApp #section-settings>div:first-child>button i{font-size:11px!important;}
+
+  /* 2. Admin Finance stats — inline repeat(4,1fr) → 2×2 */
+  #hotelApp #h-admin-stats{grid-template-columns:1fr 1fr!important;}
+
+  /* 3. Marketing Hub header stats — inline repeat(4,1fr) → 2×2 */
+  #hotelApp #mkt-summary{grid-template-columns:1fr 1fr!important;}
+
+  /* 4. Expense table panel has overflow:hidden inline — restore scroll */
+  #hotelApp #section-expenses .panel{overflow-x:auto!important;}
+
+  /* 5. Admin Finance + Data sub-panels */
+  #hotelApp #hAdminPanel-finance .grid-2{grid-template-columns:1fr!important;}
+  #hotelApp #hAdminPanel-data .grid-2{grid-template-columns:1fr!important;}
+
+  /* 6. Monthly Report — JS-rendered inline grids */
+  #hotelApp #monthly-report [style*="repeat(4,1fr)"]{grid-template-columns:1fr 1fr!important;}
+  #hotelApp #monthly-report [style*="1fr 1fr 1fr"]{grid-template-columns:1fr!important;}
+
+  /* 7. Bar charts — prevent blowing page width */
+  #hotelApp .bar-chart{overflow-x:auto;-webkit-overflow-scrolling:touch;}
+
+  /* 8. Guide section — inline 2-col grids → single column */
+  #hotelApp #hAdminPanel-guide [style*="grid-template-columns:1fr 1fr"]{
+    grid-template-columns:1fr!important;
+  }
+  #hotelApp #hAdminPanel-guide [style*="repeat(4,1fr)"]{
+    grid-template-columns:1fr 1fr!important;
+  }
+
+  /* 9. CRM guest card — 3-col stat boxes stay 3-col (they're fine at card width) */
+
+  /* 10. Marketing section header strip button row */
+  #hotelApp #section-marketing [style*="display:flex;gap:10px;flex-wrap:wrap"]{
+    width:100%!important;
+  }
+
+  /* 11. Insights section — monthly report panel header */
+  #hotelApp #section-insights .panel-header [style*="display:flex;gap:8px"]{
+    flex-wrap:wrap!important;gap:5px!important;
+  }
+  #hotelApp #report-month{width:100%!important;font-size:11px!important;}
+
+  /* 12. Finance Expenses filter row */
+  #hotelApp #section-expenses [style*="display:flex;gap:8px;flex-wrap:wrap"]{
+    flex-direction:column!important;gap:6px!important;
+  }
+  #hotelApp #hexp-search,#hotelApp #hexp-cat,#hotelApp #hexp-month{
+    width:100%!important;min-width:0!important;box-sizing:border-box!important;
+  }
+}
+
+/* Admin tab buttons: 2 per row on very small phones */
+@media(max-width:420px){
+  #hotelApp #section-settings>div:first-child>button{
+    flex:1 0 calc(50% - 3px)!important;
+  }
+}
+
 /* Business selector — mobile */
 @media(max-width:640px){
   #businessSelector > div:nth-child(2){grid-template-columns:1fr!important;max-width:340px!important;}
