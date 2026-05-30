@@ -1784,7 +1784,7 @@ select:focus, textarea:focus {
 
     <!-- Right controls -->
     <div class="nav-right">
-      <button id="hall-hamburger" onclick="hall_toggleMenu()" aria-label="Menu" style="display:none;width:36px;height:36px;border-radius:8px;border:1px solid rgba(201,168,76,.35);background:rgba(201,168,76,.1);color:#f0d080;cursor:pointer;align-items:center;justify-content:center;flex-shrink:0;font-size:20px;padding:0;font-family:inherit;"><i class="ti ti-menu-2"></i></button>
+      <button id="hall-hamburger" onclick="hall_toggleMenu(event)" aria-label="Menu" style="display:none;width:36px;height:36px;border-radius:8px;border:1px solid rgba(201,168,76,.35);background:rgba(201,168,76,.1);color:#f0d080;cursor:pointer;align-items:center;justify-content:center;flex-shrink:0;font-size:20px;padding:0;font-family:inherit;"><i class="ti ti-menu-2"></i></button>
       <div class="nav-user-wrap">
         <span class="nav-user-name" id="navUser"></span>
         <span class="role-badge" id="roleBadge"></span>
@@ -2602,7 +2602,7 @@ select:focus, textarea:focus {
       </div>
     </div>
     <div class="hotel-nav-right" style="display:flex;align-items:center;gap:8px;padding-left:16px;border-left:1px solid rgba(201,168,76,.2);flex-shrink:0;">
-      <button id="h-hamburger" onclick="h_toggleMenu()" aria-label="Menu" style="display:none;width:36px;height:36px;border-radius:8px;border:1px solid rgba(201,168,76,.3);background:rgba(201,168,76,.08);color:#C9A84C;cursor:pointer;align-items:center;justify-content:center;flex-shrink:0;font-size:20px;padding:0;"><i class="ti ti-menu-2"></i></button>
+      <button id="h-hamburger" onclick="h_toggleMenu(event)" aria-label="Menu" style="display:none;width:36px;height:36px;border-radius:8px;border:1px solid rgba(201,168,76,.3);background:rgba(201,168,76,.08);color:#C9A84C;cursor:pointer;align-items:center;justify-content:center;flex-shrink:0;font-size:20px;padding:0;"><i class="ti ti-menu-2"></i></button>
       <div id="pending-pill" class="pending-pill" onclick="h_switchTab('bookings')" style="cursor:pointer;font-size:10px;padding:3px 8px;white-space:nowrap;"><i class="ti ti-alert-triangle"></i><span id="pending-count">0</span></div>
       <div style="display:flex;align-items:center;gap:5px;padding:4px 9px;background:rgba(201,168,76,.1);border:1px solid rgba(201,168,76,.25);border-radius:7px;">
         <i class="ti ti-user-circle" style="color:#C9A84C;font-size:14px;flex-shrink:0;"></i>
@@ -2969,20 +2969,23 @@ select:focus, textarea:focus {
           </div>
 
           <!-- PRINT -->
-          <div style="border:1px solid var(--border);border-radius:9px;overflow:hidden;">
-            <div style="background:var(--bg3);padding:7px 12px;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;display:flex;align-items:center;gap:5px;"><i class="ti ti-printer" style="font-size:12px;"></i> Print Invoice</div>
-            <div style="padding:8px 10px;display:flex;flex-direction:column;gap:6px;">
-              <button onclick="printRoomOnlyInvoice()" style="display:flex;align-items:center;gap:10px;padding:9px 12px;border:1px solid var(--border);border-radius:7px;background:var(--bg2);cursor:pointer;width:100%;font-family:'DM Sans',sans-serif;text-align:left;">
-                <div style="width:30px;height:30px;background:rgba(10,22,40,.1);border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0;"><i class="ti ti-home-2" style="color:var(--navy);font-size:14px;"></i></div>
-                <div><div style="font-size:12px;font-weight:700;color:var(--text);">Room Invoice</div><div style="font-size:10px;color:var(--text3);">Room charges only</div></div>
+          <div style="border:2px solid var(--navy);border-radius:10px;overflow:hidden;box-shadow:0 3px 14px rgba(10,22,40,.13);">
+            <div style="background:var(--navy);padding:11px 14px;display:flex;align-items:center;gap:8px;">
+              <i class="ti ti-printer" style="color:#E8C96A;font-size:17px;"></i>
+              <span style="font-size:12px;font-weight:800;color:#fff;text-transform:uppercase;letter-spacing:1.2px;">Print Invoice</span>
+            </div>
+            <div style="padding:10px;display:flex;flex-direction:column;gap:8px;background:var(--bg2);">
+              <button onclick="printRoomOnlyInvoice()" style="display:flex;align-items:center;gap:12px;padding:12px 14px;border:2px solid rgba(10,22,40,.18);border-radius:8px;background:rgba(10,22,40,.04);cursor:pointer;width:100%;font-family:'DM Sans',sans-serif;text-align:left;">
+                <div style="width:38px;height:38px;background:var(--navy);border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;"><i class="ti ti-printer" style="color:#E8C96A;font-size:17px;"></i></div>
+                <div><div style="font-size:13px;font-weight:800;color:var(--navy);">🏠 Print Room Invoice</div><div style="font-size:10.5px;color:var(--text3);margin-top:2px;">Room charges only</div></div>
               </button>
-              <button onclick="printExtrasInvoice()" style="display:flex;align-items:center;gap:10px;padding:9px 12px;border:1px solid var(--border);border-radius:7px;background:var(--bg2);cursor:pointer;width:100%;font-family:'DM Sans',sans-serif;text-align:left;">
-                <div style="width:30px;height:30px;background:rgba(201,168,76,.1);border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0;"><i class="ti ti-receipt" style="color:var(--gold2);font-size:14px;"></i></div>
-                <div><div style="font-size:12px;font-weight:700;color:var(--text);">Service Invoice</div><div style="font-size:10px;color:var(--text3);">Additional service charges only</div></div>
+              <button onclick="printExtrasInvoice()" style="display:flex;align-items:center;gap:12px;padding:12px 14px;border:2px solid rgba(201,168,76,.4);border-radius:8px;background:rgba(201,168,76,.06);cursor:pointer;width:100%;font-family:'DM Sans',sans-serif;text-align:left;">
+                <div style="width:38px;height:38px;background:linear-gradient(135deg,#C9A84C,#E8C96A);border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;"><i class="ti ti-printer" style="color:#0d1b2e;font-size:17px;"></i></div>
+                <div><div style="font-size:13px;font-weight:800;color:#7a5500;">🧾 Print Service Charge Invoice</div><div style="font-size:10.5px;color:var(--text3);margin-top:2px;">Additional service charges only</div></div>
               </button>
-              <button onclick="printAndSaveInvoice()" style="display:flex;align-items:center;gap:10px;padding:9px 12px;border:1px solid var(--border);border-radius:7px;background:var(--bg2);cursor:pointer;width:100%;font-family:'DM Sans',sans-serif;text-align:left;">
-                <div style="width:30px;height:30px;background:rgba(26,112,64,.12);border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0;"><i class="ti ti-file-invoice" style="color:#1a7040;font-size:14px;"></i></div>
-                <div><div style="font-size:12px;font-weight:700;color:var(--text);">Full Invoice</div><div style="font-size:10px;color:var(--text3);">Room + all service charges</div></div>
+              <button onclick="printAndSaveInvoice()" style="display:flex;align-items:center;gap:12px;padding:12px 14px;border:2px solid rgba(26,112,64,.3);border-radius:8px;background:rgba(26,112,64,.06);cursor:pointer;width:100%;font-family:'DM Sans',sans-serif;text-align:left;">
+                <div style="width:38px;height:38px;background:linear-gradient(135deg,#1a7040,#22a05a);border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;"><i class="ti ti-printer" style="color:#fff;font-size:17px;"></i></div>
+                <div><div style="font-size:13px;font-weight:800;color:#1a5a2e;">📄 Print Complete Invoice</div><div style="font-size:10.5px;color:var(--text3);margin-top:2px;">Room + all service charges combined</div></div>
               </button>
             </div>
           </div>
@@ -3278,9 +3281,9 @@ select:focus, textarea:focus {
                 <div style="font-size:12px;font-weight:700;color:var(--navy2);margin-top:14px;margin-bottom:8px;">Printing the invoice</div>
                 <div style="font-size:12px;color:var(--text2);line-height:1.9;">
                   Three print options are available:<br>
-                  🏠 <b>Room Invoice</b> — room charges only<br>
-                  🛎 <b>Service Invoice</b> — service charges only<br>
-                  📄 <b>Full Invoice</b> — everything combined
+                  🏠 <b>Print Room Invoice</b> — room charges only<br>
+                  🧾 <b>Print Service Charge Invoice</b> — service charges only<br>
+                  📄 <b>Print Complete Invoice</b> — everything combined
                 </div>
               </div>
               <div>
@@ -3905,7 +3908,8 @@ loadPersistedUsers();
 /* window.onload handled by combined app */
 
 /* ════════════ TABS ════════════ */
-function hall_toggleMenu(){
+function hall_toggleMenu(e){
+  if(e&&e.stopPropagation)e.stopPropagation();
   var m=document.getElementById('hall-mobile-menu');
   var b=document.getElementById('hall-hamburger');
   if(!m)return;
@@ -3923,9 +3927,10 @@ function hall_closeMenu(){
 document.addEventListener('click',function(e){
   if(window.innerWidth>640)return;
   var m=document.getElementById('hall-mobile-menu');
-  var b=document.getElementById('hall-hamburger');
   if(!m||m.style.display!=='block')return;
-  if(!m.contains(e.target)&&b&&!b.contains(e.target))hall_closeMenu();
+  if(!document.contains(e.target))return; /* detached node — ignore */
+  var b=document.getElementById('hall-hamburger');
+  if(!m.contains(e.target)&&(!b||!b.contains(e.target)))hall_closeMenu();
 });
 
 function switchTab(id,btn){
@@ -6555,7 +6560,8 @@ function h_switchTab(t){
   });
 }
 
-function h_toggleMenu(){
+function h_toggleMenu(e){
+  if(e&&e.stopPropagation)e.stopPropagation();
   var m=document.getElementById('h-mobile-menu');
   var b=document.getElementById('h-hamburger');
   if(!m)return;
@@ -6569,13 +6575,14 @@ function h_closeMenu(){
   if(m)m.style.display='none';
   if(b)b.innerHTML='<i class="ti ti-menu-2"></i>';
 }
-/* Close hamburger menu when tapping outside */
+/* Close hotel hamburger menu when tapping outside */
 document.addEventListener('click',function(e){
   if(window.innerWidth>640)return;
   var m=document.getElementById('h-mobile-menu');
-  var b=document.getElementById('h-hamburger');
   if(!m||m.style.display!=='block')return;
-  if(!m.contains(e.target)&&b&&!b.contains(e.target))h_closeMenu();
+  if(!document.contains(e.target))return; /* detached node — ignore */
+  var b=document.getElementById('h-hamburger');
+  if(!m.contains(e.target)&&(!b||!b.contains(e.target)))h_closeMenu();
 });
 
 function updatePendingPill(){
@@ -6651,14 +6658,80 @@ function renderFrontDesk(){
 
 function openRoomDetail(num){
   var r=rooms.find(function(x){return x.number===num;});if(!r)return;
-  var b=bookings.find(function(x){return x.room===num&&x.status==='checked-in';});
-  var h='<div class="modal-header"><div><div class="modal-title">Room '+r.number+'</div><div class="modal-sub">'+r.type+' \u00b7 '+money(r.rate)+'/night</div></div><button class="modal-close" onclick="closeModal()"><i class="ti ti-x"></i></button></div>';
-  if(b)h+='<div style="background:var(--green-bg);border:1px solid var(--green-bd);border-radius:7px;padding:10px;margin-bottom:14px;font-size:13px;color:var(--green)"><strong>'+b.guest+'</strong> \u00b7 Checks out '+b.checkout+' \u00b7 Balance: '+money(b.amount-(b.advance||0))+'</div>';
-  h+='<div class="form-row"><div class="form-group"><label>Status</label><select id="rm-st"><option '+(r.status==='vacant'?'selected':'')+' value="vacant">Vacant</option><option '+(r.status==='occupied'?'selected':'')+' value="occupied">Occupied</option><option '+(r.status==='reserved'?'selected':'')+' value="reserved">Reserved</option><option '+(r.status==='maintenance'?'selected':'')+' value="maintenance">Maintenance</option></select></div><div class="form-group"><label>Rate/Night</label><input type="number" id="rm-rate" value="'+r.rate+'"></div></div>';
-  h+='<div class="form-group" style="margin-bottom:0"><label>Notes</label><input id="rm-notes" value="'+(r.notes||'')+'"></div>';
-  h+='<div class="modal-actions">'+(b?'<button class="btn gold" onclick="doCheckOut('+b.id+');closeModal()"><i class="ti ti-logout"></i> Check Out</button>':'')+
-    '<button class="btn" onclick="closeModal()">Cancel</button><button class="btn primary" onclick="saveRoomEdit(\''+r.number+'\')">Save</button></div>';
+  var bIn=bookings.find(function(x){return x.room===num&&x.status==='checked-in';});
+  var bRes=bookings.find(function(x){return x.room===num&&x.status==='confirmed';});
+  var h='<div class="modal-header"><div><div class="modal-title"><i class="ti ti-building" style="color:var(--gold);"></i> Room '+r.number+'</div><div class="modal-sub">'+r.type+' \u00b7 '+money(r.rate)+'/night</div></div><button class="modal-close" onclick="closeModal()"><i class="ti ti-x"></i></button></div>';
+
+  if(bIn){
+    /* \u2500\u2500 OCCUPIED \u2500\u2500 */
+    var tot=bIn.invoiceTotal!=null?bIn.invoiceTotal:bIn.amount;
+    var bal=Math.max(0,tot-(bIn.advance||0));
+    h+='<div style="background:var(--green-bg);border:1.5px solid var(--green-bd);border-radius:9px;padding:13px;margin-bottom:14px;">';
+    h+='<div style="font-size:11px;font-weight:800;color:var(--green);text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px;">\u2705 Checked In</div>';
+    h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:9px;font-size:12px;">';
+    h+='<div><div style="font-size:10px;color:var(--text3);margin-bottom:2px;">Guest</div><strong>'+bIn.guest+'</strong></div>';
+    h+='<div><div style="font-size:10px;color:var(--text3);margin-bottom:2px;">Phone</div><strong>'+bIn.phone+'</strong></div>';
+    h+='<div><div style="font-size:10px;color:var(--text3);margin-bottom:2px;">Check-out</div><strong>'+bIn.checkout+'</strong></div>';
+    h+='<div><div style="font-size:10px;color:var(--text3);margin-bottom:2px;">Balance Due</div><strong style="color:'+(bal>0?'var(--red)':'var(--green)')+';">'+money(bal)+'</strong></div>';
+    h+='</div></div>';
+    h+='<div class="modal-actions"><button class="btn" onclick="closeModal()">Close</button>';
+    h+='<button class="btn" onclick="viewBookingDetail('+bIn.id+')"><i class="ti ti-eye"></i> Details</button>';
+    h+='<button class="btn gold" onclick="doCheckOut('+bIn.id+');closeModal()"><i class="ti ti-logout"></i> Check Out</button></div>';
+
+  } else if(bRes){
+    /* \u2500\u2500 RESERVED \u2500\u2500 */
+    var tot=bRes.invoiceTotal!=null?bRes.invoiceTotal:bRes.amount;
+    var bal=Math.max(0,tot-(bRes.advance||0));
+    h+='<div style="background:#fffbee;border:2px solid var(--gold);border-radius:9px;padding:14px;margin-bottom:14px;">';
+    h+='<div style="font-size:11px;font-weight:800;color:#8a6200;text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px;display:flex;align-items:center;gap:6px;"><i class="ti ti-calendar-check"></i> Reserved \u2014 Awaiting Check-In</div>';
+    h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:9px;font-size:12px;margin-bottom:10px;">';
+    h+='<div><div style="font-size:10px;color:var(--text3);margin-bottom:2px;">Guest Name</div><strong>'+bRes.guest+'</strong></div>';
+    h+='<div><div style="font-size:10px;color:var(--text3);margin-bottom:2px;">Mobile</div><strong>'+bRes.phone+'</strong></div>';
+    h+='<div><div style="font-size:10px;color:var(--text3);margin-bottom:2px;">Expected Check-in</div><strong>'+bRes.checkin+'</strong></div>';
+    h+='<div><div style="font-size:10px;color:var(--text3);margin-bottom:2px;">Expected Check-out</div><strong>'+bRes.checkout+'</strong></div>';
+    h+='<div><div style="font-size:10px;color:var(--text3);margin-bottom:2px;">Nights</div><strong>'+bRes.nights+'</strong></div>';
+    h+='<div><div style="font-size:10px;color:var(--text3);margin-bottom:2px;">Total Amount</div><strong>'+money(tot)+'</strong></div>';
+    h+='<div><div style="font-size:10px;color:var(--text3);margin-bottom:2px;">Advance Paid</div><strong style="color:var(--green);">'+money(bRes.advance||0)+'</strong></div>';
+    h+='<div><div style="font-size:10px;color:var(--text3);margin-bottom:2px;">Balance Due</div><strong style="color:'+(bal>0?'var(--red)':'var(--green)')+';">'+money(bal)+'</strong></div>';
+    h+='</div>';
+    if(bRes.notes)h+='<div style="font-size:11px;color:var(--text3);padding-top:6px;border-top:1px solid rgba(201,168,76,.2);"><i class="ti ti-note"></i> '+bRes.notes+'</div>';
+    h+='</div>';
+    h+='<div class="modal-actions">';
+    h+='<button class="btn danger" onclick="cancelReservation('+bRes.id+')" style="margin-right:auto;"><i class="ti ti-calendar-x"></i> Cancel Reservation</button>';
+    h+='<button class="btn" onclick="closeModal()">Close</button>';
+    h+='<button class="btn gold" onclick="editReservation('+bRes.id+')" style="font-weight:700;"><i class="ti ti-forms"></i> Complete Booking</button>';
+    h+='<button class="btn primary" onclick="doCheckIn('+bRes.id+');closeModal()"><i class="ti ti-login"></i> Quick Check-In</button>';
+    h+='</div>';
+
+  } else if(r.status==='vacant'){
+    /* \u2500\u2500 VACANT: Quick Reserve Form \u2500\u2500 */
+    var today=todayStr();
+    var tomorrow=new Date(Date.now()+86400000).toISOString().split('T')[0];
+    h+='<div style="font-size:11px;font-weight:800;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;margin-bottom:12px;display:flex;align-items:center;gap:6px;"><i class="ti ti-calendar-plus" style="color:var(--gold);font-size:13px;"></i> Reserve This Room</div>';
+    h+='<div class="form-row"><div class="form-group"><label>Guest Name *</label><input id="qr-name" placeholder="Full name"></div>';
+    h+='<div class="form-group"><label>Mobile Number *</label><input id="qr-phone" placeholder="+880..."></div></div>';
+    h+='<div class="form-row"><div class="form-group"><label>Expected Check-in *</label><input type="date" id="qr-ci" value="'+today+'" oninput="qrCalc(\''+r.number+'\')"></div>';
+    h+='<div class="form-group"><label>Expected Check-out *</label><input type="date" id="qr-co" value="'+tomorrow+'" oninput="qrCalc(\''+r.number+'\')"></div></div>';
+    h+='<div id="qr-price-box" style="background:var(--navy);color:#fff;border-radius:8px;padding:11px 14px;text-align:center;font-size:13px;margin-bottom:12px;min-height:48px;display:flex;align-items:center;justify-content:center;"></div>';
+    h+='<div class="form-row"><div class="form-group"><label>Advance Payment (\u09f3)</label><input type="number" id="qr-advance" value="0" min="0" oninput="qrCalc(\''+r.number+'\')"></div>';
+    h+='<div class="form-group"><label>Payment Method</label><select id="qr-method"><option>Cash</option><option>bKash</option><option>Nagad</option><option>Card</option><option>Bank Transfer</option></select></div></div>';
+    h+='<div class="form-group"><label>Notes</label><input id="qr-notes" placeholder="Special requests, ID note..."></div>';
+    h+='<div class="modal-actions">';
+    h+='<button class="btn sm" onclick="closeModal();showNewBookingModal()" style="margin-right:auto;font-size:11px;color:var(--text3);"><i class="ti ti-forms"></i> Full Booking Form</button>';
+    h+='<button class="btn" onclick="closeModal()">Cancel</button>';
+    h+='<button class="btn primary" onclick="quickReserveRoom(\''+r.number+'\')"><i class="ti ti-calendar-check"></i> Reserve Room</button>';
+    h+='</div>';
+
+  } else {
+    /* \u2500\u2500 MAINTENANCE / OTHER \u2500\u2500 */
+    h+='<div class="form-row"><div class="form-group"><label>Status</label><select id="rm-st"><option '+(r.status==='vacant'?'selected':'')+' value="vacant">Vacant</option><option '+(r.status==='occupied'?'selected':'')+' value="occupied">Occupied</option><option '+(r.status==='reserved'?'selected':'')+' value="reserved">Reserved</option><option '+(r.status==='maintenance'?'selected':'')+' value="maintenance">Maintenance</option></select></div>';
+    h+='<div class="form-group"><label>Rate/Night</label><input type="number" id="rm-rate" value="'+r.rate+'"></div></div>';
+    h+='<div class="form-group" style="margin-bottom:0"><label>Notes</label><input id="rm-notes" value="'+(r.notes||'')+'"></div>';
+    h+='<div class="modal-actions"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn primary" onclick="saveRoomEdit(\''+r.number+'\')">Save</button></div>';
+  }
+
   showModal(h);
+  if(r.status==='vacant')try{qrCalc(r.number);}catch(e){}
 }
 function saveRoomEdit(num){
   var r=rooms.find(function(x){return x.number===num;});if(!r)return;
@@ -6666,6 +6739,171 @@ function saveRoomEdit(num){
   r.rate=parseInt(document.getElementById('rm-rate').value)||r.rate;
   r.notes=document.getElementById('rm-notes').value;
   save();closeModal();renderFrontDesk();notify('Room '+num+' updated','success');
+}
+function qrCalc(roomNum){
+  var room=rooms.find(function(r){return r.number===roomNum;});if(!room)return;
+  var ciEl=document.getElementById('qr-ci');var coEl=document.getElementById('qr-co');
+  var advEl=document.getElementById('qr-advance');var el=document.getElementById('qr-price-box');
+  if(!el)return;
+  var ci=ciEl?ciEl.value:'';var co=coEl?coEl.value:'';
+  var adv=advEl?parseFloat(advEl.value)||0:0;
+  if(!ci||!co||new Date(co)<=new Date(ci)){el.innerHTML='<span style="opacity:.6;font-size:12px;">Select valid dates</span>';return;}
+  var nights=Math.max(1,Math.round((new Date(co)-new Date(ci))/86400000));
+  var total=nights*room.rate;var bal=Math.max(0,total-adv);
+  var html='<div style="display:flex;flex-wrap:wrap;justify-content:center;gap:8px 20px;align-items:center;">';
+  html+='<div style="text-align:center;"><div style="font-size:10px;opacity:.65;">'+nights+' night'+(nights>1?'s':'')+' \xd7 '+money(room.rate)+'</div><div style="font-size:18px;font-weight:800;color:var(--gold2);">'+money(total)+'</div></div>';
+  if(adv>0){
+    html+='<div style="text-align:center;border-left:1px solid rgba(255,255,255,.2);padding-left:20px;"><div style="font-size:10px;opacity:.65;">Advance</div><div style="font-size:14px;font-weight:700;color:#6de8a8;">\u2212'+money(adv)+'</div></div>';
+    html+='<div style="text-align:center;"><div style="font-size:10px;opacity:.65;">Balance Due</div><div style="font-size:18px;font-weight:800;color:'+(bal>0?'#f5a0a0':'#6de8a8')+';">'+money(bal)+'</div></div>';
+  }
+  html+='</div>';
+  el.innerHTML=html;
+}
+function quickReserveRoom(num){
+  var name=(document.getElementById('qr-name').value||'').trim();
+  var phone=(document.getElementById('qr-phone').value||'').trim();
+  var ci=document.getElementById('qr-ci').value;
+  var co=document.getElementById('qr-co').value;
+  var advance=parseFloat(document.getElementById('qr-advance').value)||0;
+  var method=document.getElementById('qr-method').value;
+  var notes=(document.getElementById('qr-notes').value||'').trim();
+  if(!name){notify('Guest name is required','error');return;}
+  if(!phone){notify('Mobile number is required','error');return;}
+  if(!ci||!co||new Date(co)<=new Date(ci)){notify('Please check the dates','error');return;}
+  var room=rooms.find(function(r){return r.number===num;});if(!room)return;
+  var nights=Math.max(1,Math.round((new Date(co)-new Date(ci))/86400000));
+  var amount=nights*room.rate;
+  var id=bookings.length?Math.max.apply(null,bookings.map(function(b){return b.id;}))+1:1;
+  var bk={id:id,guest:name,phone:phone,room:num,type:room.type,checkin:ci,checkout:co,nights:nights,
+    amount:amount,advance:advance,
+    paymentHistory:advance>0?[{ts:new Date().toISOString(),amount:advance,method:method,note:'Reservation advance',type:'room',by:curUser||'staff'}]:[],
+    paymentMethod:method,status:'confirmed',notes:notes,source:'Walk-in',adults:2,children:0,
+    nationality:'',discountType:'none',discountAmount:0,createdAt:new Date().toISOString(),by:curUser||'staff'};
+  bookings.push(bk);
+  room.status='reserved';
+  /* Record advance/deposit in revenues immediately */
+  if(advance>0){var rid=revenues.length?Math.max.apply(null,revenues.map(function(r){return r.id;}))+1:1;revenues.push({id:rid,source:'Room Rent',amount:advance,date:todayStr(),note:name+' Rm '+num+' \u2014 reservation deposit ('+method+')'});}
+  save();closeModal();renderFrontDesk();
+  notify('\u2713 Room '+num+' reserved for '+name+(advance>0?' \u00b7 Advance: '+money(advance):''),'success');
+}
+function cancelReservation(id){
+  var b=bookings.find(function(x){return x.id===id;});if(!b)return;
+  b.status='cancelled';
+  var r=rooms.find(function(x){return x.number===b.room;});if(r)r.status='vacant';
+  save();closeModal();renderFrontDesk();
+  notify('Reservation for '+b.guest+' cancelled \u00b7 Room '+b.room+' is now vacant','success');
+}
+function editReservation(id){
+  var b=bookings.find(function(x){return x.id===id;});if(!b)return;
+  var r=rooms.find(function(x){return x.number===b.room;});
+  idFront='';idBack='';
+  var h='<div class="modal-header"><div><div class="modal-title"><i class="ti ti-forms" style="color:var(--gold);"></i> Complete Booking</div>';
+  h+='<div class="modal-sub">Room '+b.room+' \u00b7 Reserved for '+b.guest+'</div></div><button class="modal-close" onclick="closeModal()"><i class="ti ti-x"></i></button></div>';
+  /* Info banner */
+  h+='<div style="background:#fffbee;border:1.5px solid var(--gold);border-radius:8px;padding:9px 12px;margin-bottom:14px;font-size:11.5px;color:#7a5500;display:flex;align-items:center;gap:7px;">';
+  h+='<i class="ti ti-info-circle" style="font-size:15px;flex-shrink:0;"></i> Fill in the remaining details below. Advance already paid is pre-filled. Click <b>Confirm &amp; Check In</b> when ready.</div>';
+  /* Guest */
+  h+='<div class="form-section"><div class="form-sec-title"><i class="ti ti-user"></i> Guest</div>';
+  h+='<div class="form-row"><div class="form-group"><label>Full Name *</label><input id="nb-name" value="'+(b.guest||'')+'" placeholder="As per ID"></div>';
+  h+='<div class="form-group"><label>Phone *</label><input id="nb-phone" value="'+(b.phone||'')+'" placeholder="+880..."></div></div>';
+  h+='<div class="form-row"><div class="form-group"><label>Nationality</label><input id="nb-nat" value="'+(b.nationality||'')+'" placeholder="Bangladeshi"></div>';
+  h+='<div class="form-group"><label>Source</label><select id="nb-src"><option>Walk-in</option><option>Phone</option><option>Website</option><option>WhatsApp</option><option>OTA</option><option>Referral</option></select></div></div>';
+  h+='<div class="form-row"><div class="form-group"><label>Referred by \u2014 Name</label><input id="nb-ref-name" value="'+(b.refName||'')+'" placeholder="Referrer name"></div>';
+  h+='<div class="form-group"><label>Referred by \u2014 Phone</label><input id="nb-ref-phone" value="'+(b.refPhone||'')+'" placeholder="Referrer phone"></div></div></div>';
+  /* ID */
+  h+='<div class="form-section"><div class="form-sec-title"><i class="ti ti-id-badge"></i> ID Verification</div>';
+  h+='<div class="form-row"><div class="form-group"><label>ID Type</label><select id="nb-idtype"><option value="">Select</option><option>National ID (NID)</option><option>Passport</option><option>Driving License</option></select></div>';
+  h+='<div class="form-group"><label>ID Number</label><input id="nb-idnum" value="'+(b.idNum||'')+'" placeholder="Document number"></div></div>';
+  h+='<div class="form-row">';
+  h+='<div class="form-group"><label>Front Side</label><div class="id-upload-box" id="box-front"><input type="file" accept="image/*" onchange="handleIdUpload(\'front\',this)"><i class="ti ti-camera" style="font-size:18px;color:var(--text3)"></i><div style="font-size:11px;color:var(--text3);margin-top:4px" id="lbl-front">Upload front</div><img id="prev-front" class="id-preview" style="display:none"></div></div>';
+  h+='<div class="form-group"><label>Back Side</label><div class="id-upload-box" id="box-back"><input type="file" accept="image/*" onchange="handleIdUpload(\'back\',this)"><i class="ti ti-camera" style="font-size:18px;color:var(--text3)"></i><div style="font-size:11px;color:var(--text3);margin-top:4px" id="lbl-back">Upload back</div><img id="prev-back" class="id-preview" style="display:none"></div></div>';
+  h+='</div></div>';
+  /* Stay */
+  h+='<div class="form-section"><div class="form-sec-title"><i class="ti ti-door"></i> Room &amp; Stay</div>';
+  h+='<div class="form-row three"><div class="form-group"><label>Room (Reserved)</label>';
+  h+='<input value="Room '+b.room+(r?' \u00b7 '+r.type+' \u00b7 '+money(r.rate)+'/n':'')+'" readonly style="background:var(--bg3);color:var(--text3);font-weight:600;">';
+  h+='<input type="hidden" id="nb-room" value="'+b.room+'"></div>';
+  h+='<div class="form-group"><label>Check-in *</label><input type="date" id="nb-ci" value="'+b.checkin+'" onchange="calcTotal()"></div>';
+  h+='<div class="form-group"><label>Check-out *</label><input type="date" id="nb-co" value="'+b.checkout+'" onchange="calcTotal()"></div></div>';
+  h+='<div class="form-row"><div class="form-group"><label>Adults</label><select id="nb-adults"><option>1</option><option>2</option><option>3</option><option>4</option></select></div>';
+  h+='<div class="form-group"><label>Children</label><select id="nb-children"><option>0</option><option>1</option><option>2</option><option>3</option></select></div></div></div>';
+  /* Discount */
+  h+='<div class="form-section"><div class="form-sec-title"><i class="ti ti-tag"></i> Discount</div>';
+  h+='<div class="form-row three"><div class="form-group"><label>Type</label><select id="nb-disc-type" onchange="calcTotal()"><option value="none">No Discount</option><option value="percent">Percentage (%)</option><option value="flat">Fixed Amount</option><option value="fixed-rate">Fixed Rate/Night</option></select></div>';
+  h+='<div class="form-group"><label>Value</label><input type="number" id="nb-disc-val" value="0" min="0" oninput="calcTotal()"></div>';
+  h+='<div class="form-group"><label>Reason</label><input id="nb-disc-reason" placeholder="e.g. Regular guest"></div></div>';
+  h+='<div id="nb-price-box" style="background:var(--navy);color:#fff;border-radius:7px;padding:13px 16px;text-align:center;margin-top:2px;min-height:52px;display:flex;align-items:center;justify-content:center;">Loading...</div></div>';
+  /* Payment */
+  h+='<div class="form-section"><div class="form-sec-title"><i class="ti ti-cash"></i> Payment</div>';
+  h+='<div class="form-row"><div class="form-group"><label>Method</label><select id="nb-payment"><option>Cash</option><option>bKash</option><option>Nagad</option><option>Card</option><option>Bank Transfer</option></select></div>';
+  h+='<div class="form-group"><label>Advance Already Paid (\u09f3)</label><input type="number" id="nb-advance" value="'+(b.advance||0)+'" min="0" oninput="calcTotal()"></div></div>';
+  h+='<div class="form-group"><label>Notes</label><textarea id="nb-notes" rows="2" placeholder="Special requests...">'+(b.notes||'')+'</textarea></div></div>';
+  /* Actions */
+  h+='<div class="modal-actions">';
+  h+='<button class="btn" onclick="closeModal()">Cancel</button>';
+  h+='<button class="btn" onclick="updateReservation('+id+',\'confirmed\')"><i class="ti ti-device-floppy"></i> Save Changes</button>';
+  h+='<button class="btn primary" onclick="updateReservation('+id+',\'checked-in\')"><i class="ti ti-login"></i> Confirm &amp; Check In</button>';
+  h+='</div>';
+  showModal(h);
+  /* Pre-fill select fields after DOM ready */
+  setTimeout(function(){
+    var s;
+    s=document.getElementById('nb-src');if(s&&b.source)s.value=b.source;
+    s=document.getElementById('nb-adults');if(s&&b.adults)s.value=String(b.adults);
+    s=document.getElementById('nb-children');if(s&&b.children!=null)s.value=String(b.children);
+    s=document.getElementById('nb-idtype');if(s&&b.idType)s.value=b.idType;
+    s=document.getElementById('nb-payment');if(s&&b.paymentMethod)s.value=b.paymentMethod;
+    calcTotal();
+  },30);
+}
+function updateReservation(id,status){
+  var b=bookings.find(function(x){return x.id===id;});if(!b)return;
+  var oldAdvance=b.advance||0; /* capture before overwriting */
+  var name=(document.getElementById('nb-name').value||'').trim();
+  var phone=(document.getElementById('nb-phone').value||'').trim();
+  var ci=document.getElementById('nb-ci').value;
+  var co=document.getElementById('nb-co').value;
+  if(!name){notify('Guest name required','error');return;}
+  if(!phone){notify('Phone required','error');return;}
+  if(!ci||!co||new Date(co)<=new Date(ci)){notify('Check the dates','error');return;}
+  var room=rooms.find(function(r){return r.number===b.room;});
+  var nights=Math.max(1,Math.round((new Date(co)-new Date(ci))/86400000));
+  var base=nights*(room?room.rate:0);
+  var dt=document.getElementById('nb-disc-type').value;
+  var dv=parseFloat(document.getElementById('nb-disc-val').value)||0;
+  var dr=(document.getElementById('nb-disc-reason').value||'').trim();
+  var discAmt=0,amount=base;
+  if(dt==='percent'){discAmt=Math.round(base*dv/100);amount=base-discAmt;}
+  else if(dt==='flat'){discAmt=Math.min(dv,base);amount=base-discAmt;}
+  else if(dt==='fixed-rate'&&dv>0){amount=nights*dv;discAmt=Math.max(0,base-amount);}
+  amount=Math.max(0,amount);
+  var advance=parseFloat(document.getElementById('nb-advance').value)||0;
+  /* Update booking object */
+  b.guest=name; b.phone=phone; b.checkin=ci; b.checkout=co; b.nights=nights; b.amount=amount;
+  b.advance=advance; b.paymentMethod=document.getElementById('nb-payment').value;
+  b.nationality=(document.getElementById('nb-nat').value||'').trim();
+  b.source=document.getElementById('nb-src').value;
+  b.refName=(document.getElementById('nb-ref-name').value||'').trim();
+  b.refPhone=(document.getElementById('nb-ref-phone').value||'').trim();
+  b.idType=(document.getElementById('nb-idtype').value||'');
+  b.idNum=(document.getElementById('nb-idnum').value||'').trim();
+  b.adults=parseInt(document.getElementById('nb-adults').value)||2;
+  b.children=parseInt(document.getElementById('nb-children').value)||0;
+  b.discountType=dt; b.discountAmount=discAmt; b.discountReason=dr;
+  b.notes=(document.getElementById('nb-notes').value||'').trim();
+  b.status=status;
+  if(idFront)b.idFront=idFront;
+  if(idBack)b.idBack=idBack;
+  if(status==='checked-in'&&room)room.status='occupied';
+  /* Record any additional advance (amount paid beyond what was already recorded) */
+  var newAdvance=b.advance||0;
+  if(newAdvance>oldAdvance){
+    var extra=newAdvance-oldAdvance;
+    var rid=revenues.length?Math.max.apply(null,revenues.map(function(r){return r.id;}))+1:1;
+    revenues.push({id:rid,source:'Room Rent',amount:extra,date:todayStr(),note:b.guest+' Rm '+b.room+' \u2014 additional advance ('+b.paymentMethod+')'});
+  }
+  save();closeModal();renderFrontDesk();try{renderBookings();}catch(e){}
+  notify(name+(status==='checked-in'?' \u2713 Checked In \u00b7 Room '+b.room:' \u00b7 Reservation updated'),'success');
 }
 
 // ── NEW BOOKING ──
@@ -6787,6 +7025,10 @@ function saveBooking(status){
   var rp=document.getElementById('nb-ref-phone').value.trim();
   bookings.push({id:id,guest:name,phone:phone,email:'',room:roomNum,nights:nights,checkin:ci,checkout:co,amount:amount,baseAmount:base,discType:dt,discAmt:discAmt,discReason:dr,status:status,notes:document.getElementById('nb-notes').value,source:document.getElementById('nb-src').value,referredByName:rn,referredByPhone:rp,referredBy:rn||rp,nationality:document.getElementById('nb-nat').value,idType:document.getElementById('nb-idtype').value,idNum:document.getElementById('nb-idnum').value,adults:parseInt(document.getElementById('nb-adults').value)||1,children:parseInt(document.getElementById('nb-children').value)||0,advance:parseFloat(document.getElementById('nb-advance').value)||0,payment:document.getElementById('nb-payment').value,paymentMethod:document.getElementById('nb-payment').value,idFront:idFront,idBack:idBack});
   if(status==='checked-in'){var r=rooms.find(function(x){return x.number===roomNum;});if(r)r.status='occupied';}
+  /* Record advance/deposit in revenues immediately */
+  var adv=parseFloat(document.getElementById('nb-advance').value)||0;
+  var mtd=document.getElementById('nb-payment').value;
+  if(adv>0){var rid=revenues.length?Math.max.apply(null,revenues.map(function(r){return r.id;}))+1:1;revenues.push({id:rid,source:'Room Rent',amount:adv,date:todayStr(),note:name+' Rm '+roomNum+(status==='confirmed'?' \u2014 reservation deposit':' \u2014 advance payment')+' ('+mtd+')'});}
   save();closeModal();renderFrontDesk();
   notify(name+(status==='checked-in'?' checked in \u2713':' booking saved')+(discAmt>0?' \u00b7 Discount '+money(discAmt):''),'success');
 }
@@ -9020,7 +9262,7 @@ function hotelAppInit(){
   }
   /* Apply role locks to hotel nav tabs */
   var isAdmin = curRole === 'admin';
-  var adminOnlyTabs = ['finance','expenses','settings'];
+  var adminOnlyTabs = ['finance','settings'];
   adminOnlyTabs.forEach(function(tab){
     var btn = document.getElementById('htab-'+tab);
     if(btn) btn.style.display = isAdmin ? 'flex' : 'none';
