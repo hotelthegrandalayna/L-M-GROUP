@@ -1040,6 +1040,7 @@ body.hotel-print-mode #_hpm{display:block!important;}
 #hotelApp .room-card.maintenance {background:var(--bg3);border-color:var(--border2)}
 #hotelApp .room-card.maintenance::before {background:var(--border2)}
 #hotelApp .room-number {font-family:\'Playfair Display\',serif;font-size:19px;font-weight:700;color:var(--navy2)}
+#hotelApp .room-name-lbl {font-size:11px;font-weight:700;color:var(--navy2);margin-top:3px;letter-spacing:.1px;}
 #hotelApp .room-type-lbl {font-size:9px;color:var(--text3);margin-top:1px;text-transform:uppercase;letter-spacing:.5px}
 #hotelApp .room-rate-lbl {font-size:10px;font-weight:600;color:var(--gold);margin-top:2px}
 #hotelApp .room-status-dot {display:inline-flex;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-top:7px;padding:2px 7px;border-radius:10px}
@@ -3074,6 +3075,24 @@ select:focus, textarea:focus {
 
       <div id="hAdminPanel-rooms" style="display:none;">
         <div class="panel"><div class="panel-header"><div class="panel-title"><i class="ti ti-building"></i> Manage Rooms</div><button class="btn sm primary" onclick="openAddRoom()"><i class="ti ti-plus"></i> Add Room</button></div><div class="room-grid" id="settings-rooms"></div></div>
+        <!-- Extra Person Pricing Rule -->
+        <div class="panel" style="margin-top:14px;">
+          <div class="panel-header"><div class="panel-title"><i class="ti ti-users"></i> Extra Person Pricing Rule</div></div>
+          <div style="font-size:12px;color:var(--text3);margin-bottom:14px;">When the number of adults in a booking exceeds the standard capacity, an extra charge is automatically suggested to staff during booking.</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">
+            <div class="form-group">
+              <label>Standard Capacity (free adults)</label>
+              <input type="number" id="epr-threshold" min="1" max="10" style="font-size:15px;font-weight:700;text-align:center;">
+              <div style="font-size:10.5px;color:var(--text3);margin-top:4px;">Adults up to this number — no extra charge</div>
+            </div>
+            <div class="form-group">
+              <label>Extra Charge per Person (৳)</label>
+              <input type="number" id="epr-charge" min="0" style="font-size:15px;font-weight:700;text-align:center;">
+              <div style="font-size:10.5px;color:var(--text3);margin-top:4px;">Charged per adult above standard capacity</div>
+            </div>
+          </div>
+          <button class="btn primary" onclick="saveExtraPersonRules()" style="justify-content:center;"><i class="ti ti-check"></i> Save Pricing Rule</button>
+        </div>
       </div>
 
       <div id="hAdminPanel-staff" style="display:none;">
@@ -6469,18 +6488,19 @@ function crmPopAssigned(){
 /* ════════ HOTEL JS ════════ */
 
 const HOTEL={name:'Hotel The Grand Alayna',tagline:'Luxury for all',phone:'+8801883352526',email:'info@hotelthegrandalayna.com',web:'hotelthegrandalayna.com',address:'Hajari Road, Ward No. 09, Shibpur, Sitakund-4310, Chittagong, Bangladesh'};
-let rooms=JSON.parse(localStorage.getItem('ga_rooms')||'null')||[
-  {id:1,number:'101',type:'Standard',rate:2500,status:'vacant',notes:''},
-  {id:2,number:'102',type:'Standard',rate:2500,status:'vacant',notes:''},
-  {id:3,number:'103',type:'Standard',rate:2500,status:'vacant',notes:''},
-  {id:4,number:'201',type:'Deluxe',rate:3500,status:'vacant',notes:''},
-  {id:5,number:'202',type:'Deluxe',rate:3500,status:'vacant',notes:''},
-  {id:6,number:'203',type:'Deluxe',rate:3500,status:'vacant',notes:''},
-  {id:7,number:'301',type:'Suite',rate:5000,status:'vacant',notes:''},
-  {id:8,number:'302',type:'Suite',rate:5000,status:'vacant',notes:''},
-  {id:9,number:'401',type:'Executive',rate:6500,status:'vacant',notes:''},
-  {id:10,number:'402',type:'Executive',rate:6500,status:'maintenance',notes:''}
+/* Room data version — change this string any time you want to force-reset rooms from defaults */
+var _GA_ROOMS_VER='alayna-r1';
+var _GA_ROOMS_DEFAULT=[
+  {id:1,number:'101',name:'Orchid Blue',   type:'Classic Single',rate:2500,status:'vacant',notes:''},
+  {id:2,number:'102',name:'Lilly Blossom', type:'Classic Single',rate:2500,status:'vacant',notes:''},
+  {id:3,number:'103',name:'Jasmine Dew',   type:'AC Room',       rate:4000,status:'vacant',notes:''},
+  {id:4,number:'104',name:'Rose Valley',   type:'AC Room',       rate:5000,status:'vacant',notes:''},
+  {id:5,number:'105',name:'Lavender Bloom',type:'Double Room',   rate:3000,status:'vacant',notes:''},
+  {id:6,number:'106',name:'Lotus Glow',    type:'Double Room',   rate:3000,status:'vacant',notes:''}
 ];
+let rooms=(localStorage.getItem('ga_rooms_ver')===_GA_ROOMS_VER&&localStorage.getItem('ga_rooms'))?
+  (JSON.parse(localStorage.getItem('ga_rooms'))||_GA_ROOMS_DEFAULT):
+  _GA_ROOMS_DEFAULT.map(function(r){return Object.assign({},r);});
 let bookings=JSON.parse(localStorage.getItem('ga_bookings')||'[]');
 let revenues=JSON.parse(localStorage.getItem('ga_revenues')||'[]');
 let expenses=JSON.parse(localStorage.getItem('ga_expenses')||'[]');
@@ -6497,8 +6517,10 @@ let invExtras=[];
 let idFront='',idBack=''; /* legacy — kept for old bookings */
 let idPersons=[]; /* multi-person ID docs: [{front:'',back:''},...] */
 let crmSeg='all';
+let extraPersonRules=JSON.parse(localStorage.getItem('ga_extra_person')||'null')||{threshold:3,charge:300};
+var _extraPersonAccepted=false,_extraPersonCount=0,_extraPersonCharge=0;
 
-function save(){localStorage.setItem('ga_rooms',JSON.stringify(rooms));localStorage.setItem('ga_bookings',JSON.stringify(bookings));localStorage.setItem('ga_revenues',JSON.stringify(revenues));localStorage.setItem('ga_expenses',JSON.stringify(expenses));}
+function save(){localStorage.setItem('ga_rooms_ver',_GA_ROOMS_VER);localStorage.setItem('ga_rooms',JSON.stringify(rooms));localStorage.setItem('ga_bookings',JSON.stringify(bookings));localStorage.setItem('ga_revenues',JSON.stringify(revenues));localStorage.setItem('ga_expenses',JSON.stringify(expenses));}
 function saveInsights(){localStorage.setItem('ga_loyalty',JSON.stringify(loyaltyData));localStorage.setItem('ga_surveys',JSON.stringify(surveyData));localStorage.setItem('ga_pricing',JSON.stringify(pricingRules));localStorage.setItem('ga_loyalty_rules',JSON.stringify(loyaltyRules));}
 function saveGuests(){localStorage.setItem('ga_guests',JSON.stringify(guestProfiles));}
 function todayStr(){return new Date().toISOString().split('T')[0];}
@@ -6622,6 +6644,7 @@ function renderFrontDesk(){
   document.getElementById('fd-rooms').innerHTML=rooms.map(function(r){
     return '<div class="room-card '+r.status+'" onclick="openRoomDetail(\''+r.number+'\')">'+
       '<div class="room-number">'+r.number+'</div>'+
+      '<div class="room-name-lbl">'+(r.name||r.type)+'</div>'+
       '<div class="room-type-lbl">'+r.type+'</div>'+
       '<div class="room-rate-lbl">'+money(r.rate)+'</div>'+
       '<div class="room-status">'+r.status.replace('-',' ')+'</div></div>';
@@ -6661,7 +6684,7 @@ function openRoomDetail(num){
   var r=rooms.find(function(x){return x.number===num;});if(!r)return;
   var bIn=bookings.find(function(x){return x.room===num&&x.status==='checked-in';});
   var bRes=bookings.find(function(x){return x.room===num&&x.status==='confirmed';});
-  var h='<div class="modal-header"><div><div class="modal-title"><i class="ti ti-building" style="color:var(--gold);"></i> Room '+r.number+'</div><div class="modal-sub">'+r.type+' \u00b7 '+money(r.rate)+'/night</div></div><button class="modal-close" onclick="closeModal()"><i class="ti ti-x"></i></button></div>';
+  var h='<div class="modal-header"><div><div class="modal-title"><i class="ti ti-building" style="color:var(--gold);"></i> Room '+r.number+(r.name?' \u2014 '+r.name:'')+'</div><div class="modal-sub">'+r.type+' \u00b7 '+money(r.rate)+'/night</div></div><button class="modal-close" onclick="closeModal()"><i class="ti ti-x"></i></button></div>';
 
   if(bIn){
     /* \u2500\u2500 OCCUPIED \u2500\u2500 */
@@ -6741,6 +6764,60 @@ function saveRoomEdit(num){
   r.notes=document.getElementById('rm-notes').value;
   save();closeModal();renderFrontDesk();notify('Room '+num+' updated','success');
 }
+/* ── EXTRA PERSON CHARGE ── */
+function buildExtraPersonBox(){
+  return '<div id="nb-extra-person-box" style="display:none;border:1.5px solid var(--gold);border-radius:9px;padding:12px 14px;background:#fffbee;margin-top:6px;">'+
+    '<div style="display:flex;align-items:flex-start;gap:9px;margin-bottom:10px;">'+
+    '<i class="ti ti-users" style="color:var(--gold);font-size:18px;flex-shrink:0;margin-top:1px;"></i>'+
+    '<div><div id="nb-extra-person-msg" style="font-size:12px;font-weight:700;color:#7a5500;line-height:1.5;"></div>'+
+    '<div style="font-size:10.5px;color:var(--text3);margin-top:2px;">Extra charge applies for guests beyond standard capacity.</div></div></div>'+
+    '<div style="display:flex;gap:8px;">'+
+    '<button type="button" id="nb-extra-accept-btn" onclick="acceptExtraCharge()" style="flex:1;padding:9px 12px;border:none;border-radius:7px;background:var(--gold);color:#0d1b2e;font-size:12px;font-weight:700;cursor:pointer;font-family:\'DM Sans\',sans-serif;"><i class="ti ti-check"></i> Add to Invoice</button>'+
+    '<button type="button" onclick="skipExtraCharge()" style="flex:1;padding:9px 12px;border:1.5px solid var(--border);border-radius:7px;background:var(--bg3);color:var(--text3);font-size:12px;font-weight:600;cursor:pointer;font-family:\'DM Sans\',sans-serif;">Skip</button>'+
+    '</div></div>';
+}
+function checkExtraPersonCharge(){
+  var adults=parseInt((document.getElementById('nb-adults')||{}).value)||0;
+  var threshold=(extraPersonRules&&extraPersonRules.threshold)||3;
+  var rate=(extraPersonRules&&extraPersonRules.charge)||300;
+  var extra=Math.max(0,adults-threshold);
+  var box=document.getElementById('nb-extra-person-box');if(!box)return;
+  _extraPersonAccepted=false;_extraPersonCount=extra;_extraPersonCharge=extra*rate;
+  /* Reset accept button */
+  var btn=document.getElementById('nb-extra-accept-btn');
+  if(btn){btn.innerHTML='<i class="ti ti-check"></i> Add to Invoice';btn.style.background='var(--gold)';btn.style.color='#0d1b2e';}
+  if(extra>0){
+    var msg=document.getElementById('nb-extra-person-msg');
+    if(msg)msg.innerHTML=adults+' adults — <strong>'+extra+' extra</strong> above standard ('+threshold+'). Suggested: <strong>'+extra+' &times; ৳'+rate+' = ৳'+money(extra*rate)+'</strong>';
+    box.style.display='block';
+  } else {
+    box.style.display='none';_extraPersonCount=0;_extraPersonCharge=0;
+  }
+}
+function acceptExtraCharge(){
+  _extraPersonAccepted=true;
+  var btn=document.getElementById('nb-extra-accept-btn');
+  if(btn){btn.innerHTML='<i class="ti ti-check"></i> Added ✓';btn.style.background='var(--green2)';btn.style.color='#fff';}
+  try{calcTotal();}catch(e){}
+}
+function skipExtraCharge(){
+  _extraPersonAccepted=false;_extraPersonCount=0;_extraPersonCharge=0;
+  var box=document.getElementById('nb-extra-person-box');if(box)box.style.display='none';
+  try{calcTotal();}catch(e){}
+}
+function saveExtraPersonRules(){
+  var t=parseInt((document.getElementById('epr-threshold')||{}).value)||3;
+  var c=parseInt((document.getElementById('epr-charge')||{}).value)||300;
+  extraPersonRules={threshold:Math.max(1,t),charge:Math.max(0,c)};
+  localStorage.setItem('ga_extra_person',JSON.stringify(extraPersonRules));
+  notify('Extra person pricing saved ✓','success');
+}
+function populateExtraPersonRules(){
+  var t=document.getElementById('epr-threshold');var c=document.getElementById('epr-charge');
+  if(t)t.value=extraPersonRules.threshold||3;
+  if(c)c.value=extraPersonRules.charge||300;
+}
+
 function qrCalc(roomNum){
   var room=rooms.find(function(r){return r.number===roomNum;});if(!room)return;
   var ciEl=document.getElementById('qr-ci');var coEl=document.getElementById('qr-co');
@@ -6798,6 +6875,7 @@ function editReservation(id){
   var b=bookings.find(function(x){return x.id===id;});if(!b)return;
   var r=rooms.find(function(x){return x.number===b.room;});
   idFront='';idBack='';idPersons=(b.idDocs&&b.idDocs.length)?b.idDocs.map(function(d){return {front:d.front||'',back:d.back||''};}):[{front:'',back:''}];
+  _extraPersonAccepted=false;_extraPersonCount=0;_extraPersonCharge=0;
   var h='<div class="modal-header"><div><div class="modal-title"><i class="ti ti-forms" style="color:var(--gold);"></i> Complete Booking</div>';
   h+='<div class="modal-sub">Room '+b.room+' \u00b7 Reserved for '+b.guest+'</div></div><button class="modal-close" onclick="closeModal()"><i class="ti ti-x"></i></button></div>';
   /* Info banner */
@@ -6825,8 +6903,10 @@ function editReservation(id){
   h+='<input type="hidden" id="nb-room" value="'+b.room+'"></div>';
   h+='<div class="form-group"><label>Check-in *</label><input type="date" id="nb-ci" value="'+b.checkin+'" onchange="calcTotal()"></div>';
   h+='<div class="form-group"><label>Check-out *</label><input type="date" id="nb-co" value="'+b.checkout+'" onchange="calcTotal()"></div></div>';
-  h+='<div class="form-row"><div class="form-group"><label>Adults</label><select id="nb-adults"><option>1</option><option>2</option><option>3</option><option>4</option></select></div>';
-  h+='<div class="form-group"><label>Children</label><select id="nb-children"><option>0</option><option>1</option><option>2</option><option>3</option></select></div></div></div>';
+  h+='<div class="form-row"><div class="form-group"><label>Adults</label><input type="number" id="nb-adults" value="2" min="1" max="20" style="font-size:15px;font-weight:700;text-align:center;" oninput="checkExtraPersonCharge()"></div>';
+  h+='<div class="form-group"><label>Children</label><input type="number" id="nb-children" value="0" min="0" max="15" style="font-size:15px;font-weight:700;text-align:center;"></div></div>';
+  h+=buildExtraPersonBox();
+  h+='</div>';
   /* Discount */
   h+='<div class="form-section"><div class="form-sec-title"><i class="ti ti-tag"></i> Discount</div>';
   h+='<div class="form-row three"><div class="form-group"><label>Type</label><select id="nb-disc-type" onchange="calcTotal()"><option value="none">No Discount</option><option value="percent">Percentage (%)</option><option value="flat">Fixed Amount</option><option value="fixed-rate">Fixed Rate/Night</option></select></div>';
@@ -6854,7 +6934,9 @@ function editReservation(id){
     s=document.getElementById('nb-children');if(s&&b.children!=null)s.value=String(b.children);
     s=document.getElementById('nb-idtype');if(s&&b.idType)s.value=b.idType;
     s=document.getElementById('nb-payment');if(s&&b.paymentMethod)s.value=b.paymentMethod;
-    calcTotal();
+    if(b.adults){var aEl=document.getElementById('nb-adults');if(aEl)aEl.value=b.adults;}
+    if(b.children!=null){var cEl=document.getElementById('nb-children');if(cEl)cEl.value=b.children;}
+    calcTotal();checkExtraPersonCharge();
   },30);
 }
 function updateReservation(id,status){
@@ -6897,6 +6979,9 @@ function updateReservation(id,status){
   b.idDocs=idPersons.filter(function(p){return p.front||p.back;});
   b.idFront=(idPersons[0]&&idPersons[0].front)||idFront||'';
   b.idBack=(idPersons[0]&&idPersons[0].back)||idBack||'';
+  /* Save extra person charge if accepted */
+  if(_extraPersonAccepted&&_extraPersonCharge>0){b.extraPersonCharge={qty:_extraPersonCount,rate:extraPersonRules.charge||300,total:_extraPersonCharge};}
+  else if(!_extraPersonAccepted){b.extraPersonCharge=null;}
   if(status==='checked-in'&&room)room.status='occupied';
   /* Record any additional advance (amount paid beyond what was already recorded) */
   var newAdvance=b.advance||0;
@@ -6912,8 +6997,9 @@ function updateReservation(id,status){
 // ── NEW BOOKING ──
 function showNewBookingModal(){
   idFront='';idBack='';idPersons=[{front:'',back:''}];
+  _extraPersonAccepted=false;_extraPersonCount=0;_extraPersonCharge=0;
   var avail=rooms.filter(function(r){return r.status==='vacant';});
-  var rOpts=avail.map(function(r){return '<option value="'+r.number+'">'+r.number+' \u00b7 '+r.type+' \u00b7 '+money(r.rate)+'/n</option>';}).join('');
+  var rOpts=avail.map(function(r){return '<option value="'+r.number+'">'+r.number+(r.name?' \u2014 '+r.name:'')+' \u00b7 '+r.type+' \u00b7 '+money(r.rate)+'/n</option>';}).join('');
   var h='<div class="modal-header"><div><div class="modal-title">New Booking</div></div><button class="modal-close" onclick="closeModal()"><i class="ti ti-x"></i></button></div>';
   h+='<div class="form-section"><div class="form-sec-title"><i class="ti ti-user"></i> Guest</div>';
   h+='<div class="form-row"><div class="form-group"><label>Full Name *</label><input id="nb-name" placeholder="As per ID"></div><div class="form-group"><label>Phone *</label><input id="nb-phone" placeholder="+880..."></div></div>';
@@ -6929,7 +7015,8 @@ function showNewBookingModal(){
   h+='<div class="form-row three"><div class="form-group"><label>Room *</label><select id="nb-room" onchange="calcTotal()"><option value="">Select</option>'+rOpts+'</select></div>';
   h+='<div class="form-group"><label>Check-in *</label><input type="date" id="nb-ci" value="'+todayStr()+'" onchange="calcTotal()"></div>';
   h+='<div class="form-group"><label>Check-out *</label><input type="date" id="nb-co" value="'+new Date(Date.now()+86400000).toISOString().split('T')[0]+'" onchange="calcTotal()"></div></div>';
-  h+='<div class="form-row"><div class="form-group"><label>Adults</label><select id="nb-adults"><option>1</option><option selected>2</option><option>3</option><option>4</option></select></div><div class="form-group"><label>Children</label><select id="nb-children"><option selected>0</option><option>1</option><option>2</option><option>3</option></select></div></div>';
+  h+='<div class="form-row"><div class="form-group"><label>Adults</label><input type="number" id="nb-adults" value="2" min="1" max="20" style="font-size:15px;font-weight:700;text-align:center;" oninput="checkExtraPersonCharge()"></div><div class="form-group"><label>Children</label><input type="number" id="nb-children" value="0" min="0" max="15" style="font-size:15px;font-weight:700;text-align:center;"></div></div>';
+  h+=buildExtraPersonBox();
   h+='</div>';
   h+='<div class="form-section"><div class="form-sec-title"><i class="ti ti-tag"></i> Discount</div>';
   h+='<div class="form-row three"><div class="form-group"><label>Type</label><select id="nb-disc-type" onchange="calcTotal()"><option value="none">No Discount</option><option value="percent">Percentage (%)</option><option value="flat">Fixed Amount</option><option value="fixed-rate">Fixed Rate/Night</option></select></div>';
@@ -7044,7 +7131,9 @@ function calcTotal(){
   else if(dt==='flat'){discAmt=Math.min(dv,base);final=base-discAmt;}
   else if(dt==='fixed-rate'&&dv>0){final=nights*dv;discAmt=Math.max(0,base-final);}
   final=Math.max(0,final);
-  var balance=Math.max(0,final-adv);
+  var epAmt=(_extraPersonAccepted&&_extraPersonCharge>0)?_extraPersonCharge:0;
+  var grandFinal=final+epAmt;
+  var balance=Math.max(0,grandFinal-adv);
   var el=document.getElementById('nb-price-box');if(!el)return;
   if(!room||!nights){el.textContent='Select room and dates';return;}
   var html='<div style="display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:10px 18px;">';
@@ -7053,11 +7142,18 @@ function calcTotal(){
       '<span style="text-decoration:line-through;opacity:.5;font-size:13px;">'+money(base)+'</span></div>'+
       '<div><span style="font-size:10px;opacity:.7;">Discount</span><br>'+
       '<span style="color:var(--gold2);font-size:14px;font-weight:700;">\u2212'+money(discAmt)+'</span></div>'+
-      '<div><span style="font-size:10px;opacity:.7;">Total</span><br>'+
+      '<div><span style="font-size:10px;opacity:.7;">Room Total</span><br>'+
       '<span style="font-size:18px;font-weight:800;color:var(--gold2);">'+money(final)+'</span></div>';
   } else {
-    html+='<div><span style="font-size:10px;opacity:.7;">'+nights+' nights \xd7 '+money(room.rate)+'</span><br>'+
+    html+='<div><span style="font-size:10px;opacity:.7;">'+nights+' night'+(nights>1?'s':'')+' \xd7 '+money(room.rate)+'</span><br>'+
       '<span style="font-size:18px;font-weight:800;color:var(--gold2);">'+money(final)+'</span></div>';
+  }
+  if(epAmt>0){
+    html+='<div style="border-left:1px solid rgba(255,255,255,.2);padding-left:18px;">'+
+      '<span style="font-size:10px;opacity:.7;">Extra Persons</span><br>'+
+      '<span style="color:#fbbf24;font-size:14px;font-weight:700;">+'+money(epAmt)+'</span></div>'+
+      '<div><span style="font-size:10px;opacity:.7;">Grand Total</span><br>'+
+      '<span style="font-size:18px;font-weight:800;color:var(--gold2);">'+money(grandFinal)+'</span></div>';
   }
   if(adv>0){
     html+='<div style="border-left:1px solid rgba(255,255,255,.2);padding-left:18px;">'+
@@ -7068,9 +7164,9 @@ function calcTotal(){
   }
   html+='</div>';
   el.innerHTML=html;
-  /* Auto-cap advance at final total */
+  /* Auto-cap advance at grand total */
   var advEl=document.getElementById('nb-advance');
-  if(advEl&&adv>final){advEl.value=final;}
+  if(advEl&&adv>grandFinal){advEl.value=grandFinal;}
 }
 
 function saveBooking(status){
@@ -7102,6 +7198,8 @@ function saveBooking(status){
   /* Save multi-person ID docs */
   var lastBk=bookings[bookings.length-1];
   if(lastBk){lastBk.idDocs=idPersons.filter(function(p){return p.front||p.back;});lastBk.idFront=(idPersons[0]&&idPersons[0].front)||'';lastBk.idBack=(idPersons[0]&&idPersons[0].back)||'';}
+  /* Save extra person charge if accepted */
+  if(lastBk&&_extraPersonAccepted&&_extraPersonCharge>0){lastBk.extraPersonCharge={qty:_extraPersonCount,rate:extraPersonRules.charge||300,total:_extraPersonCharge};}
   /* Record advance/deposit in revenues immediately */
   var adv=parseFloat(document.getElementById('nb-advance').value)||0;
   var mtd=document.getElementById('nb-payment').value;
@@ -7726,13 +7824,16 @@ function renderInvoice(){
   var extrasTotal=extras.reduce(function(s,c){return s+c.qty*c.rate;},0);
   var base=b.baseAmount||b.amount;
   var roomTotal=Math.max(0,base-addDisc);
-  var grandTotal=roomTotal+extrasTotal;
+  var epCharge=(b.extraPersonCharge&&b.extraPersonCharge.total)||0;
+  var grandTotal=roomTotal+extrasTotal+epCharge;
   var advance=b.advance||0;
   var extrasAdvance=b.extrasAdvance||0;
-  /* Auto-compute room payment status from b.advance vs roomTotal only (not grandTotal) */
+  /* Combined extras total = manual service charges + extra person charge */
+  var combinedExtrasTotal=extrasTotal+epCharge;
+  /* Auto-compute room payment status from b.advance vs roomTotal only */
   var roomStatus=advance>=roomTotal&&roomTotal>0?'paid':advance>0&&advance<roomTotal?'partial':'unpaid';
-  /* Auto-compute extras payment status from its OWN extrasAdvance — independent of room */
-  var extrasStatus=extras.length===0?'unpaid':extrasAdvance>=extrasTotal&&extrasTotal>0?'paid':extrasAdvance>0&&extrasAdvance<extrasTotal?'partial':'unpaid';
+  /* Auto-compute extras payment status — includes extra person charge */
+  var extrasStatus=combinedExtrasTotal===0?'unpaid':extrasAdvance>=combinedExtrasTotal&&combinedExtrasTotal>0?'paid':extrasAdvance>0&&extrasAdvance<combinedExtrasTotal?'partial':'unpaid';
   /* Update hidden inputs */
   var _rps=document.getElementById('inv-pay-status');if(_rps)_rps.value=roomStatus;
   var _eps=document.getElementById('inv-extras-status');if(_eps)_eps.value=extrasStatus;
@@ -7741,13 +7842,19 @@ function renderInvoice(){
   function _applyBadge(id,status){var el=document.getElementById(id);if(!el)return;var m=_badgeMap[status]||_badgeMap.unpaid;el.style.background=m.bg;el.style.color=m.color;el.style.borderColor=m.border;el.innerHTML=m.icon+' '+m.text;}
   _applyBadge('inv-pay-status-badge',roomStatus);
   _applyBadge('inv-extras-status-badge',extrasStatus);
-  /* Show/hide collect-payment panels */
+  /* Show/hide collect-payment panels — unified: room panel shows TOTAL balance */
   var roomBalanceDue=Math.max(0,roomTotal-advance);
-  var extrasBalanceDue=Math.max(0,extrasTotal-extrasAdvance);
+  var extrasBalanceDue=Math.max(0,combinedExtrasTotal-extrasAdvance);
+  var totalBalanceDue=Math.max(0,grandTotal-advance-extrasAdvance);
   var rcEl=document.getElementById('inv-room-collect');
-  if(rcEl){rcEl.style.display=roomBalanceDue>0?'block':'none';var rbl=document.getElementById('inv-room-bal-label');if(rbl)rbl.textContent='Due: '+money(roomBalanceDue);}
+  if(rcEl){
+    rcEl.style.display=totalBalanceDue>0?'block':'none';
+    var rbl=document.getElementById('inv-room-bal-label');
+    if(rbl)rbl.textContent='Total Due: '+money(totalBalanceDue);
+  }
+  /* Hide extras collect — balance is now shown unified in room panel */
   var ecEl=document.getElementById('inv-extras-collect');
-  if(ecEl){ecEl.style.display=(extras.length>0&&extrasBalanceDue>0)?'block':'none';var ebl=document.getElementById('inv-extras-bal-label');if(ebl)ebl.textContent='Due: '+money(extrasBalanceDue);}
+  if(ecEl)ecEl.style.display='none';
   var invNum='GA-'+String(b.id).padStart(4,'0');
   /* Fix 6: use the persisted invoiceDate — never reset to today on reprint */
   var invDate=b.invoiceDate||todayStr();
@@ -7759,7 +7866,7 @@ function renderInvoice(){
   var Wb='<circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>';
   var Pn='<path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>';
 
-  function mr(label,val){return '<div style="display:flex;gap:4px;font-size:10.5px;line-height:1.9;color:#1a1a2e;"><span style="min-width:88px;color:#666;font-size:9.5px;font-weight:500;">'+label+'</span><span style="color:#999;">:</span><span style="font-weight:700;color:#111;">'+val+'</span></div>';}
+  function mr(label,val){return '<div style="display:flex;gap:5px;font-size:11.5px;line-height:1.9;color:#1a1a2e;"><span style="min-width:90px;color:#444;font-size:11px;font-weight:600;">'+label+'</span><span style="color:#888;">:</span><span style="font-weight:700;color:#111;">'+val+'</span></div>';}
 
   function statusBox(status){
     var m={paid:{c:'#1a7040',t:'PAID'},unpaid:{c:'#c0392b',t:'UNPAID'},partial:{c:'#b07800',t:'PARTIAL'}};
@@ -7802,15 +7909,17 @@ function renderInvoice(){
       /* Row 2: Bill To left, Stay Details right */
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:0;padding-top:12px;border-top:1px solid #e8e4dc;">'+
         '<div style="padding-right:18px;">'+
-          '<div style="font-size:8px;font-weight:800;letter-spacing:2px;text-transform:uppercase;color:#C9A84C;margin-bottom:5px;display:flex;align-items:center;gap:4px;">'+ico(Pn,'#C9A84C')+'Bill To</div>'+
+          '<div style="font-size:10px;font-weight:800;letter-spacing:2px;text-transform:uppercase;color:#C9A84C;margin-bottom:6px;display:flex;align-items:center;gap:4px;">'+ico(Pn,'#C9A84C')+'Bill To</div>'+
           '<div style="font-size:18px;font-weight:700;color:#000;font-family:Georgia,serif;margin-bottom:4px;">'+b.guest+'</div>'+
           '<div style="display:flex;align-items:center;gap:5px;font-size:10px;color:#555;margin-bottom:2px;">'+ico(Ph,'#888')+b.phone+'</div>'+
           (b.idNum?'<div style="font-size:9.5px;color:#aaa;">'+b.idType+': '+b.idNum+'</div>':'')+
         '</div>'+
         '<div style="padding-left:18px;border-left:1px solid #e8e4dc;">'+
-          '<div style="font-size:8px;font-weight:800;letter-spacing:2px;text-transform:uppercase;color:#1a1a2e;margin-bottom:5px;">Stay Details</div>'+
-          mr('Room',b.room)+mr('Check-In',formatDate(b.checkin))+
+          '<div style="font-size:10px;font-weight:800;letter-spacing:2px;text-transform:uppercase;color:#1a1a2e;margin-bottom:6px;">Stay Details</div>'+
+          (function(){var ro=rooms.find(function(x){return x.number===b.room;});var rName=ro&&ro.name?ro.name:'';var rType=ro?ro.type:(b.type||'');return mr('Room','Room '+b.room+(rName?' — '+rName:''))+(rType?mr('Room Type',rType):'');}())+
+          mr('Check-In',formatDate(b.checkin))+
           mr('Check-Out',formatDate(b.checkout))+mr('Nights',b.nights+' Night'+(b.nights>1?'s':''))+
+          (function(){var a=b.adults||b.adult||0;var c=b.children||0;if(!a&&!c)return '';var g=(a?a+' Adult'+(a>1?'s':''):'')+(a&&c?', ':'')+(c?c+' Child'+(c>1?'ren':''):'');return mr('Guests',g);}())+
         '</div>'+
       '</div>'+
     '</div>';
@@ -7823,7 +7932,7 @@ function renderInvoice(){
     '<td colspan="2" style="border-bottom:1px solid #eee;"></td>'+
     '<td style="padding:7px 10px;border-bottom:1px solid #eee;text-align:right;color:#B7770D;font-weight:700;font-size:10px;">-'+money(addDisc)+'</td></tr>':'';
 
-  var thS='padding:8px 10px;color:#C9A84C;font-size:8px;letter-spacing:1.5px;text-transform:uppercase;font-weight:700;';
+  var thS='padding:9px 10px;color:#C9A84C;font-size:10px;letter-spacing:1.2px;text-transform:uppercase;font-weight:700;';
   var theadRow=
     '<thead><tr style="background:#eeeae2;border-bottom:2px solid #1a1a2e;">'+
       '<th style="'+thS+'text-align:left;">Date</th>'+
@@ -7833,39 +7942,52 @@ function renderInvoice(){
       '<th style="'+thS+'text-align:right;">Amount (৳)</th>'+
     '</tr></thead>';
 
+  var _rObj=rooms.find(function(x){return x.number===b.room;});
+  var _rNameStr=_rObj&&_rObj.name?' — '+_rObj.name:'';
   var roomRow=
-    '<tr><td style="padding:8px 10px;border-bottom:1px solid #eee;color:#777;font-size:10px;">'+formatDate(b.checkin)+'</td>'+
-    '<td style="padding:8px 10px;border-bottom:1px solid #eee;color:#222;font-size:10px;">Room '+b.room+' — Accommodation ('+b.nights+' Night'+(b.nights>1?'s':'')+')</td>'+
-    '<td style="padding:8px 10px;border-bottom:1px solid #eee;text-align:center;color:#555;font-size:10px;">'+b.nights+'</td>'+
-    '<td style="padding:8px 10px;border-bottom:1px solid #ddd;text-align:right;color:#333;font-size:10px;">'+(b.baseAmount?money(Math.round(b.baseAmount/b.nights)):money(b.amount))+'</td>'+
-    '<td style="padding:8px 10px;border-bottom:1px solid #ddd;text-align:right;color:#000;font-weight:700;font-size:10px;">'+money(b.baseAmount||b.amount)+'</td></tr>';
+    '<tr><td style="padding:9px 10px;border-bottom:1px solid #eee;color:#555;font-size:11px;">'+formatDate(b.checkin)+'</td>'+
+    '<td style="padding:9px 10px;border-bottom:1px solid #eee;color:#111;font-size:11px;font-weight:500;">Room '+b.room+_rNameStr+' — Accommodation ('+b.nights+' Night'+(b.nights>1?'s':'')+')</td>'+
+    '<td style="padding:9px 10px;border-bottom:1px solid #eee;text-align:center;color:#333;font-size:11px;">'+b.nights+'</td>'+
+    '<td style="padding:9px 10px;border-bottom:1px solid #ddd;text-align:right;color:#333;font-size:11px;">'+(b.baseAmount?money(Math.round(b.baseAmount/b.nights)):money(b.amount))+'</td>'+
+    '<td style="padding:9px 10px;border-bottom:1px solid #ddd;text-align:right;color:#000;font-weight:700;font-size:12px;">'+money(b.baseAmount||b.amount)+'</td></tr>';
 
+  /* Extra person charge row */
+  var epRow='';
+  if(b.extraPersonCharge&&b.extraPersonCharge.total>0){
+    var ep=b.extraPersonCharge;
+    epRow='<tr><td style="padding:9px 10px;border-bottom:1px solid #eee;color:#555;font-size:11px;">'+formatDate(b.checkin)+'</td>'+
+      '<td style="padding:9px 10px;border-bottom:1px solid #eee;color:#111;font-size:11px;font-weight:500;">Extra Person Charge ('+ep.qty+' additional guest'+(ep.qty>1?'s':'')+')</td>'+
+      '<td style="padding:9px 10px;border-bottom:1px solid #eee;text-align:center;color:#333;font-size:11px;">'+ep.qty+'</td>'+
+      '<td style="padding:9px 10px;border-bottom:1px solid #eee;text-align:right;color:#333;font-size:11px;">'+money(ep.rate)+'</td>'+
+      '<td style="padding:9px 10px;border-bottom:1px solid #eee;text-align:right;color:#B7770D;font-weight:700;font-size:12px;">'+money(ep.total)+'</td></tr>';
+  }
   var eRows=extras.map(function(ex){
     var exDate=ex.date?formatDate(ex.date):formatDate(b.checkin);
-    return '<tr><td style="padding:7px 10px;border-bottom:1px solid #eee;color:#777;font-size:10px;">'+exDate+'</td>'+
-      '<td style="padding:7px 10px;border-bottom:1px solid #eee;color:#222;font-size:10px;">'+ex.desc+'</td>'+
-      '<td style="padding:7px 10px;border-bottom:1px solid #eee;text-align:center;color:#555;font-size:10px;">'+ex.qty+'</td>'+
-      '<td style="padding:7px 10px;border-bottom:1px solid #eee;text-align:right;color:#555;font-size:10px;">'+money(ex.rate)+'</td>'+
-      '<td style="padding:7px 10px;border-bottom:1px solid #eee;text-align:right;color:#B7770D;font-weight:700;font-size:10px;">'+money(ex.qty*ex.rate)+'</td></tr>';
+    return '<tr><td style="padding:9px 10px;border-bottom:1px solid #eee;color:#555;font-size:11px;">'+exDate+'</td>'+
+      '<td style="padding:9px 10px;border-bottom:1px solid #eee;color:#111;font-size:11px;font-weight:500;">'+ex.desc+'</td>'+
+      '<td style="padding:9px 10px;border-bottom:1px solid #eee;text-align:center;color:#333;font-size:11px;">'+ex.qty+'</td>'+
+      '<td style="padding:9px 10px;border-bottom:1px solid #eee;text-align:right;color:#333;font-size:11px;">'+money(ex.rate)+'</td>'+
+      '<td style="padding:9px 10px;border-bottom:1px solid #eee;text-align:right;color:#B7770D;font-weight:700;font-size:12px;">'+money(ex.qty*ex.rate)+'</td></tr>';
   }).join('');
 
   var sectionHdrRow=function(label){
-    return '<tr style="background:#f0ece2;"><td colspan="5" style="padding:5px 10px 4px;font-size:7.5px;font-weight:800;letter-spacing:1.8px;text-transform:uppercase;color:#1a1a2e;border-bottom:1px solid #ccc;border-top:2px solid #1a1a2e;">'+label+'</td></tr>';
+    return '<tr style="background:#f0ece2;"><td colspan="5" style="padding:6px 10px 5px;font-size:10px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:#1a1a2e;border-bottom:1px solid #ccc;border-top:2px solid #1a1a2e;">'+label+'</td></tr>';
   };
   var subTotalRow=function(label,amount){
-    return '<tr style="background:#faf8f4;"><td colspan="4" style="padding:5px 10px;font-size:9px;font-weight:700;color:#444;text-align:right;border-top:1px solid #ddd;">'+label+'</td>'+
-      '<td style="padding:5px 10px;font-size:10px;font-weight:800;color:#1a1a2e;text-align:right;border-top:1px solid #ddd;">'+money(amount)+'</td></tr>';
+    return '<tr style="background:#faf8f4;"><td colspan="4" style="padding:6px 10px;font-size:11px;font-weight:700;color:#333;text-align:right;border-top:1px solid #ddd;">'+label+'</td>'+
+      '<td style="padding:6px 10px;font-size:12px;font-weight:800;color:#1a1a2e;text-align:right;border-top:1px solid #ddd;">'+money(amount)+'</td></tr>';
   };
 
+  var hasExtras=extras.length>0||(b.extraPersonCharge&&b.extraPersonCharge.total>0);
   var tableBody;
-  if(extras.length>0){
+  if(hasExtras){
     tableBody=
       sectionHdrRow('Accommodation Charges')+
       roomRow+dRow+
       subTotalRow('Accommodation Sub-total',roomTotal)+
       sectionHdrRow('Additional Charges')+
-      eRows+
-      subTotalRow('Additional Charges Sub-total',extrasTotal);
+      epRow+eRows+
+      subTotalRow('Additional Charges Sub-total',extrasTotal+(b.extraPersonCharge&&b.extraPersonCharge.total||0));
   } else {
     tableBody=roomRow+dRow;
   }
@@ -7923,7 +8045,7 @@ function renderInvoice(){
         '<div style="display:flex;justify-content:space-between;padding:5px 0;font-size:10px;border-bottom:1px solid #eee;color:#B7770D;"><span>Service Charges Total</span><span>'+money(extrasTotal)+'</span></div>'
       :'')+
       '<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 13px;background:#1a1a2e;border-radius:4px;margin-top:6px;">'+
-        '<span style="font-size:8.5px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:#C9A84C;">Total Amount (৳)</span>'+
+        '<span style="font-size:11px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase;color:#C9A84C;">Total Amount (৳)</span>'+
         '<span style="font-size:17px;font-weight:800;color:#C9A84C;font-family:Georgia,serif;">'+money(grandTotal)+'</span>'+
       '</div>'+
       (advance>0?
@@ -8074,7 +8196,7 @@ function printExtrasInvoice(){
   var Wb='<circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>';
   var Pn='<path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>';
 
-  function mr(label,val){return '<div style="display:flex;gap:4px;font-size:10.5px;line-height:1.9;color:#1a1a2e;"><span style="min-width:88px;color:#666;font-size:9.5px;font-weight:500;">'+label+'</span><span style="color:#999;">:</span><span style="font-weight:700;color:#111;">'+val+'</span></div>';}
+  function mr(label,val){return '<div style="display:flex;gap:5px;font-size:11.5px;line-height:1.9;color:#1a1a2e;"><span style="min-width:90px;color:#444;font-size:11px;font-weight:600;">'+label+'</span><span style="color:#888;">:</span><span style="font-weight:700;color:#111;">'+val+'</span></div>';}
 
   var statusColor={paid:'#1a7040',unpaid:'#c0392b',partial:'#b07800'};
   var statusText={paid:'PAID',unpaid:'UNPAID',partial:'PARTIAL'};
@@ -8145,7 +8267,7 @@ function printExtrasInvoice(){
       '</div>'+
       '<div>'+
         '<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 13px;background:#1a1a2e;border-radius:4px;margin-bottom:4px;">'+
-          '<span style="font-size:8.5px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:#C9A84C;">Total Amount (৳)</span>'+
+          '<span style="font-size:11px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase;color:#C9A84C;">Total Amount (৳)</span>'+
           '<span style="font-size:17px;font-weight:800;color:#C9A84C;font-family:Georgia,serif;">'+money(extrasTotal)+'</span>'+
         '</div>'+
         (extrasAdvance>0?
@@ -8236,30 +8358,37 @@ function invCollectPayment(type){
   var roomTotal=Math.max(0,base-disc);
   var extras=invExtras.filter(function(c){return c.desc&&c.rate>0;});
   var extrasTotal=extras.reduce(function(s,c){return s+c.qty*c.rate;},0);
-  var grandTotal=roomTotal+extrasTotal;
+  var epCharge=(b.extraPersonCharge&&b.extraPersonCharge.total)||0;
+  var combinedExtrasTotal=extrasTotal+epCharge;
+  var grandTotal=roomTotal+combinedExtrasTotal;
   var method=methodEl.value;
   var note=noteEl.value;
   if(!b.paymentHistory)b.paymentHistory=[];
   var newBal,settled;
   if(type==='extras'){
-    /* Extras tracked independently via b.extrasAdvance */
-    var extrasBal=Math.max(0,extrasTotal-(b.extrasAdvance||0));
-    if(amt>extrasBal+0.01){notify('Amount exceeds service charges balance due ('+money(extrasBal)+').','error');return;}
+    /* Extras (manual service charges + extra person charge) tracked via b.extrasAdvance */
+    var extrasBal=Math.max(0,combinedExtrasTotal-(b.extrasAdvance||0));
+    if(amt>extrasBal+0.01){notify('Amount exceeds additional charges balance due ('+money(extrasBal)+').','error');return;}
     b.paymentHistory.push({ts:new Date().toISOString(),amount:amt,method:method,note:note||'',type:'service',by:curUser});
     b.extrasAdvance=(b.extrasAdvance||0)+amt;
-    newBal=Math.max(0,extrasTotal-b.extrasAdvance);
+    newBal=Math.max(0,combinedExtrasTotal-b.extrasAdvance);
     b.extrasPayStatus=newBal<=0?'paid':b.extrasAdvance>0?'partial':'unpaid';
     settled=newBal<=0;
     var rid2=revenues.length?Math.max.apply(null,revenues.map(function(r){return r.id;}))+1:1;
     revenues.push({id:rid2,source:'Service Charges',amount:amt,date:todayStr(),note:b.guest+' Rm '+b.room+' (Service) payment ('+method+')'+(note?' - '+note:'')});
   } else {
-    /* Room — uses b.advance as before */
-    var roomBal=Math.max(0,grandTotal-(b.advance||0));
-    if(amt>roomBal+0.01){notify('Amount exceeds balance due ('+money(roomBal)+').','error');return;}
+    /* Room collect — unified: auto-allocates to room first, then to extras (incl. extra person charge) */
+    var totalBal=Math.max(0,grandTotal-(b.advance||0)-(b.extrasAdvance||0));
+    if(amt>totalBal+0.01){notify('Amount exceeds total balance due ('+money(totalBal)+').','error');return;}
     b.paymentHistory.push({ts:new Date().toISOString(),amount:amt,method:method,note:note||'',type:'room',by:curUser});
-    b.advance=(b.advance||0)+amt;
-    newBal=Math.max(0,grandTotal-b.advance);
-    b.payStatus=newBal<=0?'paid':b.advance>0?'partial':'unpaid';
+    /* Allocate: fill room first, overflow goes to extras */
+    var roomRemaining=Math.max(0,roomTotal-(b.advance||0));
+    var toRoom=Math.min(amt,roomRemaining);
+    var toExtras=amt-toRoom;
+    b.advance=(b.advance||0)+toRoom;
+    if(toExtras>0)b.extrasAdvance=(b.extrasAdvance||0)+toExtras;
+    newBal=Math.max(0,grandTotal-b.advance-b.extrasAdvance);
+    b.payStatus=newBal<=0?'paid':((b.advance||0)+(b.extrasAdvance||0))>0?'partial':'unpaid';
     settled=newBal<=0;
     var rid1=revenues.length?Math.max.apply(null,revenues.map(function(r){return r.id;}))+1:1;
     revenues.push({id:rid1,source:'Room Rent',amount:amt,date:todayStr(),note:b.guest+' Rm '+b.room+' payment ('+method+')'+(note?' - '+note:'')});
@@ -8283,6 +8412,7 @@ function renderSettingsRooms(){
     html+='<div class="room-card '+r.status+'" style="position:relative;">';
     html+='<div onclick="openRoomDetail('+JSON.stringify(r.number)+')" style="cursor:pointer;">';
     html+='<div class="room-number">'+r.number+'</div>';
+    html+='<div class="room-name-lbl">'+(r.name||r.type)+'</div>';
     html+='<div class="room-type-lbl">'+r.type+'</div>';
     html+='<div class="room-rate-lbl">'+money(r.rate)+'/n</div>';
     html+='<div class="room-status">'+r.status.replace(/-/g,' ')+'</div>';
@@ -9489,8 +9619,9 @@ function editRoom(id){
   var h='<div class="modal-header"><div><div class="modal-title"><i class="ti ti-edit"></i> Edit Room '+r.number+'</div></div><button class="modal-close" onclick="closeModal()"><i class="ti ti-x"></i></button></div>';
   h+='<div class="form-row"><div class="form-group"><label>Room Number</label><input id="er-num" value="'+r.number+'"></div>';
   h+='<div class="form-group"><label>Floor</label><input id="er-floor" value="'+(r.floor||'')+'"></div></div>';
-  h+='<div class="form-row"><div class="form-group"><label>Type</label><input id="er-type" value="'+r.type+'"></div>';
-  h+='<div class="form-group"><label>Rate/n</label><input type="number" id="er-rate" value="'+(r.rate||0)+'"></div></div>';
+  h+='<div class="form-row"><div class="form-group"><label>Room Name (e.g. Orchid Blue)</label><input id="er-name" value="'+(r.name||'')+'"></div>';
+  h+='<div class="form-group"><label>Type (e.g. AC Room)</label><input id="er-type" value="'+r.type+'"></div></div>';
+  h+='<div class="form-row"><div class="form-group" style="grid-column:2"><label>Rate/n</label><input type="number" id="er-rate" value="'+(r.rate||0)+'"></div></div>';
   h+='<div class="form-group"><label>Notes</label><input id="er-notes" value="'+(r.notes||'')+'"></div>';
   h+='<div class="form-group"><label>Status</label><select id="er-status">'+opts+'</select></div>';
   h+='<div class="modal-actions"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn primary" onclick="saveRoomEdit('+id+')"><i class="ti ti-check"></i> Save</button></div>';
@@ -9508,6 +9639,7 @@ function saveRoomEdit(id){
     bookings.forEach(function(b){if(b.room===oldNum)b.room=nn;});
   }
   rooms[idx].number=nn;rooms[idx].type=nt;rooms[idx].rate=nr;
+  rooms[idx].name=(document.getElementById('er-name').value||'').trim()||rooms[idx].name||'';
   rooms[idx].floor=(document.getElementById('er-floor').value||'').trim();
   rooms[idx].notes=(document.getElementById('er-notes').value||'').trim();
   rooms[idx].status=document.getElementById('er-status').value;
@@ -9531,7 +9663,7 @@ function switchHotelAdminTab(tab){
     if(b){var on=t===tab;b.style.background=on?'var(--navy)':'transparent';b.style.color=on?'#E8C96A':'var(--text3)';b.style.fontWeight=on?'700':'600';}
   });
   if(tab==='finance')renderHotelAdminFinance();
-  if(tab==='rooms'){renderSettingsRooms();try{renderPricingPanel();}catch(e){}}
+  if(tab==='rooms'){renderSettingsRooms();try{renderPricingPanel();}catch(e){}populateExtraPersonRules();}
   if(tab==='staff')renderHotelStaffPw();
   if(tab==='data'){var dz=document.getElementById('h-danger-zone');if(dz)dz.style.display=curRole==='admin'?'block':'none';}
   if(tab==='security')renderSecurityPanel();
@@ -9646,34 +9778,39 @@ function updatePaySummary(){
   var roomTotal=Math.max(0,base-disc);
   var extras=invExtras.filter(function(x){return x.desc&&x.rate>0;});
   var extrasTotal=extras.reduce(function(s,x){return s+x.qty*x.rate;},0);
-  var grandTotal=roomTotal+extrasTotal;
+  var epCharge=(b.extraPersonCharge&&b.extraPersonCharge.total)||0;
+  var combinedExtrasTotal=extrasTotal+epCharge;
+  var grandTotal=roomTotal+combinedExtrasTotal;
   var advance=b.advance||0;
   sEl.style.display='block';
   var rows='';
   if(mode==='room'){
     if(tEl)tEl.textContent='ROOM PAYMENT';
-    var advR=Math.min(advance,roomTotal);
-    var rBal=Math.max(0,roomTotal-advance);
+    var extrasAdvance2=b.extrasAdvance||0;
+    var totalPaid=(advance||0)+extrasAdvance2;
+    var totalBal=Math.max(0,grandTotal-totalPaid);
     rows+='<div style="display:flex;justify-content:space-between;padding:6px 0;font-size:12px;color:var(--text2);"><span>Room Charge</span><span style="font-weight:600;color:var(--text);">'+money(roomTotal)+'</span></div>';
-    if(extras.length)rows+='<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:11px;color:var(--text2);"><span>Service Charges</span><span style="color:var(--text);">'+money(extrasTotal)+'</span></div>';
+    if(combinedExtrasTotal>0)rows+='<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:11px;color:var(--text2);"><span>Additional Charges</span><span style="color:var(--text);">'+money(combinedExtrasTotal)+'</span></div>';
+    rows+='<div style="display:flex;justify-content:space-between;padding:5px 0;font-size:12px;font-weight:700;border-top:1px solid var(--border);margin-top:4px;"><span>Grand Total</span><span>'+money(grandTotal)+'</span></div>';
     rows+='<div style="height:1px;background:var(--border);margin:4px 0;"></div>';
-    if(advR>0)rows+='<div style="display:flex;justify-content:space-between;padding:5px 0;font-size:12px;color:var(--green2);"><span>\u2714 Advance Paid</span><span style="font-weight:700;">\u2212'+money(advR)+'</span></div>';
+    if(totalPaid>0)rows+='<div style="display:flex;justify-content:space-between;padding:5px 0;font-size:12px;color:var(--green2);"><span>\u2714 Advance Paid</span><span style="font-weight:700;">\u2212'+money(totalPaid)+'</span></div>';
     rows+='<div style="height:1px;background:var(--border);margin:4px 0;"></div>';
-    if(rBal<=0){rows+='<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;background:var(--green-bg);border:1.5px solid var(--green-bd);border-radius:7px;margin-top:6px;"><span style="font-size:12px;font-weight:800;color:var(--green2);text-transform:uppercase;letter-spacing:.8px;"><i class="ti ti-check"></i> Fully Settled</span><span style="font-size:15px;font-weight:800;color:var(--green2);">\u09f3 0</span></div>';}
-    else{rows+='<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;background:rgba(192,57,43,.06);border:1.5px solid rgba(192,57,43,.3);border-radius:7px;margin-top:6px;"><span style="font-size:12px;font-weight:800;color:var(--red);text-transform:uppercase;letter-spacing:.8px;"><i class="ti ti-alert-circle"></i> Balance Due</span><span style="font-size:15px;font-weight:800;color:var(--red);">'+money(rBal)+'</span></div>';}
+    if(totalBal<=0){rows+='<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;background:var(--green-bg);border:1.5px solid var(--green-bd);border-radius:7px;margin-top:6px;"><span style="font-size:12px;font-weight:800;color:var(--green2);text-transform:uppercase;letter-spacing:.8px;"><i class="ti ti-check"></i> Fully Settled</span><span style="font-size:15px;font-weight:800;color:var(--green2);">\u09f3 0</span></div>';}
+    else{rows+='<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;background:rgba(192,57,43,.06);border:1.5px solid rgba(192,57,43,.3);border-radius:7px;margin-top:6px;"><span style="font-size:12px;font-weight:800;color:var(--red);text-transform:uppercase;letter-spacing:.8px;"><i class="ti ti-alert-circle"></i> Balance Due</span><span style="font-size:15px;font-weight:800;color:var(--red);">'+money(totalBal)+'</span></div>';}
   } else {
-    if(tEl)tEl.textContent='SERVICE PAYMENT';
-    if(!extras.length){rows='<div style="text-align:center;padding:12px;color:var(--text3);font-size:12px;"><i class="ti ti-package-off" style="font-size:20px;display:block;margin-bottom:5px;"></i>No service charges added yet</div>';}
+    if(tEl)tEl.textContent='ADDITIONAL CHARGES';
+    if(!combinedExtrasTotal){rows='<div style="text-align:center;padding:12px;color:var(--text3);font-size:12px;"><i class="ti ti-package-off" style="font-size:20px;display:block;margin-bottom:5px;"></i>No additional charges</div>';}
     else{
       var extrasAdvance=b.extrasAdvance||0;
-      var eBal=Math.max(0,extrasTotal-extrasAdvance);
+      var eBal=Math.max(0,combinedExtrasTotal-extrasAdvance);
       extras.forEach(function(x){rows+='<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:11px;color:var(--text2);"><span>'+x.desc+(x.qty>1?' \u00d7 '+x.qty:'')+'</span><span style="color:var(--text);">'+money(x.qty*x.rate)+'</span></div>';});
+      if(epCharge>0)rows+='<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:11px;color:var(--text2);"><span>Extra Person Charge</span><span style="color:var(--text);">'+money(epCharge)+'</span></div>';
       rows+='<div style="height:1px;background:var(--border);margin:5px 0;"></div>';
-      rows+='<div style="display:flex;justify-content:space-between;padding:5px 0;font-size:12px;font-weight:700;"><span>Service Charges Total</span><span>'+money(extrasTotal)+'</span></div>';
+      rows+='<div style="display:flex;justify-content:space-between;padding:5px 0;font-size:12px;font-weight:700;"><span>Additional Charges Total</span><span>'+money(combinedExtrasTotal)+'</span></div>';
       rows+='<div style="height:1px;background:var(--border);margin:4px 0;"></div>';
-      if(extrasAdvance>0)rows+='<div style="display:flex;justify-content:space-between;padding:5px 0;font-size:12px;color:var(--green2);"><span>\u2714 Paid</span><span style="font-weight:700;">\u2212'+money(Math.min(extrasAdvance,extrasTotal))+'</span></div>';
+      if(extrasAdvance>0)rows+='<div style="display:flex;justify-content:space-between;padding:5px 0;font-size:12px;color:var(--green2);"><span>\u2714 Paid</span><span style="font-weight:700;">\u2212'+money(Math.min(extrasAdvance,combinedExtrasTotal))+'</span></div>';
       rows+='<div style="height:1px;background:var(--border);margin:4px 0;"></div>';
-      if(eBal<=0){rows+='<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;background:var(--green-bg);border:1.5px solid var(--green-bd);border-radius:7px;margin-top:6px;"><span style="font-size:12px;font-weight:800;color:var(--green2);text-transform:uppercase;letter-spacing:.8px;"><i class="ti ti-check"></i> Service Settled</span><span style="font-size:15px;font-weight:800;color:var(--green2);">\u09f3 0</span></div>';}
+      if(eBal<=0){rows+='<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;background:var(--green-bg);border:1.5px solid var(--green-bd);border-radius:7px;margin-top:6px;"><span style="font-size:12px;font-weight:800;color:var(--green2);text-transform:uppercase;letter-spacing:.8px;"><i class="ti ti-check"></i> Settled</span><span style="font-size:15px;font-weight:800;color:var(--green2);">\u09f3 0</span></div>';}
       else{rows+='<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;background:rgba(192,57,43,.06);border:1.5px solid rgba(192,57,43,.3);border-radius:7px;margin-top:6px;"><span style="font-size:12px;font-weight:800;color:var(--red);text-transform:uppercase;letter-spacing:.8px;"><i class="ti ti-alert-circle"></i> Service Balance</span><span style="font-size:15px;font-weight:800;color:var(--red);">'+money(eBal)+'</span></div>';}
     }
   }
