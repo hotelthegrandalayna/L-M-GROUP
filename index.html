@@ -6494,7 +6494,8 @@ let pricingRules=JSON.parse(localStorage.getItem('ga_pricing')||'null')||[
 ];
 let loyaltyRules=JSON.parse(localStorage.getItem('ga_loyalty_rules')||'null')||{ptsPerNight:10,ptsPerThousand:5,referralBonus:200,pointValue:1,silverThreshold:500,goldThreshold:1000,platinumThreshold:2000};
 let invExtras=[];
-let idFront='',idBack='';
+let idFront='',idBack=''; /* legacy — kept for old bookings */
+let idPersons=[]; /* multi-person ID docs: [{front:'',back:''},...] */
 let crmSeg='all';
 
 function save(){localStorage.setItem('ga_rooms',JSON.stringify(rooms));localStorage.setItem('ga_bookings',JSON.stringify(bookings));localStorage.setItem('ga_revenues',JSON.stringify(revenues));localStorage.setItem('ga_expenses',JSON.stringify(expenses));}
@@ -6796,7 +6797,7 @@ function cancelReservation(id){
 function editReservation(id){
   var b=bookings.find(function(x){return x.id===id;});if(!b)return;
   var r=rooms.find(function(x){return x.number===b.room;});
-  idFront='';idBack='';
+  idFront='';idBack='';idPersons=(b.idDocs&&b.idDocs.length)?b.idDocs.map(function(d){return {front:d.front||'',back:d.back||''};}):[{front:'',back:''}];
   var h='<div class="modal-header"><div><div class="modal-title"><i class="ti ti-forms" style="color:var(--gold);"></i> Complete Booking</div>';
   h+='<div class="modal-sub">Room '+b.room+' \u00b7 Reserved for '+b.guest+'</div></div><button class="modal-close" onclick="closeModal()"><i class="ti ti-x"></i></button></div>';
   /* Info banner */
@@ -6813,11 +6814,10 @@ function editReservation(id){
   /* ID */
   h+='<div class="form-section"><div class="form-sec-title"><i class="ti ti-id-badge"></i> ID Verification</div>';
   h+='<div class="form-row"><div class="form-group"><label>ID Type</label><select id="nb-idtype"><option value="">Select</option><option>National ID (NID)</option><option>Passport</option><option>Driving License</option></select></div>';
-  h+='<div class="form-group"><label>ID Number</label><input id="nb-idnum" value="'+(b.idNum||'')+'" placeholder="Document number"></div></div>';
-  h+='<div class="form-row">';
-  h+='<div class="form-group"><label>Front Side</label><div class="id-upload-box" id="box-front"><input type="file" accept="image/*" onchange="handleIdUpload(\'front\',this)"><i class="ti ti-camera" style="font-size:18px;color:var(--text3)"></i><div style="font-size:11px;color:var(--text3);margin-top:4px" id="lbl-front">Upload front</div><img id="prev-front" class="id-preview" style="display:none"></div></div>';
-  h+='<div class="form-group"><label>Back Side</label><div class="id-upload-box" id="box-back"><input type="file" accept="image/*" onchange="handleIdUpload(\'back\',this)"><i class="ti ti-camera" style="font-size:18px;color:var(--text3)"></i><div style="font-size:11px;color:var(--text3);margin-top:4px" id="lbl-back">Upload back</div><img id="prev-back" class="id-preview" style="display:none"></div></div>';
-  h+='</div></div>';
+  h+='<div class="form-group"><label>ID Number (Primary Guest)</label><input id="nb-idnum" value="'+(b.idNum||'')+'" placeholder="Document number"></div></div>';
+  h+='<div id="nb-id-persons-list"></div>';
+  h+='<button type="button" onclick="addPersonIdRow()" style="display:flex;align-items:center;gap:7px;margin-top:8px;padding:9px 16px;border:2px dashed var(--gold);border-radius:8px;background:var(--gold4);color:var(--gold);font-size:12px;font-weight:700;cursor:pointer;font-family:\'DM Sans\',sans-serif;width:100%;justify-content:center;"><i class="ti ti-user-plus" style="font-size:15px;"></i> Add Another Person\'s ID</button>';
+  h+='</div>';
   /* Stay */
   h+='<div class="form-section"><div class="form-sec-title"><i class="ti ti-door"></i> Room &amp; Stay</div>';
   h+='<div class="form-row three"><div class="form-group"><label>Room (Reserved)</label>';
@@ -6845,6 +6845,7 @@ function editReservation(id){
   h+='<button class="btn primary" onclick="updateReservation('+id+',\'checked-in\')"><i class="ti ti-login"></i> Confirm &amp; Check In</button>';
   h+='</div>';
   showModal(h);
+  renderInitialPersonRows();
   /* Pre-fill select fields after DOM ready */
   setTimeout(function(){
     var s;
@@ -6892,8 +6893,10 @@ function updateReservation(id,status){
   b.discountType=dt; b.discountAmount=discAmt; b.discountReason=dr;
   b.notes=(document.getElementById('nb-notes').value||'').trim();
   b.status=status;
-  if(idFront)b.idFront=idFront;
-  if(idBack)b.idBack=idBack;
+  /* Save multi-person ID docs */
+  b.idDocs=idPersons.filter(function(p){return p.front||p.back;});
+  b.idFront=(idPersons[0]&&idPersons[0].front)||idFront||'';
+  b.idBack=(idPersons[0]&&idPersons[0].back)||idBack||'';
   if(status==='checked-in'&&room)room.status='occupied';
   /* Record any additional advance (amount paid beyond what was already recorded) */
   var newAdvance=b.advance||0;
@@ -6908,7 +6911,7 @@ function updateReservation(id,status){
 
 // ── NEW BOOKING ──
 function showNewBookingModal(){
-  idFront='';idBack='';
+  idFront='';idBack='';idPersons=[{front:'',back:''}];
   var avail=rooms.filter(function(r){return r.status==='vacant';});
   var rOpts=avail.map(function(r){return '<option value="'+r.number+'">'+r.number+' \u00b7 '+r.type+' \u00b7 '+money(r.rate)+'/n</option>';}).join('');
   var h='<div class="modal-header"><div><div class="modal-title">New Booking</div></div><button class="modal-close" onclick="closeModal()"><i class="ti ti-x"></i></button></div>';
@@ -6917,12 +6920,11 @@ function showNewBookingModal(){
   h+='<div class="form-row"><div class="form-group"><label>Nationality</label><input id="nb-nat" placeholder="Bangladeshi"></div><div class="form-group"><label>Source</label><select id="nb-src"><option>Walk-in</option><option>Phone</option><option>Website</option><option>WhatsApp</option><option>OTA</option><option>Referral</option></select></div></div>';
   h+='<div class="form-row"><div class="form-group"><label>Referred by \u2014 Name</label><input id="nb-ref-name" placeholder="Referrer name"></div><div class="form-group"><label>Referred by \u2014 Phone</label><input id="nb-ref-phone" placeholder="Referrer phone"></div></div>';
   h+='</div>';
-  h+='<div class="form-section"><div class="form-sec-title"><i class="ti ti-id-badge"></i> ID</div>';
-  h+='<div class="form-row"><div class="form-group"><label>ID Type</label><select id="nb-idtype"><option value="">Select</option><option>National ID (NID)</option><option>Passport</option><option>Driving License</option></select></div><div class="form-group"><label>ID Number</label><input id="nb-idnum" placeholder="Document number"></div></div>';
-  h+='<div class="form-row">';
-  h+='<div class="form-group"><label>Front Side</label><div class="id-upload-box" id="box-front"><input type="file" accept="image/*" onchange="handleIdUpload(\'front\',this)"><i class="ti ti-camera" style="font-size:18px;color:var(--text3)"></i><div style="font-size:11px;color:var(--text3);margin-top:4px" id="lbl-front">Upload front</div><img id="prev-front" class="id-preview" style="display:none"></div></div>';
-  h+='<div class="form-group"><label>Back Side</label><div class="id-upload-box" id="box-back"><input type="file" accept="image/*" onchange="handleIdUpload(\'back\',this)"><i class="ti ti-camera" style="font-size:18px;color:var(--text3)"></i><div style="font-size:11px;color:var(--text3);margin-top:4px" id="lbl-back">Upload back</div><img id="prev-back" class="id-preview" style="display:none"></div></div>';
-  h+='</div></div>';
+  h+='<div class="form-section"><div class="form-sec-title"><i class="ti ti-id-badge"></i> ID Verification</div>';
+  h+='<div class="form-row"><div class="form-group"><label>ID Type</label><select id="nb-idtype"><option value="">Select</option><option>National ID (NID)</option><option>Passport</option><option>Driving License</option></select></div><div class="form-group"><label>ID Number (Primary Guest)</label><input id="nb-idnum" placeholder="Document number"></div></div>';
+  h+='<div id="nb-id-persons-list"></div>';
+  h+='<button type="button" onclick="addPersonIdRow()" style="display:flex;align-items:center;gap:7px;margin-top:8px;padding:9px 16px;border:2px dashed var(--gold);border-radius:8px;background:var(--gold4);color:var(--gold);font-size:12px;font-weight:700;cursor:pointer;font-family:\'DM Sans\',sans-serif;width:100%;justify-content:center;"><i class="ti ti-user-plus" style="font-size:15px;"></i> Add Another Person\'s ID</button>';
+  h+='</div>';
   h+='<div class="form-section"><div class="form-sec-title"><i class="ti ti-door"></i> Room &amp; Stay</div>';
   h+='<div class="form-row three"><div class="form-group"><label>Room *</label><select id="nb-room" onchange="calcTotal()"><option value="">Select</option>'+rOpts+'</select></div>';
   h+='<div class="form-group"><label>Check-in *</label><input type="date" id="nb-ci" value="'+todayStr()+'" onchange="calcTotal()"></div>';
@@ -6940,19 +6942,91 @@ function showNewBookingModal(){
   h+='<div class="form-group"><label>Notes</label><textarea id="nb-notes" rows="2" placeholder="Special requests..."></textarea></div>';
   h+='</div>';
   h+='<div class="modal-actions"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn" onclick="saveBooking(\'confirmed\')"><i class="ti ti-calendar"></i> Save Reservation</button><button class="btn primary" onclick="saveBooking(\'checked-in\')"><i class="ti ti-login"></i> Check In Now</button></div>';
-  showModal(h);calcTotal();
+  showModal(h);calcTotal();renderInitialPersonRows();
 }
 
 function handleIdUpload(side,input){
+  /* legacy single-person handler \u2014 kept for compatibility */
   var file=input.files[0];if(!file)return;
   if(file.size>5*1024*1024){notify('Max 5MB','error');return;}
   var reader=new FileReader();
   reader.onload=function(e){
     var data=e.target.result;
-    if(side==='front'){idFront=data;document.getElementById('lbl-front').textContent='\u2713 '+file.name;document.getElementById('box-front').style.borderColor='var(--gold)';var p=document.getElementById('prev-front');if(file.type.startsWith('image/')){p.src=data;p.style.display='block';}}
-    else{idBack=data;document.getElementById('lbl-back').textContent='\u2713 '+file.name;document.getElementById('box-back').style.borderColor='var(--gold)';var p=document.getElementById('prev-back');if(file.type.startsWith('image/')){p.src=data;p.style.display='block';}}
+    if(side==='front'){idFront=data;var lbl=document.getElementById('lbl-front');if(lbl)lbl.textContent='\u2713 '+file.name;var bx=document.getElementById('box-front');if(bx)bx.style.borderColor='var(--gold)';var p=document.getElementById('prev-front');if(p&&file.type.startsWith('image/')){p.src=data;p.style.display='block';}}
+    else{idBack=data;var lbl=document.getElementById('lbl-back');if(lbl)lbl.textContent='\u2713 '+file.name;var bx=document.getElementById('box-back');if(bx)bx.style.borderColor='var(--gold)';var p=document.getElementById('prev-back');if(p&&file.type.startsWith('image/')){p.src=data;p.style.display='block';}}
   };
   reader.readAsDataURL(file);
+}
+function handlePersonIdUpload(idx,side,input){
+  var file=input.files[0];if(!file)return;
+  if(file.size>5*1024*1024){notify('Max 5MB per file','error');return;}
+  var reader=new FileReader();
+  reader.onload=function(e){
+    var data=e.target.result;
+    if(!idPersons[idx])idPersons[idx]={front:'',back:''};
+    idPersons[idx][side]=data;
+    var lbl=document.getElementById('id-lbl-'+idx+'-'+side);
+    var box=document.getElementById('id-box-'+idx+'-'+side);
+    var prv=document.getElementById('id-prv-'+idx+'-'+side);
+    if(lbl)lbl.textContent='\u2713 '+file.name;
+    if(box)box.style.borderColor='var(--gold)';
+    if(prv&&file.type.startsWith('image/')){prv.src=data;prv.style.display='block';}
+  };
+  reader.readAsDataURL(file);
+}
+function buildPersonIdRow(idx,existing){
+  /* Build one person row HTML string */
+  var num=idx+1;
+  var canRemove=idx>0;
+  var fr=existing&&existing.front?existing.front:'';
+  var bk=existing&&existing.back?existing.back:'';
+  var h='<div id="id-person-row-'+idx+'" style="border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:8px;background:var(--bg3);">';
+  h+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">';
+  h+='<div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;display:flex;align-items:center;gap:5px;"><i class="ti ti-user" style="color:var(--gold);"></i> Person '+num+'</div>';
+  if(canRemove)h+='<button type="button" onclick="removePersonIdRow('+idx+')" style="border:none;background:transparent;color:var(--red);cursor:pointer;font-size:11px;font-weight:700;padding:2px 6px;border-radius:5px;"><i class="ti ti-x"></i> Remove</button>';
+  h+='</div>';
+  h+='<div class="form-row">';
+  /* Front */
+  h+='<div class="form-group"><label>Front Side</label>';
+  h+='<div class="id-upload-box" id="id-box-'+idx+'-front">';
+  h+='<input type="file" accept="image/*" onchange="handlePersonIdUpload('+idx+',\'front\',this)">';
+  h+='<i class="ti ti-camera" style="font-size:18px;color:var(--text3)"></i>';
+  h+='<div style="font-size:11px;color:var(--text3);margin-top:4px" id="id-lbl-'+idx+'-front">'+(fr?'\u2713 Uploaded':'Upload front')+'</div>';
+  h+='<img id="id-prv-'+idx+'-front" class="id-preview" src="'+(fr||'')+'" style="display:'+(fr?'block':'none')+'"></div></div>';
+  /* Back */
+  h+='<div class="form-group"><label>Back Side</label>';
+  h+='<div class="id-upload-box" id="id-box-'+idx+'-back">';
+  h+='<input type="file" accept="image/*" onchange="handlePersonIdUpload('+idx+',\'back\',this)">';
+  h+='<i class="ti ti-camera" style="font-size:18px;color:var(--text3)"></i>';
+  h+='<div style="font-size:11px;color:var(--text3);margin-top:4px" id="id-lbl-'+idx+'-back">'+(bk?'\u2713 Uploaded':'Upload back')+'</div>';
+  h+='<img id="id-prv-'+idx+'-back" class="id-preview" src="'+(bk||'')+'" style="display:'+(bk?'block':'none')+'"></div></div>';
+  h+='</div></div>';
+  return h;
+}
+function addPersonIdRow(){
+  /* Ensure idPersons array has a slot */
+  var idx=idPersons.length;
+  idPersons.push({front:'',back:''});
+  var list=document.getElementById('nb-id-persons-list');
+  if(!list)return;
+  var div=document.createElement('div');
+  div.innerHTML=buildPersonIdRow(idx,null);
+  list.appendChild(div.firstChild);
+}
+function removePersonIdRow(idx){
+  var row=document.getElementById('id-person-row-'+idx);
+  if(row)row.remove();
+  idPersons[idx]={front:'',back:''};/* blank it out \u2014 keep array indices stable */
+}
+function renderInitialPersonRows(){
+  var list=document.getElementById('nb-id-persons-list');
+  if(!list)return;
+  list.innerHTML='';
+  idPersons.forEach(function(p,i){
+    var div=document.createElement('div');
+    div.innerHTML=buildPersonIdRow(i,p);
+    list.appendChild(div.firstChild);
+  });
 }
 
 function calcTotal(){
@@ -7025,6 +7099,9 @@ function saveBooking(status){
   var rp=document.getElementById('nb-ref-phone').value.trim();
   bookings.push({id:id,guest:name,phone:phone,email:'',room:roomNum,nights:nights,checkin:ci,checkout:co,amount:amount,baseAmount:base,discType:dt,discAmt:discAmt,discReason:dr,status:status,notes:document.getElementById('nb-notes').value,source:document.getElementById('nb-src').value,referredByName:rn,referredByPhone:rp,referredBy:rn||rp,nationality:document.getElementById('nb-nat').value,idType:document.getElementById('nb-idtype').value,idNum:document.getElementById('nb-idnum').value,adults:parseInt(document.getElementById('nb-adults').value)||1,children:parseInt(document.getElementById('nb-children').value)||0,advance:parseFloat(document.getElementById('nb-advance').value)||0,payment:document.getElementById('nb-payment').value,paymentMethod:document.getElementById('nb-payment').value,idFront:idFront,idBack:idBack});
   if(status==='checked-in'){var r=rooms.find(function(x){return x.number===roomNum;});if(r)r.status='occupied';}
+  /* Save multi-person ID docs */
+  var lastBk=bookings[bookings.length-1];
+  if(lastBk){lastBk.idDocs=idPersons.filter(function(p){return p.front||p.back;});lastBk.idFront=(idPersons[0]&&idPersons[0].front)||'';lastBk.idBack=(idPersons[0]&&idPersons[0].back)||'';}
   /* Record advance/deposit in revenues immediately */
   var adv=parseFloat(document.getElementById('nb-advance').value)||0;
   var mtd=document.getElementById('nb-payment').value;
