@@ -3062,6 +3062,7 @@ select:focus, textarea:focus {
         <button id="hAdminTab-data" onclick="switchHotelAdminTab('data')" style="flex:1;padding:8px 10px;border-radius:7px;border:none;font-size:11px;font-weight:600;cursor:pointer;background:transparent;color:var(--text3);font-family:'DM Sans',sans-serif;display:flex;align-items:center;justify-content:center;gap:5px;"><i class="ti ti-database"></i> Data</button>
         <button id="hAdminTab-security" onclick="switchHotelAdminTab('security')" style="flex:1;padding:8px 10px;border-radius:7px;border:none;font-size:11px;font-weight:600;cursor:pointer;background:transparent;color:var(--text3);font-family:'DM Sans',sans-serif;display:flex;align-items:center;justify-content:center;gap:5px;"><i class="ti ti-shield-lock"></i> Security</button>
         <button id="hAdminTab-guide" onclick="switchHotelAdminTab('guide')" style="flex:1;padding:8px 10px;border-radius:7px;border:none;font-size:11px;font-weight:600;cursor:pointer;background:transparent;color:var(--text3);font-family:'DM Sans',sans-serif;display:flex;align-items:center;justify-content:center;gap:5px;"><i class="ti ti-book-2"></i> Guide</button>
+        <button id="hAdminTab-inventory" onclick="switchHotelAdminTab('inventory')" style="flex:1;padding:8px 10px;border-radius:7px;border:none;font-size:11px;font-weight:600;cursor:pointer;background:transparent;color:var(--text3);font-family:'DM Sans',sans-serif;display:flex;align-items:center;justify-content:center;gap:5px;position:relative;"><i class="ti ti-package"></i> Inventory<span id="inv-low-badge" style="display:none;position:absolute;top:4px;right:6px;background:#e74c3c;color:#fff;font-size:8px;font-weight:800;border-radius:8px;padding:1px 5px;line-height:1.5;"></span></button>
       </div>
 
       <div id="hAdminPanel-finance">
@@ -3533,6 +3534,60 @@ select:focus, textarea:focus {
             </div>
           </div>
 
+        </div>
+      </div>
+
+      <!-- INVENTORY PANEL -->
+      <div id="hAdminPanel-inventory" style="display:none;">
+        <div class="panel" style="margin-bottom:14px;">
+          <div class="panel-header">
+            <div class="panel-title"><i class="ti ti-package"></i> Stock Overview</div>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <button class="btn sm" onclick="invToggleView('overview')" id="inv-btn-overview" style="background:var(--navy);color:#E8C96A;border-color:var(--navy);"><i class="ti ti-layout-list"></i> Stock</button>
+              <button class="btn sm" onclick="invToggleView('log')" id="inv-btn-log"><i class="ti ti-history"></i> History</button>
+              <button class="btn sm primary" onclick="openAddItemModal()"><i class="ti ti-plus"></i> New Item</button>
+            </div>
+          </div>
+          <!-- Stock Overview Table -->
+          <div id="inv-view-overview">
+            <table style="width:100%;border-collapse:collapse;font-size:13px;" id="inv-stock-table">
+              <thead><tr style="background:var(--navy2);color:#E8C96A;">
+                <th style="padding:9px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;">Item</th>
+                <th style="padding:9px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;">Category</th>
+                <th style="padding:9px 12px;text-align:center;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;">In Stock</th>
+                <th style="padding:9px 12px;text-align:center;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;">Min</th>
+                <th style="padding:9px 12px;text-align:center;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;">Unit</th>
+                <th style="padding:9px 12px;text-align:right;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;">Actions</th>
+              </tr></thead>
+              <tbody id="inv-stock-tbody"></tbody>
+            </table>
+          </div>
+          <!-- Transaction Log -->
+          <div id="inv-view-log" style="display:none;">
+            <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:center;">
+              <select id="inv-log-filter" onchange="renderInvLog()" style="font-size:12px;padding:5px 8px;border-radius:7px;border:1px solid var(--border);background:var(--bg2);color:var(--text);width:auto;">
+                <option value="">All Items</option>
+              </select>
+              <select id="inv-log-type" onchange="renderInvLog()" style="font-size:12px;padding:5px 8px;border-radius:7px;border:1px solid var(--border);background:var(--bg2);color:var(--text);width:auto;">
+                <option value="">All Types</option>
+                <option value="purchase">Purchase</option>
+                <option value="remove">Removal</option>
+              </select>
+            </div>
+            <table style="width:100%;border-collapse:collapse;font-size:13px;">
+              <thead><tr style="background:var(--navy2);color:#E8C96A;">
+                <th style="padding:9px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;">Date</th>
+                <th style="padding:9px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;">Item</th>
+                <th style="padding:9px 12px;text-align:center;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;">Type</th>
+                <th style="padding:9px 12px;text-align:center;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;">Qty</th>
+                <th style="padding:9px 12px;text-align:right;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;">Price Paid</th>
+                <th style="padding:9px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;">Note</th>
+                <th style="padding:9px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;">By</th>
+                <th style="padding:9px 12px;text-align:center;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;"></th>
+              </tr></thead>
+              <tbody id="inv-log-tbody"></tbody>
+            </table>
+          </div>
         </div>
       </div>
 
@@ -4251,6 +4306,7 @@ function selSide(prefix,radio){
   radio.closest('.side-btn').classList.add('sel');
   if(prefix==='w')G('eWSide').textContent='';
 }
+function toggleTxn(wrapperId,method){var el=document.getElementById(wrapperId);if(el)el.style.display=(method==='bKash'||method==='Nagad')?'block':'none';}
 function selPay(radio){(document.getElementById('hallApp')||document).querySelectorAll('.pay-btn').forEach(function(b){b.classList.remove('sel');});radio.closest('.pay-btn').classList.add('sel');G('bankBlock').style.display=radio.value==='Bank Transfer'?'block':'none';}
 function checkAvail(t){
   var d=t==='w'?G('wDate').value:t==='h'?G('hDate').value:t==='h2'?G('h2Date').value:G('gDate').value;
@@ -6514,13 +6570,29 @@ let pricingRules=JSON.parse(localStorage.getItem('ga_pricing')||'null')||[
 ];
 let loyaltyRules=JSON.parse(localStorage.getItem('ga_loyalty_rules')||'null')||{ptsPerNight:10,ptsPerThousand:5,referralBonus:200,pointValue:1,silverThreshold:500,goldThreshold:1000,platinumThreshold:2000};
 let invExtras=[];
-let idFront='',idBack=''; /* legacy — kept for old bookings */
+let idFront='',idBack='';
+
+/* ── INVENTORY ── */
+var _INV_DEFAULT=[
+  {id:1,name:'Blanket',category:'Linen',unit:'pcs',minStock:5},
+  {id:2,name:'Bed Sheet',category:'Linen',unit:'pcs',minStock:10},
+  {id:3,name:'Pillow',category:'Linen',unit:'pcs',minStock:10},
+  {id:4,name:'Pillow Cover',category:'Linen',unit:'pcs',minStock:10},
+  {id:5,name:'Bath Towel',category:'Linen',unit:'pcs',minStock:10},
+  {id:6,name:'Hand Towel',category:'Linen',unit:'pcs',minStock:10},
+  {id:7,name:'Mattress Protector',category:'Linen',unit:'pcs',minStock:5},
+  {id:8,name:'Soap Bar',category:'Toiletry',unit:'pcs',minStock:20},
+  {id:9,name:'Shampoo Sachet',category:'Toiletry',unit:'pcs',minStock:20}
+];
+var invItems=JSON.parse(localStorage.getItem('ga_inv_items')||'null')||_INV_DEFAULT.map(function(i){return Object.assign({},i);});
+var invTx=JSON.parse(localStorage.getItem('ga_inv_tx')||'[]'); /* legacy — kept for old bookings */
 let idPersons=[]; /* multi-person ID docs: [{front:'',back:''},...] */
 let crmSeg='all';
 let extraPersonRules=JSON.parse(localStorage.getItem('ga_extra_person')||'null')||{threshold:3,charge:300};
 var _extraPersonAccepted=false,_extraPersonCount=0,_extraPersonCharge=0;
 
 function save(){localStorage.setItem('ga_rooms_ver',_GA_ROOMS_VER);localStorage.setItem('ga_rooms',JSON.stringify(rooms));localStorage.setItem('ga_bookings',JSON.stringify(bookings));localStorage.setItem('ga_revenues',JSON.stringify(revenues));localStorage.setItem('ga_expenses',JSON.stringify(expenses));}
+function saveInventory(){localStorage.setItem('ga_inv_items',JSON.stringify(invItems));localStorage.setItem('ga_inv_tx',JSON.stringify(invTx));}
 function saveInsights(){localStorage.setItem('ga_loyalty',JSON.stringify(loyaltyData));localStorage.setItem('ga_surveys',JSON.stringify(surveyData));localStorage.setItem('ga_pricing',JSON.stringify(pricingRules));localStorage.setItem('ga_loyalty_rules',JSON.stringify(loyaltyRules));}
 function saveGuests(){localStorage.setItem('ga_guests',JSON.stringify(guestProfiles));}
 function todayStr(){return new Date().toISOString().split('T')[0];}
@@ -6738,7 +6810,8 @@ function openRoomDetail(num){
     h+='<div class="form-group"><label>Expected Check-out *</label><input type="date" id="qr-co" value="'+tomorrow+'" oninput="qrCalc(\''+r.number+'\')"></div></div>';
     h+='<div id="qr-price-box" style="background:var(--navy);color:#fff;border-radius:8px;padding:11px 14px;text-align:center;font-size:13px;margin-bottom:12px;min-height:48px;display:flex;align-items:center;justify-content:center;"></div>';
     h+='<div class="form-row"><div class="form-group"><label>Advance Payment (\u09f3)</label><input type="number" id="qr-advance" value="0" min="0" oninput="qrCalc(\''+r.number+'\')"></div>';
-    h+='<div class="form-group"><label>Payment Method</label><select id="qr-method"><option>Cash</option><option>bKash</option><option>Nagad</option><option>Card</option><option>Bank Transfer</option></select></div></div>';
+    h+='<div class="form-group"><label>Payment Method</label><select id="qr-method" onchange="toggleTxn(\'qr-txn\',this.value)"><option>Cash</option><option>bKash</option><option>Nagad</option><option>Card</option><option>Bank Transfer</option></select></div></div>';
+    h+='<div class="form-group" id="qr-txn" style="display:none;"><label>Transaction Number</label><input type="text" id="qr-txn-num" placeholder="e.g. 01X-XXXXXXXXXX"></div>';
     h+='<div class="form-group"><label>Notes</label><input id="qr-notes" placeholder="Special requests, ID note..."></div>';
     h+='<div class="modal-actions">';
     h+='<button class="btn sm" onclick="closeModal();showNewBookingModal()" style="margin-right:auto;font-size:11px;color:var(--text3);"><i class="ti ti-forms"></i> Full Booking Form</button>';
@@ -6844,6 +6917,7 @@ function quickReserveRoom(num){
   var co=document.getElementById('qr-co').value;
   var advance=parseFloat(document.getElementById('qr-advance').value)||0;
   var method=document.getElementById('qr-method').value;
+  var txnNum=(document.getElementById('qr-txn-num')&&['bKash','Nagad'].indexOf(method)>-1)?document.getElementById('qr-txn-num').value.trim():'';
   var notes=(document.getElementById('qr-notes').value||'').trim();
   if(!name){notify('Guest name is required','error');return;}
   if(!phone){notify('Mobile number is required','error');return;}
@@ -6854,8 +6928,8 @@ function quickReserveRoom(num){
   var id=bookings.length?Math.max.apply(null,bookings.map(function(b){return b.id;}))+1:1;
   var bk={id:id,guest:name,phone:phone,room:num,type:room.type,checkin:ci,checkout:co,nights:nights,
     amount:amount,advance:advance,
-    paymentHistory:advance>0?[{ts:new Date().toISOString(),amount:advance,method:method,note:'Reservation advance',type:'room',by:curUser||'staff'}]:[],
-    paymentMethod:method,status:'confirmed',notes:notes,source:'Walk-in',adults:2,children:0,
+    paymentHistory:advance>0?[{ts:new Date().toISOString(),amount:advance,method:method,txnNumber:txnNum,note:'Reservation advance',type:'room',by:curUser||'staff'}]:[],
+    paymentMethod:method,txnNumber:txnNum,status:'confirmed',notes:notes,source:'Walk-in',adults:2,children:0,
     nationality:'',discountType:'none',discountAmount:0,createdAt:new Date().toISOString(),by:curUser||'staff'};
   bookings.push(bk);
   room.status='reserved';
@@ -6915,8 +6989,9 @@ function editReservation(id){
   h+='<div id="nb-price-box" style="background:var(--navy);color:#fff;border-radius:7px;padding:13px 16px;text-align:center;margin-top:2px;min-height:52px;display:flex;align-items:center;justify-content:center;">Loading...</div></div>';
   /* Payment */
   h+='<div class="form-section"><div class="form-sec-title"><i class="ti ti-cash"></i> Payment</div>';
-  h+='<div class="form-row"><div class="form-group"><label>Method</label><select id="nb-payment"><option>Cash</option><option>bKash</option><option>Nagad</option><option>Card</option><option>Bank Transfer</option></select></div>';
+  h+='<div class="form-row"><div class="form-group"><label>Method</label><select id="nb-payment" onchange="toggleTxn(\'nb-txn\',this.value)"><option>Cash</option><option>bKash</option><option>Nagad</option><option>Card</option><option>Bank Transfer</option></select></div>';
   h+='<div class="form-group"><label>Advance Already Paid (\u09f3)</label><input type="number" id="nb-advance" value="'+(b.advance||0)+'" min="0" oninput="calcTotal()"></div></div>';
+  h+='<div class="form-group" id="nb-txn" style="display:none;"><label>Transaction Number</label><input type="text" id="nb-txn-num" placeholder="e.g. 01X-XXXXXXXXXX" value="'+(b.txnNumber||'')+'"></div>';
   h+='<div class="form-group"><label>Notes</label><textarea id="nb-notes" rows="2" placeholder="Special requests...">'+(b.notes||'')+'</textarea></div></div>';
   /* Actions */
   h+='<div class="modal-actions">';
@@ -6933,7 +7008,7 @@ function editReservation(id){
     s=document.getElementById('nb-adults');if(s&&b.adults)s.value=String(b.adults);
     s=document.getElementById('nb-children');if(s&&b.children!=null)s.value=String(b.children);
     s=document.getElementById('nb-idtype');if(s&&b.idType)s.value=b.idType;
-    s=document.getElementById('nb-payment');if(s&&b.paymentMethod)s.value=b.paymentMethod;
+    s=document.getElementById('nb-payment');if(s&&b.paymentMethod){s.value=b.paymentMethod;toggleTxn('nb-txn',b.paymentMethod);}
     if(b.adults){var aEl=document.getElementById('nb-adults');if(aEl)aEl.value=b.adults;}
     if(b.children!=null){var cEl=document.getElementById('nb-children');if(cEl)cEl.value=b.children;}
     calcTotal();checkExtraPersonCharge();
@@ -6964,6 +7039,7 @@ function updateReservation(id,status){
   /* Update booking object */
   b.guest=name; b.phone=phone; b.checkin=ci; b.checkout=co; b.nights=nights; b.amount=amount;
   b.advance=advance; b.paymentMethod=document.getElementById('nb-payment').value;
+  var _pm=b.paymentMethod; b.txnNumber=(['bKash','Nagad'].indexOf(_pm)>-1&&document.getElementById('nb-txn-num'))?(document.getElementById('nb-txn-num').value.trim()||''):'';
   b.nationality=(document.getElementById('nb-nat').value||'').trim();
   b.source=document.getElementById('nb-src').value;
   b.refName=(document.getElementById('nb-ref-name').value||'').trim();
@@ -7025,7 +7101,8 @@ function showNewBookingModal(){
   h+='<div id="nb-price-box" style="background:var(--navy);color:#fff;border-radius:7px;padding:13px 16px;text-align:center;margin-top:2px;min-height:52px;display:flex;align-items:center;justify-content:center;">Select room and dates</div>';
   h+='</div>';
   h+='<div class="form-section"><div class="form-sec-title"><i class="ti ti-cash"></i> Payment</div>';
-  h+='<div class="form-row"><div class="form-group"><label>Method</label><select id="nb-payment"><option>Cash</option><option>bKash</option><option>Nagad</option><option>Card</option><option>Bank Transfer</option></select></div><div class="form-group"><label>Advance Paid (৳)</label><input type="number" id="nb-advance" value="0" min="0" oninput="calcTotal()"></div></div>';
+  h+='<div class="form-row"><div class="form-group"><label>Method</label><select id="nb-payment" onchange="toggleTxn(\'nb-txn\',this.value)"><option>Cash</option><option>bKash</option><option>Nagad</option><option>Card</option><option>Bank Transfer</option></select></div><div class="form-group"><label>Advance Paid (৳)</label><input type="number" id="nb-advance" value="0" min="0" oninput="calcTotal()"></div></div>';
+  h+='<div class="form-group" id="nb-txn" style="display:none;"><label>Transaction Number</label><input type="text" id="nb-txn-num" placeholder="e.g. 01X-XXXXXXXXXX"></div>';
   h+='<div class="form-group"><label>Notes</label><textarea id="nb-notes" rows="2" placeholder="Special requests..."></textarea></div>';
   h+='</div>';
   h+='<div class="modal-actions"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn" onclick="saveBooking(\'confirmed\')"><i class="ti ti-calendar"></i> Save Reservation</button><button class="btn primary" onclick="saveBooking(\'checked-in\')"><i class="ti ti-login"></i> Check In Now</button></div>';
@@ -9497,8 +9574,9 @@ function recordPayment(id){
   h+='<div><div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;">Paid</div><div style="font-size:15px;font-weight:700;color:var(--green2);">'+money(paid)+'</div></div>';
   h+='<div><div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;">Due</div><div style="font-size:15px;font-weight:700;color:var(--red);">'+money(bal)+'</div></div></div>';
   h+='<div class="form-group"><label>Amount Received</label><input type="number" id="rp-amount" placeholder="Enter amount" min="1" style="font-size:16px;font-weight:700;text-align:center;"></div>';
-  h+='<div class="form-row"><div class="form-group"><label>Method</label><select id="rp-method"><option>Cash</option><option>bKash</option><option>Nagad</option><option>Card</option><option>Bank Transfer</option></select></div>';
+  h+='<div class="form-row"><div class="form-group"><label>Method</label><select id="rp-method" onchange="toggleTxn(\'rp-txn\',this.value)"><option>Cash</option><option>bKash</option><option>Nagad</option><option>Card</option><option>Bank Transfer</option></select></div>';
   h+='<div class="form-group"><label>Note</label><input type="text" id="rp-note" placeholder="Optional"></div></div>';
+  h+='<div class="form-group" id="rp-txn" style="display:none;"><label>Transaction Number</label><input type="text" id="rp-txn-num" placeholder="e.g. 01X-XXXXXXXXXX"></div>';
   h+='<div class="modal-actions"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn success" onclick="confirmRecordPayment('+id+','+bal+')"><i class="ti ti-check"></i> Confirm</button></div>';
   showModal(h);
   setTimeout(function(){var el=document.getElementById('rp-amount');if(el)el.focus();},200);
@@ -9509,10 +9587,11 @@ function confirmRecordPayment(id,bal){
   if(amt>bal+0.01){notify('Amount exceeds balance ('+money(bal)+').','error');return;}
   var method=document.getElementById('rp-method').value;
   var note=document.getElementById('rp-note').value;
+  var rpTxn=(['bKash','Nagad'].indexOf(method)>-1&&document.getElementById('rp-txn-num'))?(document.getElementById('rp-txn-num').value.trim()||''):'';
   var idx=bookings.findIndex(function(b){return b.id===id;});if(idx<0)return;
   var b=bookings[idx];
   if(!b.paymentHistory)b.paymentHistory=[];
-  b.paymentHistory.push({ts:new Date().toISOString(),amount:amt,method:method,note:note||'',type:'room',by:curUser});
+  b.paymentHistory.push({ts:new Date().toISOString(),amount:amt,method:method,txnNumber:rpTxn,note:note||'',type:'room',by:curUser});
   b.advance=(b.advance||0)+amt;
   var total=(b.invoiceTotal!=null?b.invoiceTotal:b.amount);
   var newBal=Math.max(0,total-b.advance);
@@ -9656,7 +9735,7 @@ function deleteRoom(id){
 
 /* ADMIN PANEL */
 function switchHotelAdminTab(tab){
-  ['finance','rooms','staff','data','security','guide'].forEach(function(t){
+  ['finance','rooms','staff','data','security','guide','inventory'].forEach(function(t){
     var p=document.getElementById('hAdminPanel-'+t);
     var b=document.getElementById('hAdminTab-'+t);
     if(p)p.style.display=t===tab?'block':'none';
@@ -9667,6 +9746,7 @@ function switchHotelAdminTab(tab){
   if(tab==='staff')renderHotelStaffPw();
   if(tab==='data'){var dz=document.getElementById('h-danger-zone');if(dz)dz.style.display=curRole==='admin'?'block':'none';}
   if(tab==='security')renderSecurityPanel();
+  if(tab==='inventory')renderInventory();
 }
 function renderHotelAdmin(){
   var isAdmin=curRole==='admin';
@@ -9744,7 +9824,8 @@ function hotelClearAll(){
   if(curRole!=='admin'){notify('Admin only.','error');return;}
   if(!confirm('Delete ALL hotel data?'))return;
   rooms=[];bookings=[];revenues=[];expenses=[];
-  ['ga_rooms','ga_bookings','ga_revenues','ga_expenses','ga_guests','ga_loyalty','ga_surveys','ga_pricing'].forEach(function(k){localStorage.removeItem(k);});
+  invItems=_INV_DEFAULT.map(function(i){return Object.assign({},i);});invTx=[];
+  ['ga_rooms','ga_bookings','ga_revenues','ga_expenses','ga_guests','ga_loyalty','ga_surveys','ga_pricing','ga_inv_items','ga_inv_tx'].forEach(function(k){localStorage.removeItem(k);});
   notify('Cleared.','error');renderFrontDesk();renderBookings();
 }
 
@@ -9858,6 +9939,214 @@ function waCampaignSendNext(){
 }
 function waCampaignMarkSent(idx){var d=window._waC;if(d&&d.sent.indexOf(idx)<0)d.sent.push(idx);if(d)d.idx=idx+1;}
 function waCampaignFinish(){var d=window._waC;closeModal();notify('\u2714 Done \u2014 '+(d?d.sent.length:0)+'/'+(d?d.contacts.length:0)+' sent','success');window._waC=null;}
+
+/* \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+   INVENTORY
+\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550 */
+function invStock(itemId){
+  return invTx.filter(function(t){return t.itemId===itemId;}).reduce(function(s,t){return s+t.qty;},0);
+}
+
+function invUpdateLowBadge(){
+  var low=invItems.filter(function(it){return invStock(it.id)<it.minStock;}).length;
+  var b=document.getElementById('inv-low-badge');
+  if(b){b.textContent=low||'';b.style.display=low?'inline-block':'none';}
+}
+
+function renderInventory(){
+  invUpdateLowBadge();
+  renderInvStock();
+  renderInvLog();
+  invToggleView('overview');
+}
+
+function invToggleView(v){
+  var ov=document.getElementById('inv-view-overview');
+  var lv=document.getElementById('inv-view-log');
+  var bo=document.getElementById('inv-btn-overview');
+  var bl=document.getElementById('inv-btn-log');
+  if(!ov||!lv)return;
+  ov.style.display=v==='overview'?'block':'none';
+  lv.style.display=v==='log'?'block':'none';
+  if(bo){bo.style.background=v==='overview'?'var(--navy)':'';bo.style.color=v==='overview'?'#E8C96A':'';}
+  if(bl){bl.style.background=v==='log'?'var(--navy)':'';bl.style.color=v==='log'?'#E8C96A':'';}
+  if(v==='log')renderInvLog();
+}
+
+function renderInvStock(){
+  var tb=document.getElementById('inv-stock-tbody');
+  if(!tb)return;
+  if(!invItems.length){tb.innerHTML='<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text3);font-size:13px;">No items yet. Click <b>+ New Item</b> to add one.</td></tr>';return;}
+  var rows='';
+  invItems.forEach(function(it){
+    var stock=invStock(it.id);
+    var low=stock<it.minStock;
+    var stockColor=low?'#e74c3c':'var(--green2)';
+    var rowBg=low?'background:#fff5f5;':'';
+    rows+='<tr style="border-bottom:1px solid var(--border);'+rowBg+'">';
+    rows+='<td style="padding:10px 12px;font-weight:700;color:var(--text);">'+it.name+(low?'  <span style="background:#fde8e8;color:#e74c3c;font-size:9px;font-weight:800;padding:2px 6px;border-radius:5px;letter-spacing:.5px;">LOW</span>':'')+'</td>';
+    rows+='<td style="padding:10px 12px;font-size:12px;color:var(--text3);">'+it.category+'</td>';
+    rows+='<td style="padding:10px 12px;text-align:center;font-size:18px;font-weight:800;color:'+stockColor+';">'+stock+'</td>';
+    rows+='<td style="padding:10px 12px;text-align:center;font-size:12px;color:var(--text3);">'+it.minStock+'</td>';
+    rows+='<td style="padding:10px 12px;text-align:center;font-size:12px;color:var(--text3);">'+it.unit+'</td>';
+    rows+='<td style="padding:10px 12px;text-align:right;">';
+    rows+='<button class="btn sm success" onclick="openAddStockModal('+it.id+')" style="margin-right:4px;"><i class="ti ti-plus"></i> Add</button>';
+    rows+='<button class="btn sm danger" onclick="openRemoveStockModal('+it.id+')" style="margin-right:4px;"><i class="ti ti-minus"></i> Remove</button>';
+    rows+='<button class="btn sm" onclick="openEditItemModal('+it.id+')"><i class="ti ti-pencil"></i></button>';
+    rows+='</td></tr>';
+  });
+  tb.innerHTML=rows;
+}
+
+function renderInvLog(){
+  var tb=document.getElementById('inv-log-tbody');
+  if(!tb)return;
+  /* populate item filter */
+  var fs=document.getElementById('inv-log-filter');
+  if(fs&&fs.options.length===1){invItems.forEach(function(it){var o=document.createElement('option');o.value=it.id;o.textContent=it.name;fs.appendChild(o);});}
+  var filterItem=fs?parseInt(fs.value)||0:0;
+  var filterType=document.getElementById('inv-log-type')?document.getElementById('inv-log-type').value:'';
+  var list=invTx.slice().reverse().filter(function(t){
+    if(filterItem&&t.itemId!==filterItem)return false;
+    if(filterType&&t.type!==filterType)return false;
+    return true;
+  });
+  if(!list.length){tb.innerHTML='<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text3);font-size:13px;">No transactions yet.</td></tr>';return;}
+  var rows='';
+  list.forEach(function(t){
+    var it=invItems.find(function(i){return i.id===t.itemId;})||{name:'?',unit:''};
+    var isAdd=t.type==='purchase';
+    var typeLabel=isAdd?'<span style="background:#e8f5e9;color:#1a7a40;font-size:10px;font-weight:800;padding:2px 8px;border-radius:5px;">Purchase</span>':'<span style="background:#fde8e8;color:#e74c3c;font-size:10px;font-weight:800;padding:2px 8px;border-radius:5px;">'+t.reason+'</span>';
+    var qtyStr='<span style="font-weight:800;color:'+(isAdd?'var(--green2)':'#e74c3c')+';">'+(isAdd?'+':'')+t.qty+'</span>';
+    rows+='<tr style="border-bottom:1px solid var(--border);">';
+    rows+='<td style="padding:9px 12px;font-size:12px;color:var(--text2);">'+t.date+'</td>';
+    rows+='<td style="padding:9px 12px;font-weight:600;">'+it.name+'</td>';
+    rows+='<td style="padding:9px 12px;text-align:center;">'+typeLabel+'</td>';
+    rows+='<td style="padding:9px 12px;text-align:center;">'+qtyStr+' '+it.unit+'</td>';
+    rows+='<td style="padding:9px 12px;text-align:right;font-size:12px;">'+(t.price?money(t.price):'\u2014')+'</td>';
+    rows+='<td style="padding:9px 12px;font-size:12px;color:var(--text3);">'+(t.note||'\u2014')+'</td>';
+    rows+='<td style="padding:9px 12px;font-size:12px;color:var(--text3);">'+(t.by||'\u2014')+'</td>';
+    rows+='<td style="padding:9px 12px;text-align:center;"><button class="btn sm danger" onclick="deleteInvTx(\''+t.id+'\')" title="Delete"><i class="ti ti-trash"></i></button></td>';
+    rows+='</tr>';
+  });
+  tb.innerHTML=rows;
+}
+
+function deleteInvTx(txId){
+  if(!confirm('Delete this transaction? Stock count will update.'))return;
+  invTx=invTx.filter(function(t){return t.id!==txId;});
+  saveInventory();renderInventory();notify('Transaction deleted.','success');
+}
+
+function openAddItemModal(){
+  var h='<div class="modal-header"><div><div class="modal-title"><i class="ti ti-package"></i> New Inventory Item</div></div><button class="modal-close" onclick="closeModal()"><i class="ti ti-x"></i></button></div>';
+  h+='<div class="form-group" style="margin-bottom:10px;"><label>Item Name</label><input type="text" id="inv-new-name" placeholder="e.g. Extra Pillow"></div>';
+  h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">';
+  h+='<div class="form-group"><label>Category</label><select id="inv-new-cat"><option>Linen</option><option>Toiletry</option><option>Electronics</option><option>Furniture</option><option>Cleaning</option><option>Other</option></select></div>';
+  h+='<div class="form-group"><label>Unit</label><select id="inv-new-unit"><option>pcs</option><option>sets</option><option>pairs</option><option>boxes</option><option>bottles</option><option>rolls</option></select></div>';
+  h+='</div>';
+  h+='<div class="form-group" style="margin-bottom:10px;"><label>Minimum Stock (low-stock alert triggers below this)</label><input type="number" id="inv-new-min" value="5" min="0"></div>';
+  h+='<div class="modal-actions"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn primary" onclick="saveNewItem()"><i class="ti ti-check"></i> Add Item</button></div>';
+  showModal(h);
+  setTimeout(function(){var el=document.getElementById('inv-new-name');if(el)el.focus();},150);
+}
+
+function saveNewItem(){
+  var name=(document.getElementById('inv-new-name').value||'').trim();
+  if(!name){notify('Item name required.','error');return;}
+  var maxId=invItems.length?Math.max.apply(null,invItems.map(function(i){return i.id;})):0;
+  invItems.push({id:maxId+1,name:name,category:document.getElementById('inv-new-cat').value,unit:document.getElementById('inv-new-unit').value,minStock:parseInt(document.getElementById('inv-new-min').value)||0});
+  saveInventory();closeModal();renderInventory();notify(name+' added.','success');
+}
+
+function openEditItemModal(itemId){
+  var it=invItems.find(function(i){return i.id===itemId;});if(!it)return;
+  var h='<div class="modal-header"><div><div class="modal-title"><i class="ti ti-pencil"></i> Edit Item</div></div><button class="modal-close" onclick="closeModal()"><i class="ti ti-x"></i></button></div>';
+  h+='<div class="form-group" style="margin-bottom:10px;"><label>Item Name</label><input type="text" id="inv-edit-name" value="'+it.name+'"></div>';
+  h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">';
+  h+='<div class="form-group"><label>Category</label><select id="inv-edit-cat"><option>Linen</option><option>Toiletry</option><option>Electronics</option><option>Furniture</option><option>Cleaning</option><option>Other</option></select></div>';
+  h+='<div class="form-group"><label>Unit</label><select id="inv-edit-unit"><option>pcs</option><option>sets</option><option>pairs</option><option>boxes</option><option>bottles</option><option>rolls</option></select></div>';
+  h+='</div>';
+  h+='<div class="form-group" style="margin-bottom:10px;"><label>Minimum Stock</label><input type="number" id="inv-edit-min" value="'+it.minStock+'" min="0"></div>';
+  h+='<div class="modal-actions"><button class="btn danger" onclick="deleteInvItem('+itemId+')" style="margin-right:auto;"><i class="ti ti-trash"></i> Delete Item</button><button class="btn" onclick="closeModal()">Cancel</button><button class="btn primary" onclick="saveEditItem('+itemId+')"><i class="ti ti-check"></i> Save</button></div>';
+  showModal(h);
+  setTimeout(function(){var sc=document.getElementById('inv-edit-cat');if(sc)sc.value=it.category;var su=document.getElementById('inv-edit-unit');if(su)su.value=it.unit;},50);
+}
+
+function saveEditItem(itemId){
+  var it=invItems.find(function(i){return i.id===itemId;});if(!it)return;
+  var name=(document.getElementById('inv-edit-name').value||'').trim();
+  if(!name){notify('Item name required.','error');return;}
+  it.name=name;it.category=document.getElementById('inv-edit-cat').value;it.unit=document.getElementById('inv-edit-unit').value;it.minStock=parseInt(document.getElementById('inv-edit-min').value)||0;
+  saveInventory();closeModal();renderInventory();notify('Item updated.','success');
+}
+
+function deleteInvItem(itemId){
+  if(!confirm('Delete this item and all its stock history?'))return;
+  invItems=invItems.filter(function(i){return i.id!==itemId;});
+  invTx=invTx.filter(function(t){return t.itemId!==itemId;});
+  saveInventory();closeModal();renderInventory();notify('Item deleted.','success');
+}
+
+function openAddStockModal(itemId){
+  var it=invItems.find(function(i){return i.id===itemId;});if(!it)return;
+  var cur=invStock(itemId);
+  var h='<div class="modal-header"><div><div class="modal-title"><i class="ti ti-plus"></i> Add Stock</div><div class="modal-sub">'+it.name+' \u00b7 Current: '+cur+' '+it.unit+'</div></div><button class="modal-close" onclick="closeModal()"><i class="ti ti-x"></i></button></div>';
+  h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">';
+  h+='<div class="form-group"><label>Quantity Added</label><input type="number" id="inv-add-qty" value="1" min="1"></div>';
+  h+='<div class="form-group"><label>Date of Purchase</label><input type="date" id="inv-add-date" value="'+todayStr()+'"></div>';
+  h+='</div>';
+  h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">';
+  h+='<div class="form-group"><label>Total Price Paid (\u09f3)</label><input type="number" id="inv-add-price" placeholder="0" min="0"></div>';
+  h+='<div class="form-group"><label>Supplier / Source</label><input type="text" id="inv-add-note" placeholder="e.g. Dhaka market"></div>';
+  h+='</div>';
+  h+='<div class="modal-actions"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn primary" onclick="saveAddStock('+itemId+')"><i class="ti ti-check"></i> Add Stock</button></div>';
+  showModal(h);
+  setTimeout(function(){var el=document.getElementById('inv-add-qty');if(el)el.focus();},150);
+}
+
+function saveAddStock(itemId){
+  var qty=parseInt(document.getElementById('inv-add-qty').value)||0;
+  if(qty<=0){notify('Enter a valid quantity.','error');return;}
+  var date=document.getElementById('inv-add-date').value||todayStr();
+  var price=parseFloat(document.getElementById('inv-add-price').value)||0;
+  var note=(document.getElementById('inv-add-note').value||'').trim();
+  var maxId=invTx.length?Math.max.apply(null,invTx.map(function(t){return t.id;})):0;
+  invTx.push({id:maxId+1,itemId:itemId,date:date,qty:qty,type:'purchase',reason:'Purchase',price:price,note:note,by:curUser||'staff',ts:new Date().toISOString()});
+  saveInventory();closeModal();renderInventory();
+  var it=invItems.find(function(i){return i.id===itemId;});
+  notify((it?it.name:'Item')+': +'+qty+' added. New stock: '+invStock(itemId)+'.','success');
+}
+
+function openRemoveStockModal(itemId){
+  var it=invItems.find(function(i){return i.id===itemId;});if(!it)return;
+  var cur=invStock(itemId);
+  var h='<div class="modal-header"><div><div class="modal-title"><i class="ti ti-minus"></i> Remove Stock</div><div class="modal-sub">'+it.name+' \u00b7 Current: '+cur+' '+it.unit+'</div></div><button class="modal-close" onclick="closeModal()"><i class="ti ti-x"></i></button></div>';
+  h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">';
+  h+='<div class="form-group"><label>Quantity to Remove</label><input type="number" id="inv-rem-qty" value="1" min="1" max="'+cur+'"></div>';
+  h+='<div class="form-group"><label>Date</label><input type="date" id="inv-rem-date" value="'+todayStr()+'"></div>';
+  h+='</div>';
+  h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">';
+  h+='<div class="form-group"><label>Reason</label><select id="inv-rem-reason"><option>Damaged</option><option>Lost</option><option>Laundry Loss</option><option>Stolen</option><option>Adjustment</option></select></div>';
+  h+='<div class="form-group"><label>Note</label><input type="text" id="inv-rem-note" placeholder="Optional details"></div>';
+  h+='</div>';
+  h+='<div class="modal-actions"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn danger" onclick="saveRemoveStock('+itemId+','+cur+')"><i class="ti ti-check"></i> Remove</button></div>';
+  showModal(h);
+}
+
+function saveRemoveStock(itemId,cur){
+  var qty=parseInt(document.getElementById('inv-rem-qty').value)||0;
+  if(qty<=0){notify('Enter a valid quantity.','error');return;}
+  if(qty>cur){notify('Cannot remove more than current stock ('+cur+').','error');return;}
+  var date=document.getElementById('inv-rem-date').value||todayStr();
+  var reason=document.getElementById('inv-rem-reason').value||'Adjustment';
+  var note=(document.getElementById('inv-rem-note').value||'').trim();
+  var maxId=invTx.length?Math.max.apply(null,invTx.map(function(t){return t.id;})):0;
+  invTx.push({id:maxId+1,itemId:itemId,date:date,qty:-qty,type:'remove',reason:reason,price:0,note:note,by:curUser||'staff',ts:new Date().toISOString()});
+  saveInventory();closeModal();renderInventory();
+  var it=invItems.find(function(i){return i.id===itemId;});
+  notify((it?it.name:'Item')+': -'+qty+' removed ('+reason+'). Stock now: '+invStock(itemId)+'.','success');
+}
 
 </script>
 
