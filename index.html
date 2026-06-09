@@ -591,18 +591,27 @@ body.hotel-print-mode #_hpm{display:block!important;}
   body.hotel-print-mode > *{display:none!important;}
   body.hotel-print-mode #_hpm{
     display:block!important;position:static!important;
-    background:#fff!important;padding:10mm 14mm!important;
+    background:#fff!important;
+    padding:8mm 10mm!important;
+    margin:0!important;
+    width:100%!important;box-sizing:border-box!important;
     min-height:100vh!important;
   }
   body.hotel-print-mode #_hpm > div{
-    min-height:257mm!important;border-radius:0!important;
-    box-shadow:none!important;
+    min-height:0!important;border-radius:0!important;
+    box-shadow:none!important;width:100%!important;
+    max-width:100%!important;padding:0!important;margin:0!important;
   }
-  body.hotel-print-mode .invoice-preview{max-width:100%!important;}
+  body.hotel-print-mode .invoice-preview{max-width:100%!important;width:100%!important;}
   body.hotel-print-mode .inv-table th{background:#0A1628!important;color:#E8C96A!important;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
   body.hotel-print-mode .paid-stamp,body.hotel-print-mode .unpaid-stamp{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
-  @page{margin:10mm 12mm;size:A4;}
+  /* Zero @page margin — padding on #_hpm handles all spacing, no double-stacking */
+  @page{margin:0;size:A4;}
   *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;}
+  /* T&C page — forces page 2 (back of paper with duplex) */
+  #_hpm_tc{page-break-before:always!important;break-before:page!important;padding:6mm 0 0;}
+  /* Hide screen-only duplex notice when printing */
+  #_hpm_duplex_notice{display:none!important;}
 }
 
 /* Hotel nav tab interactions */
@@ -2976,6 +2985,11 @@ select:focus, textarea:focus {
               <span style="font-size:12px;font-weight:800;color:#fff;text-transform:uppercase;letter-spacing:1.2px;">Print Invoice</span>
             </div>
             <div style="padding:10px;display:flex;flex-direction:column;gap:8px;background:var(--bg2);">
+              <!-- T&C first-print notice -->
+              <div id="inv-tc-notice" style="display:none;background:#e8f5e9;border:1.5px solid #27ae60;border-radius:8px;padding:9px 12px;font-size:11px;color:#1a5a2e;line-height:1.6;">
+                <b>📋 First Print:</b> Terms &amp; Conditions (অতিথি নিয়মাবলী) will be included as page 2.<br>
+                <span style="color:#555;">💡 Enable <b>Two-sided (Duplex)</b> printing in your printer dialog to print it on the back of this page.</span>
+              </div>
               <button onclick="printRoomOnlyInvoice()" style="display:flex;align-items:center;gap:12px;padding:12px 14px;border:2px solid rgba(10,22,40,.18);border-radius:8px;background:rgba(10,22,40,.04);cursor:pointer;width:100%;font-family:'DM Sans',sans-serif;text-align:left;">
                 <div style="width:38px;height:38px;background:var(--navy);border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;"><i class="ti ti-printer" style="color:#E8C96A;font-size:17px;"></i></div>
                 <div><div style="font-size:13px;font-weight:800;color:var(--navy);">🏠 Print Room Invoice</div><div style="font-size:10.5px;color:var(--text3);margin-top:2px;">Room charges only</div></div>
@@ -2987,6 +3001,10 @@ select:focus, textarea:focus {
               <button onclick="printAndSaveInvoice()" style="display:flex;align-items:center;gap:12px;padding:12px 14px;border:2px solid rgba(26,112,64,.3);border-radius:8px;background:rgba(26,112,64,.06);cursor:pointer;width:100%;font-family:'DM Sans',sans-serif;text-align:left;">
                 <div style="width:38px;height:38px;background:linear-gradient(135deg,#1a7040,#22a05a);border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;"><i class="ti ti-printer" style="color:#fff;font-size:17px;"></i></div>
                 <div><div style="font-size:13px;font-weight:800;color:#1a5a2e;">📄 Print Complete Invoice</div><div style="font-size:10.5px;color:var(--text3);margin-top:2px;">Room + all service charges combined</div></div>
+              </button>
+              <button onclick="printWithTC()" style="display:flex;align-items:center;gap:12px;padding:12px 14px;border:2px dashed rgba(139,26,26,.4);border-radius:8px;background:rgba(139,26,26,.04);cursor:pointer;width:100%;font-family:'DM Sans',sans-serif;text-align:left;">
+                <div style="width:38px;height:38px;background:linear-gradient(135deg,#8B1A1A,#b02020);border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;"><i class="ti ti-file-text" style="color:#f5d67a;font-size:17px;"></i></div>
+                <div><div style="font-size:13px;font-weight:800;color:#8B1A1A;">📋 Print with Terms &amp; Conditions</div><div style="font-size:10.5px;color:var(--text3);margin-top:2px;">Complete invoice + T&amp;C page (manual override)</div></div>
               </button>
             </div>
           </div>
@@ -3124,6 +3142,21 @@ select:focus, textarea:focus {
                 <button class="btn" onclick="showSecLog()"><i class="ti ti-list"></i> View Security Log</button>
               </div>
               <div id="sec-pin-status" style="margin-top:10px;font-size:11px;color:var(--text3);"></div>
+            </div>
+            <div class="setting-card">
+              <div style="font-size:14px;font-weight:700;margin-bottom:4px;color:var(--navy2);display:flex;align-items:center;gap:8px;"><i class="ti ti-file-text" style="color:var(--gold)"></i> Terms &amp; Conditions on Invoice</div>
+              <div style="font-size:12px;color:var(--text3);margin-bottom:12px;line-height:1.7;">When enabled, the Guest Rules &amp; Terms (অতিথি নিয়মাবলী ও শর্তসমূহ) will automatically print on the <b>back of the first invoice</b> for each booking. Subsequent reprints skip it. Print with <b>two-sided (duplex)</b> to get T&amp;C on the back of the same page.</div>
+              <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
+                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;font-weight:700;color:var(--text);">
+                  <input type="checkbox" id="tc-enabled-toggle" onchange="saveTcSetting()" style="width:16px;height:16px;accent-color:var(--navy);cursor:pointer;">
+                  Print T&amp;C on first check-in invoice
+                </label>
+              </div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                <button class="btn sm" onclick="previewHotelTc()"><i class="ti ti-eye"></i> Preview T&amp;C</button>
+                <button class="btn sm" onclick="resetAllTcFlags()" style="color:var(--red2);border-color:var(--red2);"><i class="ti ti-refresh"></i> Re-enable T&amp;C for All Bookings</button>
+              </div>
+              <div style="font-size:10.5px;color:var(--text3);margin-top:8px;">Re-enable is useful if a printer problem prevented the T&amp;C from printing for past guests.</div>
             </div>
             <div class="setting-card">
               <div style="font-size:14px;font-weight:700;margin-bottom:4px;color:var(--navy2);display:flex;align-items:center;gap:8px;"><i class="ti ti-info-circle" style="color:var(--gold)"></i> How it works</div>
@@ -7813,6 +7846,35 @@ function renderSecurityPanel(){
   var st=document.getElementById('sec-pin-status');
   if(st)st.textContent=pin?'✔ PIN is set (••••)':'No PIN set yet — staff can request but cannot be granted overrides until you set one.';
   if(st)st.style.color=pin?'var(--green2)':'var(--red)';
+  /* T&C toggle */
+  var tog=document.getElementById('tc-enabled-toggle');
+  if(tog)tog.checked=localStorage.getItem('ga_tc_enabled')!=='false';
+}
+function saveTcSetting(){
+  var tog=document.getElementById('tc-enabled-toggle');
+  if(tog)localStorage.setItem('ga_tc_enabled',tog.checked?'true':'false');
+  notify(tog&&tog.checked?'T&C will print on first invoice.':'T&C printing disabled.','success');
+}
+function previewHotelTc(){
+  var h='<div class="modal-header"><div><div class="modal-title"><i class="ti ti-file-text"></i> Terms &amp; Conditions Preview</div></div><button class="modal-close" onclick="closeModal()"><i class="ti ti-x"></i></button></div>';
+  var _pvBid=parseInt((document.getElementById('inv-select')||{}).value||0);
+  var _pvB=_pvBid?bookings.find(function(x){return x.id===_pvBid;}):null;
+  h+='<div style="max-height:70vh;overflow-y:auto;padding:4px 0;">'+_hotelTcHtml(_pvB)+'</div>';
+  h+='<div class="modal-actions"><button class="btn" onclick="closeModal()">Close</button></div>';
+  showModal(h);
+}
+function resetAllTcFlags(){
+  if(!confirm('This will allow T&C to print again on the next invoice for ALL existing bookings. Continue?'))return;
+  bookings.forEach(function(b){delete b.tcPrinted;});
+  save();notify('T&C re-enabled for all bookings.','success');updateInvTcNotice();
+}
+function updateInvTcNotice(){
+  var notice=document.getElementById('inv-tc-notice');
+  if(!notice)return;
+  var tcEnabled=localStorage.getItem('ga_tc_enabled')!=='false';
+  var bid=parseInt((document.getElementById('inv-select')||{}).value||0);
+  var b=bid?bookings.find(function(x){return x.id===bid;}):null;
+  notice.style.display=(tcEnabled&&b&&!b.tcPrinted)?'block':'none';
 }
 
 function showSecLog(){
@@ -7859,6 +7921,7 @@ function loadInvoice(){
   window._invSavedExtrasCount=invExtras.length;
   renderExtras();renderInvoice();
   updateInvLockUI();
+  updateInvTcNotice();
 }
 function addExtra(){
   if(!parseInt((document.getElementById('inv-select')||{}).value||0)){notify('Select a booking first.','error');return;}
@@ -8210,20 +8273,140 @@ function renderInvoice(){
 }
 
 
-function _hotelPrint(invHTML){
+function _hotelPrint(invHTML, bookingId){
+  /* Decide whether to include T&C */
+  var tcEnabled=localStorage.getItem('ga_tc_enabled')!=='false';
+  var includeTC=false;
+  var bIdx=-1;
+  if(tcEnabled&&bookingId){
+    bIdx=bookings.findIndex(function(b){return b.id===bookingId;});
+    if(bIdx>=0&&!bookings[bIdx].tcPrinted)includeTC=true;
+  }
+  /* Build TC html block if needed */
+  var tcBlock='';
+  if(includeTC)tcBlock=_hotelTcHtml(bIdx>=0?bookings[bIdx]:null);
+
   /* Remove any leftover print container from a previous call */
   var old=document.getElementById('_hpm');if(old)old.remove();
   var d=document.createElement('div');
   d.id='_hpm';
-  d.innerHTML='<div style="font-family:DM Sans,sans-serif;padding:20px;max-width:680px;margin:0 auto;color:#1a1a2e;background:#fff;">'+invHTML+'</div>';
+  d.innerHTML='<div style="font-family:DM Sans,sans-serif;padding:0;max-width:100%;margin:0;color:#1a1a2e;background:#fff;">'+invHTML+'</div>'
+    +(includeTC?'<div id="_hpm_tc">'+tcBlock+'</div>'+'<div id="_hpm_duplex_notice" style="text-align:center;font-size:10px;color:#888;padding:4px 0 0;font-style:italic;">↑ Terms &amp; Conditions (পৃষ্ঠা ২) — Enable duplex printing to print on reverse side</div>':'');
   d.style.display='none';
   document.body.appendChild(d);
   document.body.classList.add('hotel-print-mode');
-  /* Delay print so the browser has time to repaint with the new CSS class
-     applied (hiding the app UI, showing #_hpm) before the dialog opens.
-     Clean up only AFTER the print dialog closes via the afterprint event —
-     calling window.print() on Windows/Chrome returns immediately, so removing
-     the element right away would empty the print preview. */
+  /* Mark TC as printed after the dialog closes */
+  setTimeout(function(){
+    var cleanup=function(){
+      document.body.classList.remove('hotel-print-mode');
+      if(d.parentNode)d.remove();
+      if(includeTC&&bIdx>=0){bookings[bIdx].tcPrinted=true;save();updateInvTcNotice();}
+      window.removeEventListener('afterprint',cleanup);
+    };
+    window.addEventListener('afterprint',cleanup);
+    window.print();
+  },300);
+}
+
+function _hotelTcHtml(b){
+  var bn=['১','২','৩','৪','৫','৬','৭','৮','৯','১০','১১','১২','১৩','১৪','১৫'];
+  var terms=[
+    'চেক-ইনের সময় অতিথিদের অবশ্যই জাতীয় পরিচয়পত্র নিশ্চিত করতে হবে। সেক্ষেত্রে বাংলাদেশি নাগরিকঃ জাতীয় পরিচয়পত্র, পাসপোর্ট অথবা ড্রাইভিং লাইসেন্স এবং বিদেশি অতিথিঃ বৈধ পাসপোর্ট ও ভিসা নিশ্চিত করে চেক-ইন করতে পারবে।',
+    'দম্পতি অতিথিদের ক্ষেত্রে শুধুমাত্র প্রমান (বিবাহ সনদ/নিকাহনামা) প্রদর্শন সাপেক্ষেই চেক-ইন করতে পারবে। প্রমান প্রদানে ব্যর্থ এবং জাল সনদ ব্যবহারে অবিলম্বে বুকিং বাতিল করা হবে এবং সেক্ষেত্রে পূর্বে রিজার্ভেশন সাপেক্ষে প্রদানকৃত অর্থ থাকলে তা ফেরতযোগ্য নয়।',
+    'চেক-ইন এবং চেক-আউটের নির্ধারিত সময় যথাক্রমে দুপুর ২:০০ এবং দুপুর ১২:০০ (বুকিং এর তারিখ সাপেক্ষে)। অগ্রিম বা বিলম্বিত চেক-ইন/চেক-আউট কক্ষের প্রাপ্যতার উপর নির্ভরশীল এবং সেক্ষেত্রে অতিরিক্ত চার্জ প্রযোজ্য হতে পারে।',
+    'কাঙ্খিত কক্ষের সর্বোচ্চ অতিথি ধারণক্ষমতা সাপেক্ষেই বুকিং নিশ্চিত হবে। শুধুমাত্র নিবন্ধনকৃত অতিথিরাই কক্ষে থাকতে পারবেন এবং অতিরিক্ত গেস্ট রাতে অবস্থান করতে পারবে না।',
+    'বুকিং এর নির্ধারিত ভাড়া অবশ্যই চেক-ইন পূর্বক পরিশোধ করতে হবে এবং অথোরিটির অনুমোদন সাপেক্ষে সকল বকেয়া অবশ্যই চেক-আউট কালীন সময়ে পরিশোধ নিশ্চিত করতে হবে।',
+    'সকলের নিরাপত্তার স্বার্থে হোটেলের প্রধান প্রবেশদ্বার বন্ধের নির্ধারিত সময় রাত ১২:০০টা। উক্ত সময়ের পরে প্রধান প্রবেশদ্বার খোলার প্রয়োজন হলে অবশ্যই তা পূর্বে রিসিপশনে অবগত করতে হবে।',
+    'হোটেল কর্তৃক প্রদানকৃত সকল সামগ্রী (যেমনঃ টিভি, এসি, রিমোট, তোয়ালে, বেডশিট, কম্বল, রুমের চাবি ইত্যাদি) হোটেলের নিজস্ব সম্পত্তি। অতিথি কর্তৃক কোনো সামগ্রী হারানো বা ক্ষতিগ্রস্ত হলে উক্ত জিনিসের জন্য প্রতিস্থাপন মূল্য নেওয়া হবে।',
+    'শুধুমাত্র হোটেল কর্তৃক নির্ধারিত এলাকায় ধূমপান করা যাবে এবং উক্ত এরিয়া বাদে ধুমপান করলে জরিমানার বিধান রয়েছে। হোটেল কক্ষের ভেতরে সকল প্রকার রান্না সহ গ্যাসের সিলিন্ডার, বৈদ্যুতিক চুলা, হিটার বা এ জাতীয় সরঞ্জাম ব্যবহার সম্পূর্ণ নিষিদ্ধ। শৃঙ্খলা নিশ্চিতে প্রয়োজনে হোটেল বাহিরের খাবার সীমিত করতে পারে।',
+    'সকল অতিথির বিশ্রামের স্বার্থে রাত ১০:০০টা থেকে সকাল ৭:০০টা সময়ে অতিরিক্ত শব্দ, উচ্চশব্দে বাদ্যসামগ্রী সহ অন্য অতিথির বিশ্রাম বিঘ্ন হয় এমন সকল আচরণ সম্পূর্ণ নিষিদ্ধ।',
+    'অতিথির সাথে আগত শিশু এবং ব্যক্তি মালিকানার সকল মালামাল ও সম্পত্তির নিরাপত্তার দায়িত্ব অতিথির উপর বর্তায় এবং উক্ত সামগ্রীর হারানো অথবা ক্ষতি সাধন হলে হোটেল কর্তপক্ষ দায়ী নয়।',
+    'পরিচালনা, হাউসকিপিং, রক্ষণাবেক্ষণ, জরুরি পরিস্থিতি এবং নিরাপত্তার স্বার্থে হোটেলের স্টাফ কক্ষে প্রবেশ করতে পারবে এবং নির্ধারিত সময় রুম ক্লিনিং এর স্বার্থে কক্ষ সাময়িক সময়ের জন্য ছেড়ে দিতে হবে।',
+    'হোটেল দ্যা গ্র্যান্ড আলায়না বাংলাদেশ সরকার কর্তৃক প্রণোদিত সকল আইনের নিকট বাধিত এবং অতিথি কর্তৃক উক্ত আইন লঙ্ঘন সাধন হলে কর্তৃপক্ষ অবিলম্বে বুকিং বাতিল এবং নিরাপত্তার স্বার্থে প্রশাসনের সহযোগিতা নিতে পারবে।',
+    'মদ্যজাতীয় পানীয় রাখা ও পান করার ক্ষেত্রে বাংলাদেশের সরকার কর্তৃক প্রণোদিত সকল আইন প্রযোজ্য হবে এবং মদ্যপান অবস্থায় কেউ বিশৃঙ্খলা সৃষ্টি করলে কর্তপক্ষ সকলের নিরাপত্তার স্বার্থে সকল ব্যবস্থা গ্রহণ করতে পারবে।',
+    'প্রতিষ্ঠানের সুনাম ও শৃঙ্খলার স্বার্থে কর্তৃপক্ষ কক্ষ বুকিং সীমিত করার অধিকার রাখে।',
+    'প্রাকৃতিক দুর্যোগ, সরকারি নিষেধাজ্ঞা, বিদ্যুৎ বিভ্রাট, ধর্মঘট সহ যেকোন জনজরুরি পরিস্থিতিতে হোটেলের নিয়ন্ত্রণের বাইরের যেকোনো কারণে হোটেল সেবা বিঘ্নিত হলে হোটেল কর্তৃপক্ষ দায়ী থাকবে না। উক্ত নির্ধারিত সকল শর্ত হোটেল দ্যা গ্র্যান্ড আলায়না প্রয়োজন সাপেক্ষে বিনা নোটিশে পরিবর্তনের অধিকার রাখে।'
+  ];
+  var rows=terms.map(function(t,i){
+    return '<tr>'
+      +'<td style="padding:4px 8px 4px 2px;font-weight:800;color:#8B1A1A;font-size:12px;vertical-align:top;white-space:nowrap;">'+bn[i]+'.</td>'
+      +'<td style="padding:4px 2px;font-size:11.5px;color:#1a1a1a;line-height:1.65;">'+t+'</td>'
+      +'</tr>';
+  }).join('');
+  return '<div style="border:2px solid #8B1A1A;border-radius:10px;overflow:hidden;font-family:\'Kalpurush\',\'Noto Sans Bengali\',\'SolaimanLipi\',Arial,sans-serif;">'
+    +'<div style="background:#8B1A1A;padding:10px 18px;text-align:center;">'
+      +'<div style="font-size:15px;font-weight:700;color:#f5d67a;letter-spacing:1px;">HOTEL THE GRAND ALAYNA</div>'
+      +'<div style="font-size:13px;font-weight:700;color:#fff;margin-top:2px;">অতিথি নিয়মাবলী ও শর্তসমূহ</div>'
+      +'<div style="font-size:10px;color:rgba(255,255,255,.7);margin-top:2px;">সীতাকুণ্ড, চট্টগ্রাম, বাংলাদেশ</div>'
+    +'</div>'
+    +'<div style="padding:12px 16px;background:#fff9f9;">'
+      +'<table style="width:100%;border-collapse:collapse;"><tbody>'+rows+'</tbody></table>'
+      +'<div style="margin-top:12px;padding:10px 12px;background:#fff3e0;border:1.5px solid #e0a040;border-radius:8px;font-size:11.5px;color:#5a3000;line-height:1.6;">'
+        +'আমি উক্ত শর্তাবলী সজ্ঞানে সম্পূর্ণ পড়েছি এবং সম্মতিক্রমে স্বাক্ষর নিশ্চিত করলাম।'
+      +'</div>'
+      +(function(){
+          var guestName=b&&b.guest?b.guest:'';
+          var ciDate=b&&b.checkin?b.checkin:todayStr();
+          /* Format date as DD/MM/YYYY */
+          var parts=ciDate.split('-');
+          var fmtDate=parts.length===3?parts[2]+'/'+parts[1]+'/'+parts[0]:ciDate;
+          return '<div style="display:grid;grid-template-columns:1fr 1fr;gap:28px;margin-top:16px;">'
+            +'<div>'
+              +'<div style="border-top:1.5px solid #8B1A1A;padding-top:5px;text-align:center;">'
+                +'<div style="font-size:12px;font-weight:700;color:#1a1a1a;margin-bottom:2px;">'+guestName+'</div>'
+                +'<div style="font-size:10px;color:#555;">অতিথির স্বাক্ষর / Guest Signature</div>'
+              +'</div>'
+            +'</div>'
+            +'<div>'
+              +'<div style="border-top:1.5px solid #8B1A1A;padding-top:5px;text-align:center;">'
+                +'<div style="font-size:12px;font-weight:700;color:#1a1a1a;margin-bottom:2px;">'+fmtDate+'</div>'
+                +'<div style="font-size:10px;color:#555;">তারিখ / Date</div>'
+              +'</div>'
+            +'</div>'
+          +'</div>';
+        })()
+    +'</div>'
+  +'</div>';
+}
+
+function printRoomOnlyInvoice(){
+  var out=document.getElementById('inv-output');
+  if(!out||!out.innerHTML.trim()){notify('Click Preview first.','error');return;}
+  saveInvoiceChanges(true);
+  var bid=parseInt((document.getElementById('inv-select')||{}).value||0);
+  /* Temporarily suppress extras so renderInvoice() builds a room-only invoice */
+  var _saved=invExtras;
+  invExtras=[];
+  renderInvoice();
+  var html=out.innerHTML;
+  /* Restore full view */
+  invExtras=_saved;
+  renderInvoice();
+  _hotelPrint(html, bid);
+}
+function printAndSaveInvoice(){
+  var out=document.getElementById('inv-output');
+  if(!out||!out.innerHTML.trim()){notify('Click Preview first.','error');return;}
+  saveInvoiceChanges(true);
+  var bid=parseInt((document.getElementById('inv-select')||{}).value||0);
+  _hotelPrint(out.innerHTML, bid);
+}
+function printWithTC(){
+  var out=document.getElementById('inv-output');
+  if(!out||!out.innerHTML.trim()){notify('Click Preview first.','error');return;}
+  saveInvoiceChanges(true);
+  var bid=parseInt((document.getElementById('inv-select')||{}).value||0);
+  var b=bid?bookings.find(function(x){return x.id===bid;}):null;
+  if(!b){notify('Select a booking first.','error');return;}
+  /* Force T&C regardless of tcPrinted flag — don't update the flag */
+  var old=document.getElementById('_hpm');if(old)old.remove();
+  var d=document.createElement('div');
+  d.id='_hpm';
+  d.innerHTML='<div style="font-family:DM Sans,sans-serif;padding:0;max-width:100%;margin:0;color:#1a1a2e;background:#fff;">'+out.innerHTML+'</div>'
+    +'<div id="_hpm_tc">'+_hotelTcHtml(b)+'</div>';
+  d.style.display='none';
+  document.body.appendChild(d);
+  document.body.classList.add('hotel-print-mode');
   setTimeout(function(){
     var cleanup=function(){
       document.body.classList.remove('hotel-print-mode');
@@ -8233,27 +8416,6 @@ function _hotelPrint(invHTML){
     window.addEventListener('afterprint',cleanup);
     window.print();
   },300);
-}
-
-function printRoomOnlyInvoice(){
-  var out=document.getElementById('inv-output');
-  if(!out||!out.innerHTML.trim()){notify('Click Preview first.','error');return;}
-  saveInvoiceChanges(true);
-  /* Temporarily suppress extras so renderInvoice() builds a room-only invoice */
-  var _saved=invExtras;
-  invExtras=[];
-  renderInvoice();
-  var html=out.innerHTML;
-  /* Restore full view */
-  invExtras=_saved;
-  renderInvoice();
-  _hotelPrint(html);
-}
-function printAndSaveInvoice(){
-  var out=document.getElementById('inv-output');
-  if(!out||!out.innerHTML.trim()){notify('Click Preview first.','error');return;}
-  saveInvoiceChanges(true);
-  _hotelPrint(out.innerHTML);
 }
 
 function printExtrasInvoice(){
