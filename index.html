@@ -6729,14 +6729,33 @@ function closeModal(){document.getElementById('modal-overlay').style.display='no
 function maybeClose(e){if(e.target===document.getElementById('modal-overlay'))closeModal();}
 
 // ── FRONT DESK ──
+/* ── Compute effective room status from live bookings ── */
+function getRoomDisplayStatus(num){
+  var room=rooms.find(function(r){return r.number===num;});
+  if(!room)return'vacant';
+  if(room.status==='maintenance')return'maintenance';
+  var today=todayStr();
+  /* Occupied = someone physically checked in */
+  if(bookings.some(function(b){return b.room===num&&b.status==='checked-in';}))return'occupied';
+  /* Reserved = confirmed booking whose checkin is today or guest is mid-stay */
+  if(bookings.some(function(b){return b.room===num&&b.status==='confirmed'&&b.checkin<=today&&b.checkout>today;}))return'reserved';
+  return'vacant';
+}
+/* Returns true if the given dates clash with an existing confirmed/checked-in booking */
+function bookingConflicts(roomNum,ci,co,excludeId){
+  return bookings.some(function(b){
+    return b.room===roomNum&&b.id!==excludeId&&(b.status==='confirmed'||b.status==='checked-in')&&b.checkin<co&&b.checkout>ci;
+  });
+}
+
 function renderFrontDesk(){
   var today=todayStr();
   var totalRev=revenues.reduce(function(s,r){return s+r.amount;},0);
   var totalExp=expenses.reduce(function(s,e){return s+e.amount;},0);
-  var occ=rooms.filter(function(r){return r.status==='occupied';}).length;
+  var occ=rooms.filter(function(r){return getRoomDisplayStatus(r.number)==='occupied';}).length;
   var occPct=rooms.length?Math.round(occ/rooms.length*100):0;
   var inhouse=bookings.filter(function(b){return b.status==='checked-in';});
-  var arrivals=bookings.filter(function(b){return b.checkin===today&&b.status!=='cancelled';});
+  var arrivals=bookings.filter(function(b){return b.checkin===today&&b.status==='confirmed';});
   var departures=bookings.filter(function(b){return b.checkout===today&&b.status!=='cancelled';});
   updatePendingPill();
   var profit=totalRev-totalExp;
@@ -6747,12 +6766,16 @@ function renderFrontDesk(){
     '<div class="metric green"><div class="metric-icon"><i class="ti ti-trending-up"></i></div><div class="metric-label">Net Profit</div><div class="metric-value" style="font-size:19px;color:'+(profit>=0?'var(--green)':'var(--red)')+'">'+money(profit)+'</div></div>';
 
   document.getElementById('fd-rooms').innerHTML=rooms.map(function(r){
-    return '<div class="room-card '+r.status+'" onclick="openRoomDetail(\''+r.number+'\')">'+
+    var ds=getRoomDisplayStatus(r.number);
+    var futureCount=bookings.filter(function(b){return b.room===r.number&&b.status==='confirmed'&&b.checkin>today;}).length;
+    var badge=futureCount?'<div style="position:absolute;top:6px;right:6px;background:#F59E0B;color:#fff;font-size:8px;font-weight:800;border-radius:8px;padding:1px 5px;line-height:1.5;">'+futureCount+' booked</div>':'';
+    return '<div class="room-card '+ds+'" style="position:relative;" onclick="openRoomDetail(\''+r.number+'\')">'+
+      badge+
       '<div class="room-number">'+r.number+'</div>'+
       '<div class="room-name-lbl">'+(r.name||r.type)+'</div>'+
       '<div class="room-type-lbl">'+r.type+'</div>'+
       '<div class="room-rate-lbl">'+money(r.rate)+'</div>'+
-      '<div class="room-status">'+r.status.replace('-',' ')+'</div></div>';
+      '<div class="room-status">'+ds.replace('-',' ')+'</div></div>';
   }).join('');
 
   function mkCard(b,showIn,showOut){
@@ -6760,7 +6783,7 @@ function renderFrontDesk(){
       '<div class="arr-room">Rm<br>'+b.room+'</div>'+
       '<div style="flex:1;min-width:0"><div style="font-weight:700;font-size:13px">'+b.guest+'</div><div style="font-size:11px;color:var(--text3)">'+b.phone+' \u00b7 '+b.nights+'n \u00b7 '+money(b.amount)+'</div></div>'+
       '<div style="display:flex;gap:5px;flex-shrink:0">'+
-        (showIn&&b.status==='confirmed'?'<button class="btn sm primary" onclick="doCheckIn('+b.id+')"><i class="ti ti-login"></i> In</button>':'')+
+        (showIn&&b.status==='confirmed'?'<button class="btn sm primary" onclick="editReservation('+b.id+')"><i class="ti ti-login"></i> In</button>':'')+
         (showOut&&b.status==='checked-in'?'<button class="btn sm gold" onclick="doCheckOut('+b.id+')"><i class="ti ti-logout"></i> Out</button>':'')+
         '<button class="btn sm icon-btn" onclick="viewBookingDetail('+b.id+')"><i class="ti ti-eye"></i></button>'+
       '</div></div>';
@@ -6787,9 +6810,29 @@ function renderFrontDesk(){
 
 function openRoomDetail(num){
   var r=rooms.find(function(x){return x.number===num;});if(!r)return;
+  var today=todayStr();
+  var ds=getRoomDisplayStatus(num);
   var bIn=bookings.find(function(x){return x.room===num&&x.status==='checked-in';});
-  var bRes=bookings.find(function(x){return x.room===num&&x.status==='confirmed';});
+  /* Active reservation = arriving today or currently mid-stay */
+  var bRes=bookings.find(function(x){return x.room===num&&x.status==='confirmed'&&x.checkin<=today&&x.checkout>today;});
+  /* All future confirmed bookings (checkin after today) */
+  var futureBookings=bookings.filter(function(x){return x.room===num&&x.status==='confirmed'&&x.checkin>today;}).sort(function(a,b){return a.checkin>b.checkin?1:-1;});
   var h='<div class="modal-header"><div><div class="modal-title"><i class="ti ti-building" style="color:var(--gold);"></i> Room '+r.number+(r.name?' \u2014 '+r.name:'')+'</div><div class="modal-sub">'+r.type+' \u00b7 '+money(r.rate)+'/night</div></div><button class="modal-close" onclick="closeModal()"><i class="ti ti-x"></i></button></div>';
+
+  /* Helper: render a future booking row */
+  function futureBkRow(b){
+    return '<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:#fffbee;border:1.5px solid #FCD34D;border-radius:8px;margin-bottom:6px;">'
+      +'<i class="ti ti-calendar-event" style="color:#F59E0B;font-size:15px;flex-shrink:0;"></i>'
+      +'<div style="flex:1;min-width:0;">'
+        +'<div style="font-size:12px;font-weight:700;color:var(--navy);">'+b.guest+'</div>'
+        +'<div style="font-size:11px;color:var(--text3);">'+b.checkin+' \u2192 '+b.checkout+' \u00b7 '+b.nights+'n \u00b7 '+money(b.amount)+'</div>'
+      +'</div>'
+      +'<div style="display:flex;gap:4px;flex-shrink:0;">'
+        +'<button class="btn sm" onclick="closeModal();editReservation('+b.id+')" style="font-size:10px;padding:4px 8px;"><i class="ti ti-forms"></i></button>'
+        +'<button class="btn sm danger" onclick="cancelReservation('+b.id+')" style="font-size:10px;padding:4px 8px;"><i class="ti ti-x"></i></button>'
+      +'</div>'
+    +'</div>';
+  }
 
   if(bIn){
     /* \u2500\u2500 OCCUPIED \u2500\u2500 */
@@ -6803,6 +6846,10 @@ function openRoomDetail(num){
     h+='<div><div style="font-size:10px;color:var(--text3);margin-bottom:2px;">Check-out</div><strong>'+bIn.checkout+'</strong></div>';
     h+='<div><div style="font-size:10px;color:var(--text3);margin-bottom:2px;">Balance Due</div><strong style="color:'+(bal>0?'var(--red)':'var(--green)')+';">'+money(bal)+'</strong></div>';
     h+='</div></div>';
+    if(futureBookings.length){
+      h+='<div style="font-size:10px;font-weight:800;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px;">Upcoming Reservations</div>';
+      h+=futureBookings.map(futureBkRow).join('');
+    }
     h+='<div class="modal-actions"><button class="btn" onclick="closeModal()">Close</button>';
     h+='<button class="btn" onclick="viewBookingDetail('+bIn.id+')"><i class="ti ti-eye"></i> Details</button>';
     h+='<button class="btn gold" onclick="doCheckOut('+bIn.id+');closeModal()"><i class="ti ti-logout"></i> Check Out</button></div>';
@@ -6825,18 +6872,41 @@ function openRoomDetail(num){
     h+='</div>';
     if(bRes.notes)h+='<div style="font-size:11px;color:var(--text3);padding-top:6px;border-top:1px solid rgba(201,168,76,.2);"><i class="ti ti-note"></i> '+bRes.notes+'</div>';
     h+='</div>';
+    /* Future bookings for this room */
+    if(futureBookings.length){
+      h+='<div style="font-size:10px;font-weight:800;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px;">Upcoming Reservations</div>';
+      h+=futureBookings.map(futureBkRow).join('');
+    }
+    h+='<div style="border-top:1px dashed var(--border);margin:12px 0 10px;"></div>';
+    h+='<div style="font-size:11px;font-weight:800;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;margin-bottom:12px;display:flex;align-items:center;gap:6px;"><i class="ti ti-calendar-plus" style="color:var(--gold);font-size:13px;"></i> Add Another Reservation</div>';
+    var tomorrowR=new Date(Date.now()+86400000).toISOString().split('T')[0];
+    var dayAfterR=new Date(Date.now()+2*86400000).toISOString().split('T')[0];
+    h+='<div class="form-row"><div class="form-group"><label>Guest Name *</label><input id="qr-name" placeholder="Full name"></div>';
+    h+='<div class="form-group"><label>Mobile Number *</label><input id="qr-phone" placeholder="+880..."></div></div>';
+    h+='<div class="form-row"><div class="form-group"><label>Expected Check-in *</label><input type="date" id="qr-ci" value="'+tomorrowR+'" oninput="qrCalc(\''+r.number+'\')"></div>';
+    h+='<div class="form-group"><label>Expected Check-out *</label><input type="date" id="qr-co" value="'+dayAfterR+'" oninput="qrCalc(\''+r.number+'\')"></div></div>';
+    h+='<div id="qr-price-box" style="background:var(--navy);color:#fff;border-radius:8px;padding:11px 14px;text-align:center;font-size:13px;margin-bottom:12px;min-height:48px;display:flex;align-items:center;justify-content:center;"></div>';
+    h+='<div class="form-row"><div class="form-group"><label>Advance Payment (৳)</label><input type="number" id="qr-advance" value="0" min="0" oninput="qrCalc(\''+r.number+'\')"></div>';
+    h+='<div class="form-group"><label>Payment Method</label><select id="qr-method" onchange="toggleTxn(\'qr-txn\',this.value)"><option>Cash</option><option>bKash</option><option>Nagad</option><option>Card</option><option>Bank Transfer</option></select></div></div>';
+    h+='<div class="form-group" id="qr-txn" style="display:none;"><label>Transaction Number</label><input type="text" id="qr-txn-num" placeholder="e.g. 01X-XXXXXXXXXX"></div>';
+    h+='<div class="form-group"><label>Notes</label><input id="qr-notes" placeholder="Special requests, ID note..."></div>';
     h+='<div class="modal-actions">';
-    h+='<button class="btn danger" onclick="cancelReservation('+bRes.id+')" style="margin-right:auto;"><i class="ti ti-calendar-x"></i> Cancel Reservation</button>';
+    h+='<button class="btn danger" onclick="cancelReservation('+bRes.id+')" style="margin-right:auto;"><i class="ti ti-calendar-x"></i> Cancel Current</button>';
     h+='<button class="btn" onclick="closeModal()">Close</button>';
     h+='<button class="btn gold" onclick="editReservation('+bRes.id+')" style="font-weight:700;"><i class="ti ti-forms"></i> Complete Booking</button>';
-    h+='<button class="btn primary" onclick="doCheckIn('+bRes.id+');closeModal()"><i class="ti ti-login"></i> Quick Check-In</button>';
+    h+='<button class="btn primary" onclick="quickReserveRoom(\''+r.number+'\')"><i class="ti ti-calendar-check"></i> Reserve Again</button>';
     h+='</div>';
 
-  } else if(r.status==='vacant'){
-    /* \u2500\u2500 VACANT: Quick Reserve Form \u2500\u2500 */
-    var today=todayStr();
+  } else if(ds==='vacant'||ds==='reserved'){
+    /* \u2500\u2500 VACANT or no active reservation today: Quick Reserve Form \u2500\u2500 */
     var tomorrow=new Date(Date.now()+86400000).toISOString().split('T')[0];
-    h+='<div style="font-size:11px;font-weight:800;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;margin-bottom:12px;display:flex;align-items:center;gap:6px;"><i class="ti ti-calendar-plus" style="color:var(--gold);font-size:13px;"></i> Reserve This Room</div>';
+    /* Show future bookings first if any */
+    if(futureBookings.length){
+      h+='<div style="font-size:10px;font-weight:800;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px;display:flex;align-items:center;gap:6px;"><i class="ti ti-calendar-event" style="color:#F59E0B;"></i> Upcoming Reservations</div>';
+      h+=futureBookings.map(futureBkRow).join('');
+      h+='<div style="border-top:1px dashed var(--border);margin:12px 0 10px;"></div>';
+    }
+    h+='<div style="font-size:11px;font-weight:800;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;margin-bottom:12px;display:flex;align-items:center;gap:6px;"><i class="ti ti-calendar-plus" style="color:var(--gold);font-size:13px;"></i> New Reservation</div>';
     h+='<div class="form-row"><div class="form-group"><label>Guest Name *</label><input id="qr-name" placeholder="Full name"></div>';
     h+='<div class="form-group"><label>Mobile Number *</label><input id="qr-phone" placeholder="+880..."></div></div>';
     h+='<div class="form-row"><div class="form-group"><label>Expected Check-in *</label><input type="date" id="qr-ci" value="'+today+'" oninput="qrCalc(\''+r.number+'\')"></div>';
@@ -6861,7 +6931,7 @@ function openRoomDetail(num){
   }
 
   showModal(h);
-  if(r.status==='vacant')try{qrCalc(r.number);}catch(e){}
+  if(ds==='vacant'||ds==='reserved'||bRes)try{qrCalc(r.number);}catch(e){}
 }
 function saveRoomEdit(num){
   var r=rooms.find(function(x){return x.number===num;});if(!r)return;
@@ -6955,6 +7025,7 @@ function quickReserveRoom(num){
   if(!name){notify('Guest name is required','error');return;}
   if(!phone){notify('Mobile number is required','error');return;}
   if(!ci||!co||new Date(co)<=new Date(ci)){notify('Please check the dates','error');return;}
+  if(bookingConflicts(num,ci,co,null)){notify('Room '+num+' is already reserved for those dates. Please choose different dates.','error');return;}
   var room=rooms.find(function(r){return r.number===num;});if(!room)return;
   var nights=Math.max(1,Math.round((new Date(co)-new Date(ci))/86400000));
   var amount=nights*room.rate;
@@ -6965,7 +7036,6 @@ function quickReserveRoom(num){
     paymentMethod:method,txnNumber:txnNum,status:'confirmed',notes:notes,source:'Walk-in',adults:2,children:0,
     nationality:'',discountType:'none',discountAmount:0,createdAt:new Date().toISOString(),by:curUser||'staff'};
   bookings.push(bk);
-  room.status='reserved';
   /* Record advance/deposit in revenues immediately */
   if(advance>0){var rid=revenues.length?Math.max.apply(null,revenues.map(function(r){return r.id;}))+1:1;revenues.push({id:rid,source:'Room Rent',amount:advance,date:todayStr(),note:name+' Rm '+num+' \u2014 reservation deposit ('+method+')'});}
   save();closeModal();renderFrontDesk();
@@ -6974,7 +7044,6 @@ function quickReserveRoom(num){
 function cancelReservation(id){
   var b=bookings.find(function(x){return x.id===id;});if(!b)return;
   b.status='cancelled';
-  var r=rooms.find(function(x){return x.number===b.room;});if(r)r.status='vacant';
   save();closeModal();renderFrontDesk();
   notify('Reservation for '+b.guest+' cancelled \u00b7 Room '+b.room+' is now vacant','success');
 }
