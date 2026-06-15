@@ -1,0 +1,281 @@
+
+/* Hall App — Amelia Convention Hall */
+/* Uses same design tokens as hotel app via :root but scoped to #hallApp */
+
+#hallApp {
+  font-family: 'DM Sans', sans-serif;
+  background: var(--bg, #F4F3F0);
+  color: var(--text, #1A1A2E);
+}
+
+/* Login screen */
+#hallApp #loginScreen.screen { display:flex; align-items:center; justify-content:center; min-height:100vh; background:radial-gradient(ellipse at 50% 40%,rgba(107,18,18,.08),transparent 70%),#f0ece4; }
+#hallApp .login-box { background:rgba(255,255,255,.07); border:1px solid rgba(201,168,76,.25); border-radius:20px; padding:36px 32px; width:100%; max-width:360px; text-align:center; backdrop-filter:blur(12px); }
+#hallApp .login-monogram { margin-bottom:10px; }
+#hallApp .login-logo { font-size:28px; font-weight:800; color:#f2dfc0; font-family:'Playfair Display',serif; letter-spacing:2px; margin-bottom:2px; }
+#hallApp .login-sub { font-size:12px; color:#c9a84c; letter-spacing:4px; text-transform:uppercase; margin-bottom:18px; }
+#hallApp .login-box h2 { color:#f0e8d8; font-size:16px; font-weight:600; margin-bottom:16px; }
+#hallApp .login-box input { display:block; width:100%; box-sizing:border-box; padding:11px 14px; margin-bottom:10px; background:rgba(255,255,255,.1); border:1px solid rgba(201,168,76,.3); border-radius:10px; color:#f0e8d8; font-size:14px; font-family:inherit; outline:none; }
+#hallApp .login-box input::placeholder { color:rgba(240,232,216,.4); }
+#hallApp .login-box input:focus { border-color:#c9a84c; background:rgba(255,255,255,.15); }
+#hallApp .login-box button[type=submit] { width:100%; padding:12px; background:linear-gradient(135deg,#c9a84c,#e8c96c); border:none; border-radius:10px; font-weight:800; font-size:14px; color:#1a1a2e; cursor:pointer; font-family:inherit; margin-top:4px; }
+#hallApp .login-err { color:#fca5a5; font-size:12px; margin-top:10px; }
+#hallApp .login-hint { color:rgba(201,168,76,.5); font-size:11px; margin-top:12px; }
+
+/* Hall Navbar — Purple Premium Theme */
+#hallApp nav.hall-nav {
+  background: linear-gradient(135deg, #2D1B69 0%, #4A2080 50%, #3D1875 100%);
+  padding: 0 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  height: 62px;
+  flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: 0 2px 20px rgba(45,27,105,.5), 0 1px 0 rgba(180,130,255,.15);
+}
+
+/* Brand */
+#hallApp .nav-brand { display:flex; align-items:center; gap:10px; min-width:0; }
+#hallApp .nav-brand-logo { opacity:.92; }
+#hallApp .nav-brand-text { min-width:0; }
+#hallApp .nav-brand-name {
+  font-size:13px; font-weight:800; color:#e8d5ff;
+  font-family:'Playfair Display',serif; white-space:nowrap; display:block;
+  text-shadow: 0 1px 6px rgba(180,130,255,.4);
+}
+#hallApp .nav-brand-sub {
+  font-size:9px; color:rgba(201,168,76,.85); letter-spacing:2px;
+  text-transform:uppercase; display:block; margin-top:1px;
+}
+
+/* Tabs container */
+#hallApp .nav-tabs {
+  display: flex;
+  flex: 1;
+  align-items: stretch;
+  overflow-x: auto;
+  scrollbar-width: none;
+  gap: 2px;
+  padding: 8px 4px;
+}
+#hallApp .nav-tabs::-webkit-scrollbar { display:none; }
+
+/* Individual tab */
+#hallApp .nav-tab {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 6px 16px;
+  min-width: 72px;
+  height: 46px;
+  background: rgba(255,255,255,.05);
+  border: 1px solid rgba(180,130,255,.12);
+  border-radius: 10px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all .2s cubic-bezier(.34,1.56,.64,1);
+  flex-shrink: 0;
+  overflow: hidden;
+}
+#hallApp .nav-tab::before {
+  content:'';
+  position:absolute;
+  inset:0;
+  background: linear-gradient(135deg, rgba(180,130,255,.15), rgba(255,255,255,.05));
+  opacity: 0;
+  transition: opacity .2s;
+  border-radius: 10px;
+}
+#hallApp .nav-tab:hover {
+  background: rgba(180,130,255,.15);
+  border-color: rgba(180,130,255,.35);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(100,50,200,.25);
+}
+#hallApp .nav-tab:hover::before { opacity:1; }
+#hallApp .nav-tab.active {
+  background: linear-gradient(135deg, rgba(180,130,255,.3), rgba(120,60,200,.2));
+  border-color: rgba(200,160,255,.6);
+  box-shadow: 0 0 0 1px rgba(200,160,255,.3), 0 4px 16px rgba(100,50,200,.35), inset 0 1px 0 rgba(255,255,255,.15);
+  transform: translateY(-2px);
+}
+
+/* Tab icon & label */
+#hallApp .tab-icon {
+  font-size: 16px;
+  line-height: 1;
+  filter: drop-shadow(0 1px 3px rgba(0,0,0,.2));
+  transition: transform .2s;
+}
+#hallApp .nav-tab:hover .tab-icon { transform: scale(1.15); }
+#hallApp .nav-tab.active .tab-icon { transform: scale(1.1); }
+#hallApp .tab-label {
+  font-size: 9px;
+  font-weight: 800;
+  color: rgba(255,255,255,.88);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  transition: color .2s;
+  line-height: 1;
+  text-shadow: 0 1px 4px rgba(0,0,0,.3);
+}
+#hallApp .nav-tab:hover .tab-label { color: #fff; }
+#hallApp .nav-tab.active .tab-label { color: #fff; text-shadow: 0 0 10px rgba(220,180,255,.6); }
+
+/* Active pip (animated underline dot) */
+#hallApp .tab-pip {
+  position: absolute;
+  bottom: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 18px;
+  height: 3px;
+  background: linear-gradient(90deg, #c9a84c, #f0d080, #c9a84c);
+  border-radius: 2px;
+  animation: pipPulse 1.8s ease-in-out infinite;
+}
+@keyframes pipPulse {
+  0%,100% { width:14px; opacity:.85; }
+  50%      { width:26px; opacity:1; box-shadow:0 0 8px rgba(201,168,76,.7); }
+}
+
+/* Right side */
+#hallApp .nav-right { display:flex; align-items:center; gap:8px; flex-shrink:0; flex-wrap:nowrap; }
+#hallApp .nav-user-wrap {
+  display:flex; flex-direction:row; align-items:center; gap:8px;
+  padding:5px 10px; background:rgba(0,0,0,.25);
+  border-radius:9px; border:1px solid rgba(255,255,255,.08);
+  flex-shrink:0;
+}
+#hallApp .nav-avatar {
+  width:28px; height:28px; border-radius:50%;
+  background: linear-gradient(135deg,#c9a84c,#f0d080);
+  color:#2D1B69; font-weight:800; font-size:12px;
+  display:flex; align-items:center; justify-content:center;
+  flex-shrink:0;
+}
+#hallApp .nav-user-info { display:flex; flex-direction:column; align-items:flex-start; gap:2px; }
+#hallApp .nav-user-name { font-size:12px; font-weight:700; color:#f2dfc0; white-space:nowrap; line-height:1; }
+#hallApp .nav-switch-btn {
+  padding: 6px 12px; border-radius:8px;
+  border: 1px solid rgba(201,168,76,.35);
+  background: rgba(201,168,76,.12);
+  color: #f0d080; font-size:11px;
+  font-family:inherit; cursor:pointer; font-weight:700;
+  transition:.15s;
+}
+#hallApp .nav-switch-btn:hover { background:rgba(201,168,76,.22); }
+#hallApp .logout-btn {
+  background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.1);
+  border-radius:8px; cursor:pointer; color:rgba(200,160,255,.8);
+  font-size:17px; padding:5px 9px; transition:.15s; line-height:1;
+}
+#hallApp .logout-btn:hover { background:rgba(255,80,80,.18); color:#fca5a5; border-color:rgba(255,80,80,.3); }
+
+/* Notification */
+#hallApp .notif { position:fixed; top:70px; right:20px; z-index:9999; padding:12px 18px; border-radius:10px; font-weight:700; font-size:13px; box-shadow:0 4px 20px rgba(0,0,0,.15); display:none; }
+#hallApp .notif.show   { display:block; animation:slideIn .3s ease; }
+#hallApp .notif.success { background:#dcfce7; color:#166534; border:1px solid #86efac; }
+#hallApp .notif.error   { background:#fee2e2; color:#991b1b; border:1px solid #fca5a5; }
+#hallApp .notif.info    { background:#dbeafe; color:#1e40af; border:1px solid #93c5fd; }
+
+/* Shared Panel / form styles scoped to #hallApp */
+#hallApp .panel { background:#fff; border-radius:14px; border:1px solid rgba(0,0,0,.07); box-shadow:0 1px 4px rgba(0,0,0,.06); overflow:hidden; }
+#hallApp .panel-header { display:flex; align-items:center; justify-content:space-between; padding:14px 16px; border-bottom:1px solid rgba(0,0,0,.06); }
+#hallApp .panel-title  { font-size:13px; font-weight:800; color:#1a1a2e; }
+#hallApp .form-group   { display:flex; flex-direction:column; gap:5px; margin-bottom:12px; }
+#hallApp .form-group label { font-size:11px; font-weight:700; color:#555; text-transform:uppercase; letter-spacing:.5px; }
+#hallApp .form-group input,
+#hallApp .form-group select,
+#hallApp .form-group textarea { width:100%; padding:9px 12px; border:1.5px solid #e5e3de; border-radius:8px; font-size:13px; font-family:inherit; background:#fafaf9; color:#1a1a2e; transition:.15s; outline:none; box-sizing:border-box; }
+#hallApp .form-group input:focus,
+#hallApp .form-group select:focus,
+#hallApp .form-group textarea:focus { border-color:#c9a84c; background:#fff; box-shadow:0 0 0 3px rgba(201,168,76,.1); }
+#hallApp .form-row { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; }
+#hallApp .btn { display:inline-flex; align-items:center; gap:5px; padding:8px 14px; border-radius:9px; font-size:12px; font-weight:700; font-family:inherit; cursor:pointer; border:1.5px solid #e5e3de; background:#fff; color:#1a1a2e; transition:.15s; }
+#hallApp .btn:hover { background:#f4f3f0; }
+#hallApp .btn.primary { background:linear-gradient(135deg,#c9a84c,#e8c96c); border-color:#c9a84c; color:#1a1a2e; }
+#hallApp .btn.primary:hover { opacity:.9; }
+#hallApp .btn.danger  { background:#fee2e2; color:#991b1b; border-color:#fca5a5; }
+#hallApp .btn.sm      { padding:5px 10px; font-size:11px; }
+#hallApp .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,.5); display:none; align-items:center; justify-content:center; z-index:1000; padding:16px; }
+#hallApp .modal-overlay.open { display:flex; }
+#hallApp .modal-box { background:#fff; border-radius:16px; padding:24px; width:100%; max-width:640px; margin:auto; box-shadow:0 20px 60px rgba(0,0,0,.2); max-height:90vh; overflow-y:auto; }
+#hallApp .modal-header { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:18px; }
+#hallApp .modal-title  { font-size:15px; font-weight:800; color:#1a1a2e; }
+#hallApp .modal-sub    { font-size:11px; color:#888; margin-top:3px; }
+#hallApp .modal-close  { background:none; border:none; cursor:pointer; color:#888; font-size:18px; padding:2px; }
+#hallApp .modal-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:18px; }
+#hallApp .role-badge { font-size:9px; font-weight:800; padding:2px 8px; border-radius:20px; text-transform:uppercase; letter-spacing:.5px; }
+#hallApp .role-badge.admin { background:rgba(201,168,76,.25); color:#f0d080; border:1px solid rgba(201,168,76,.45); }
+#hallApp .role-badge.staff { background:rgba(180,130,255,.2); color:#d4aaff; border:1px solid rgba(180,130,255,.35); }
+
+@keyframes slideIn { from { opacity:0; transform:translateX(20px); } to { opacity:1; transform:translateX(0); } }
+
+/* ═══════════════════════════════════════════════════════
+   HALL APP — MOBILE RESPONSIVE (≤640px)
+═══════════════════════════════════════════════════════ */
+@media (max-width: 640px) {
+
+  /* ── Navbar ── */
+  #hallApp nav.hall-nav { padding: 0 10px; height: 52px; gap: 6px; }
+  #hallApp .nav-brand-text { display: none !important; }
+  #hallApp .nav-tabs { display: none !important; }
+  #hallApp .nav-user-wrap { display: none !important; }
+  #hallApp .nav-switch-btn { display: none !important; }
+  #hallApp .logout-btn { display: none !important; }
+  #hallApp #hall-hamburger { display: flex !important; }
+
+  /* ── Page wrappers ── */
+  #hallApp .hall-page { padding: 10px 8px !important; }
+  #hallApp .hall-page-inner { max-width: 100% !important; padding: 10px 8px !important; }
+
+  /* ── Stat grids → 2 cols ── */
+  #hallApp .hall-stat-grid { grid-template-columns: 1fr 1fr !important; gap: 8px !important; }
+
+  /* ── 2-col info grids → 1 col ── */
+  #hallApp .hall-2col { grid-template-columns: 1fr !important; }
+
+  /* ── Button rows → wrap ── */
+  #hallApp .hall-btn-row { flex-wrap: wrap !important; gap: 6px !important; }
+  #hallApp .hall-btn-row button { flex: 1 1 auto !important; min-width: 100px !important; }
+
+  /* ── Filter bar → stack ── */
+  #hallApp .hall-filter-bar { flex-direction: column !important; }
+  #hallApp .hall-filter-bar input,
+  #hallApp .hall-filter-bar select { width: 100% !important; min-width: 0 !important; }
+
+  /* ── Tables: horizontal scroll ── */
+  #hallApp .hall-table-wrap { overflow-x: auto !important; -webkit-overflow-scrolling: touch !important; }
+  #hallApp .hall-table-wrap table { min-width: 520px !important; font-size: 11px !important; }
+
+  /* ── Modal: bottom sheet ── */
+  #hallApp .modal-overlay { padding: 0 !important; align-items: flex-end !important; }
+  #hallApp .modal-box { border-radius: 16px 16px 0 0 !important; max-height: 92vh !important; padding: 18px 14px !important; }
+  #hallApp .modal-actions { flex-wrap: wrap !important; }
+  #hallApp .modal-actions .btn { flex: 1 1 auto !important; justify-content: center !important; }
+
+  /* ── Form rows: single column ── */
+  #hallApp .form-row { grid-template-columns: 1fr !important; }
+
+  /* ── Notification: full width ── */
+  #hallApp .notif { left: 10px !important; right: 10px !important; width: auto !important; }
+
+  /* ── Calendar grid cells: smaller ── */
+  #hallApp .hall-cal-cell { min-height: 44px !important; padding: 3px !important; font-size: 10px !important; }
+
+  /* ── Admin sub-tabs: wrap ── */
+  #hallApp .admin-subtabs { flex-wrap: wrap !important; }
+  #hallApp .admin-subtab { padding: 6px 10px !important; font-size: 10px !important; }
+}
+
+/* ── Very small phones ── */
+@media (max-width: 380px) {
+  #hallApp .hall-stat-grid { grid-template-columns: 1fr !important; }
+}
