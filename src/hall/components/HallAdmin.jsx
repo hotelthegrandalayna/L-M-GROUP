@@ -3,6 +3,7 @@ import { useState, useMemo } from "react";
 import { useHall, EV_TYPES, checkHallAdminPass } from "../HallContext";
 import useIsMobile from "../useIsMobile";
 import { loadWaConfig, saveWaConfig, sendWhatsAppAlert } from "../../utils/whatsapp";
+import AuditLogViewer from "../../components/AuditLogViewer";
 
 const DEFAULT_RECOVERY_EMAILS = ["mainulhasan86@gmail.com","mainulhasan86@yahoo.com"];
 function loadRecoveryEmails() {
@@ -266,6 +267,7 @@ export default function HallAdmin() {
     { id:"reports",  label:"📈 Reports"  },
     ...(isAdmin ? [
       { id:"sms",      label:"📱 SMS"      },
+      { id:"audit",    label:"🕵 Audit Log" },
       { id:"password", label:"🔐 Password" },
       { id:"danger",   label:"⚠️ Danger Zone", danger:true },
     ] : []),
@@ -729,6 +731,7 @@ export default function HallAdmin() {
 
       {/* ════════ SMS ════════ */}
       {tab==="sms" && isAdmin && <SmsPanel notify={notify} isMobile={isMobile} invoices={invoices} />}
+      {tab==="audit" && isAdmin && <AuditLogViewer scope="hall" title="Hall — Activity Audit Log" checkPassword={checkHallAdminPass} notify={notify} />}
 
     </div>
   );

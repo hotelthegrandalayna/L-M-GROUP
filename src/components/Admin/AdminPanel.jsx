@@ -5,17 +5,20 @@ import AdminRooms   from "./AdminRooms";
 import AdminStaff   from "./AdminStaff";
 import AdminData    from "./AdminData";
 import AdminSMS     from "./AdminSMS";
+import AuditLogViewer from "../AuditLogViewer";
+import { checkAdminPassword } from "../../utils/auth";
 
 const TABS = [
   { key:"finance", label:"Finance",  icon:"ti-currency-taka" },
   { key:"rooms",   label:"Rooms",    icon:"ti-building"      },
   { key:"sms",     label:"Messages", icon:"ti-message-circle" },
+  { key:"audit",   label:"Audit Log",icon:"ti-eye"            },
   { key:"staff",   label:"Staff",    icon:"ti-users"         },
   { key:"data",    label:"Data",     icon:"ti-database"      },
 ];
 
 export default function AdminPanel() {
-  const { curRole } = useApp();
+  const { curRole, notify } = useApp();
   const [tab, setTab] = useState("finance");
 
   if (curRole !== "admin" && curRole !== "manager") {
@@ -51,6 +54,7 @@ export default function AdminPanel() {
       {tab==="finance" && <AdminFinance />}
       {tab==="rooms"   && <AdminRooms />}
       {tab==="sms"     && <AdminSMS />}
+      {tab==="audit"   && <AuditLogViewer scope="hotel" title="Hotel — Activity Audit Log" checkPassword={checkAdminPassword} notify={notify} />}
       {tab==="staff"   && curRole==="admin" && <AdminStaff />}
       {tab==="data"    && <AdminData />}
     </div>

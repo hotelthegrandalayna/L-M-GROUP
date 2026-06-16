@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import { useApp } from "../context/AppContext";
 import { todayStr, money, formatDate, nightsBetween, bookingConflicts, maxId } from "../utils/helpers";
 import { sendWhatsAppAlert, buildHotelWaMessage } from "../utils/whatsapp";
+import { logEvent } from "../utils/auditLog";
 
 const STATUS_COLORS = {
   confirmed:    { bg:"#fffbee", border:"#FCD34D", color:"#8a6200", icon:"ti-calendar-check" },
@@ -56,6 +57,7 @@ function BookingModal({ booking, onClose }) {
     updateRevenues([...revenues, { id: maxId(revenues), source: "Room Rent", amount: amt, date: today,
       note: b.guest + " Rm " + b.room + " - " + (payNote || "payment") + " (" + payMtd + ")", bookingId: b.id }]);
     notify("Payment of " + money(amt) + " recorded", "success");
+    logEvent("hotel", "room_payment_collected", { num:String(b.id), guest:b.guest, amount:amt, note:`Rm ${b.room} · via ${payMtd}` }, curUser);
     setPayAmt(0); setPayTxn(""); setPayNote("");
     onClose();
   }
@@ -77,6 +79,7 @@ function BookingModal({ booking, onClose }) {
     if (!window.confirm("Cancel this booking? This cannot be undone.")) return;
     updateBookings(bookings.map(x => x.id === b.id ? { ...x, status: "cancelled" } : x));
     notify("Booking cancelled", "success");
+    logEvent("hotel", "booking_cancelled", { num:String(b.id), guest:b.guest, amount:invoiceTotal, note:`Rm ${b.room}` }, curUser);
     onClose();
   }
 
@@ -84,6 +87,7 @@ function BookingModal({ booking, onClose }) {
     if (!eGuest.trim()) { notify("Guest name required", "error"); return; }
     updateBookings(bookings.map(x => x.id === b.id ? { ...x, guest: eGuest.trim(), phone: ePhone.trim(), notes: eNotes.trim() } : x));
     notify("Booking updated", "success");
+    logEvent("hotel", "invoice_updated", { num:String(b.id), guest:eGuest.trim(), amount:invoiceTotal, note:`Rm ${b.room} · details edited` }, curUser);
     setEditMode(false);
     onClose();
   }
@@ -505,6 +509,8 @@ function NewBookingModal({ onClose }) {
       note: name.trim() + " Rm " + selRoom.number + (status === "confirmed" ? " — reservation deposit" : " — advance payment") + " (" + method + ")",
       bookingId: id }]);
     notify(name.trim() + (status === "checked-in" ? " checked in ✓" : " booking saved") + (discAmt > 0 ? " · Discount " + money(discAmt) : ""), "success");
+    logEvent("hotel", status === "checked-in" ? "booking_checked_in" : "booking_created",
+      { num:String(id), guest:bkObj.guest, amount:roomTotal, note:`Rm ${selRoom.number}${discAmt>0?` · Discount ৳${discAmt}`:""}` }, curUser);
     setSmsData({ booking: bkObj, refName: refName.trim(), refPhone: refPhone.trim(), status });
   }
 

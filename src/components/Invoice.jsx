@@ -2,6 +2,8 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { useApp } from "../context/AppContext";
 import { todayStr, money, maxId } from "../utils/helpers";
+import { logEvent } from "../utils/auditLog";
+import { loadWaConfig, sendWhatsAppAlert, buildHotelPrintAlertMessage } from "../utils/whatsapp";
 
 const HOTEL_INFO = {
   name: "Hotel The Grand Alayna",
@@ -412,6 +414,7 @@ export default function Invoice() {
       note:selBk.guest+" Rm "+selBk.room+" - "+(note||type+" payment")+" ("+method+")", bookingId:selBk.id };
     updateRevenues([...revenues, rev]);
     notify("Payment of " + money(amt) + " recorded","success");
+    logEvent("hotel", "room_payment_collected", { num:String(selBk.id), guest:selBk.guest, amount:amt, note:`Rm ${selBk.room} · via ${method}` }, curUser);
     // After payment, clear note and set remaining balance in amount field
     const remaining = Math.max(0, balDue - amt);
     if (type==="room") { setRoomAmt(remaining > 0 ? String(remaining) : ""); setRoomNote(""); }
@@ -439,6 +442,12 @@ export default function Invoice() {
     hotelPrint(extHtml, null);
   }
 
+  function maybeSendPrintAlert(bk, label) {
+    if (!loadWaConfig().hotelPrintAlert || bk.printAlertSent) return;
+    sendWhatsAppAlert(buildHotelPrintAlertMessage(bk, label)).catch(() => {});
+    updateBookings(prev => prev.map(b => b.id===bk.id ? {...b, printAlertSent:true} : b));
+  }
+
   function printComplete() {
     if (!selBk) { notify("Select a booking first","error"); return; }
     saveChanges(true);
@@ -449,6 +458,8 @@ export default function Invoice() {
     if (needsTC) {
       updateBookings(bookings.map(b => b.id===selBk.id ? {...b, tcPrinted:true} : b));
     }
+    logEvent("hotel", "invoice_printed", { num:String(selBk.id), guest:selBk.guest, amount:selBk.invoiceTotal ?? selBk.amount, note:"Complete invoice" }, curUser);
+    maybeSendPrintAlert(selBk, "Complete Invoice");
   }
 
   function printWithTC() {
@@ -456,6 +467,8 @@ export default function Invoice() {
     saveChanges(true);
     const html = buildInvoiceHTML(selBk, rooms, validExtras, mode);
     hotelPrint(html, buildTCHtml(selBk));
+    logEvent("hotel", "invoice_printed", { num:String(selBk.id), guest:selBk.guest, amount:selBk.invoiceTotal ?? selBk.amount, note:"Complete invoice + T&C" }, curUser);
+    maybeSendPrintAlert(selBk, "Complete Invoice + T&C");
   }
 
   const activeBookings = bookings.filter(b => b.status !== "cancelled");

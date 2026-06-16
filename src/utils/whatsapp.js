@@ -2,12 +2,13 @@ const WA_KEY = "ga_wa_config";
 const DEFAULT_WA_TEMPLATE_HALL  = "🏛 *New Hall Booking!*\n\nClient: {name}\nEvent: {evType}\nDate: {date}\nTotal: {amount}\nAdvance: {advance}\nBalance: {balance}\nInvoice: {invNum}\nPhone: {phone}";
 const DEFAULT_WA_TEMPLATE_HOTEL = "🏨 *New Hotel Booking!*\n\nGuest: {guest}\nRoom: {room}\nCheck-in: {checkin}\nCheck-out: {checkout}\nNights: {nights}\nTotal: {total}\nAdvance: {advance}";
 
+const WA_DEFAULTS = { enabled:false, num1:"", key1:"", num2:"", key2:"", hallTemplate:DEFAULT_WA_TEMPLATE_HALL, hotelTemplate:DEFAULT_WA_TEMPLATE_HOTEL, hotelPrintAlert:false };
+
 export function loadWaConfig() {
   try {
-    return JSON.parse(localStorage.getItem(WA_KEY) || "null") ||
-      { enabled:false, num1:"", key1:"", num2:"", key2:"", hallTemplate:DEFAULT_WA_TEMPLATE_HALL, hotelTemplate:DEFAULT_WA_TEMPLATE_HOTEL };
+    return { ...WA_DEFAULTS, ...(JSON.parse(localStorage.getItem(WA_KEY) || "null") || {}) };
   } catch {
-    return { enabled:false, num1:"", key1:"", num2:"", key2:"", hallTemplate:DEFAULT_WA_TEMPLATE_HALL, hotelTemplate:DEFAULT_WA_TEMPLATE_HOTEL };
+    return { ...WA_DEFAULTS };
   }
 }
 
@@ -56,4 +57,11 @@ export function buildHotelWaMessage(bk) {
     .replace(/{nights}/g,   String(bk.nights||""))
     .replace(/{total}/g,    "৳"+(bk.amount||0).toLocaleString())
     .replace(/{advance}/g,  "৳"+(bk.advance||0).toLocaleString());
+}
+
+export function buildHotelPrintAlertMessage(bk, label) {
+  const total   = bk.invoiceTotal != null ? bk.invoiceTotal : (bk.amount||0);
+  const paid    = (bk.paymentHistory||[]).reduce((s,p)=>s+p.amount, 0);
+  const balance = Math.max(0, total - paid);
+  return `🧾 *Invoice Printed — ${label}*\n\nGuest: ${bk.guest||""}\nRoom: Rm ${bk.room||""}\nTotal: ৳${total.toLocaleString()}\nPaid: ৳${paid.toLocaleString()}\nBalance: ৳${balance.toLocaleString()}\nBooking #${bk.id}${bk.discAmt>0?`\nDiscount applied: ৳${bk.discAmt.toLocaleString()}`:""}`;
 }

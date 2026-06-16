@@ -4,6 +4,7 @@ import { useHall, EV_TYPES, checkHallAdminPass } from "../HallContext";
 import useIsMobile from "../useIsMobile";
 import { sendSmsForInvoice } from "./HallAdmin";
 import { sendWhatsAppAlert, buildHallWaMessage } from "../../utils/whatsapp";
+import { logEvent } from "../../utils/auditLog";
 
 // ── Colors ────────────────────────────────────────────────────────────────────
 const C = {
@@ -87,7 +88,7 @@ function newInvObj(num) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 export default function HallInvoice() {
-  const { invoices, setInvoices, notify, invoiceJumpSignal } = useHall();
+  const { invoices, setInvoices, notify, invoiceJumpSignal, curUser } = useHall();
   const isMobile = useIsMobile();
   const [view, setView] = useState("form");   // default: create form
   const [editInv, setEditInv] = useState(() => null);  // will init in effect
@@ -160,17 +161,16 @@ export default function HallInvoice() {
       savedRecord = final;
       setInvoices(prev => prev.map(i => i.id === inv.id ? final : i));
       notify("Invoice updated", "success");
+      logEvent("hall", "invoice_updated", { num:savedRecord.num, client:savedRecord.client, amount:savedRecord.grand }, curUser);
     } else {
       const id = String(Date.now());
       savedRecord = { ...final, id };
       setInvoices(prev => [...prev, savedRecord]);
       notify("Invoice saved", "success");
-      if (!isLead) {
-        sendSmsForInvoice(savedRecord).then(ok => {
-          if (ok) notify("SMS sent to client ✓", "success");
-        }).catch(() => {});
-        sendWhatsAppAlert(buildHallWaMessage(savedRecord)).catch(() => {});
-      }
+      logEvent("hall", "invoice_created", { num:savedRecord.num, client:savedRecord.client, amount:savedRecord.grand, note: isLead?"draft/lead":"" }, curUser);
+      // Guest SMS and owner WhatsApp alert are sent only once the invoice is
+      // confirmed (see confirmAndPrint below) — never on an unreviewed draft,
+      // so the guest is never texted a preliminary number that might change.
     }
     if (andView) { setDetailInv(savedRecord); setView("detail"); setEditInv(null); return; }
     // Keep editing the same now-saved record (rather than resetting to a blank form) —
@@ -185,6 +185,7 @@ export default function HallInvoice() {
     if (!checkHallAdminPass(delPass)) { notify("Incorrect password","error"); return; }
     setInvoices(prev => prev.filter(i => i.id !== deleteModal.id));
     notify("Invoice deleted","success");
+    logEvent("hall", "invoice_deleted", { num:deleteModal.num, client:deleteModal.client, amount:deleteModal.grand }, curUser);
     setDeleteModal(null);
     if (view === "detail") backToForm();
   }
@@ -233,7 +234,7 @@ export default function HallInvoice() {
     deleteModal={deleteModal} delPass={delPass} setDelPass={setDelPass}
     confirmDelete={confirmDelete} setDeleteModal={setDeleteModal}
     notify={notify} setInvoices={setInvoices} invoices={invoices}
-    getNextNum={nextAchNum}
+    getNextNum={nextAchNum} curUser={curUser}
     isMobile={isMobile} />;
 
   // ── Invoice History (list) ─────────────────────────────────────────────────
@@ -1065,7 +1066,7 @@ function InvForm({ inv, onSave, onSavePreview, onCancel, onViewHistory, invoiceC
 }
 
 // ─── Invoice Detail / Print View ──────────────────────────────────────────────
-function InvDetail({ inv, setDetailInv, onEdit, onBack, onDelete, deleteModal, delPass, setDelPass, confirmDelete, setDeleteModal, notify, setInvoices, invoices, getNextNum, isMobile }) {
+function InvDetail({ inv, setDetailInv, onEdit, onBack, onDelete, deleteModal, delPass, setDelPass, confirmDelete, setDeleteModal, notify, setInvoices, invoices, getNextNum, curUser, isMobile }) {
   const [payModal, setPayModal]   = useState(false);
   const [payAmt, setPayAmt]       = useState("");
   const [payMethod, setPayMethod] = useState("Cash");
@@ -1098,6 +1099,7 @@ function InvDetail({ inv, setDetailInv, onEdit, onBack, onDelete, deleteModal, d
     setInvoices(prev => prev.map(i => i.id===inv.id ? updated : i));
     setDetailInv && setDetailInv(updated);
     notify("Hall payment recorded ✅","success");
+    logEvent("hall", "hall_payment_collected", { num:inv.num, client:inv.client, amount:a, note:`via ${payMethod}` }, curUser);
     setPayModal(false);
     setPayAmt("");
     setPayDone({ newPaid, newBal, status });
@@ -1113,6 +1115,7 @@ function InvDetail({ inv, setDetailInv, onEdit, onBack, onDelete, deleteModal, d
     setInvoices(prev => prev.map(i => i.id===inv.id ? updated : i));
     setDetailInv && setDetailInv(updated);
     notify("Waiter cost collection recorded ✅","success");
+    logEvent("hall", "waiter_payment_collected", { num:inv.num, client:inv.client, amount:a }, curUser);
     setWaiterPayModal(false);
     setWaiterPayAmt("");
     setWaiterPayDone({ newPaid, newBal, status });
@@ -1129,6 +1132,17 @@ function InvDetail({ inv, setDetailInv, onEdit, onBack, onDelete, deleteModal, d
     setInvoices(prev => prev.map(i => i.id===inv.id ? updated : i));
     setDetailInv && setDetailInv(updated);
     notify("Invoice confirmed ✅","success");
+    logEvent("hall", "invoice_confirmed", { num:newNum, client:updated.client, amount:updated.grand }, curUser);
+
+    // Guest SMS and the owner's WhatsApp copy are sent only now — at the final,
+    // locked, reviewed total — never at the draft stage, so a guest is never
+    // texted a number that could still change, and the owner always has an
+    // independent record of the real confirmed amount.
+    sendSmsForInvoice(updated).then(ok => {
+      if (ok) notify("SMS sent to client ✓", "success");
+    }).catch(() => {});
+    sendWhatsAppAlert(buildHallWaMessage(updated)).catch(() => {});
+
     setTimeout(() => {
       const html = buildInvoiceHtml(true, true).split(oldNum).join(newNum);
       const w = window.open("","_blank");

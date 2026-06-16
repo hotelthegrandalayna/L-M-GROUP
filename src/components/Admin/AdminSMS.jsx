@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useApp } from "../../context/AppContext";
+import { loadWaConfig, saveWaConfig } from "../../utils/whatsapp";
 
 const TEMPLATE_DEFS = [
   {
@@ -40,6 +41,14 @@ export default function AdminSMS() {
   const { smsTemplates, setSmsTemplates, notify } = useApp();
   const [editing, setEditing] = useState(null); // key of template being edited
   const [draft,   setDraft]   = useState("");
+  const [waCfg, setWaCfg] = useState(loadWaConfig);
+
+  function togglePrintAlert() {
+    const next = { ...waCfg, hotelPrintAlert: !waCfg.hotelPrintAlert };
+    setWaCfg(next);
+    saveWaConfig(next);
+    notify(next.hotelPrintAlert ? "Owner WhatsApp alert on invoice print: ON ✅" : "Owner WhatsApp alert on invoice print: OFF", "success");
+  }
 
   function openEdit(key) {
     setEditing(key);
@@ -78,6 +87,26 @@ export default function AdminSMS() {
           <br />
           <span style={{ color:"var(--gold2)", fontWeight:700 }}>API integration coming soon</span> — for now messages can be copied and sent via WhatsApp.
         </div>
+      </div>
+
+      {/* Owner alert on invoice print — anti-fraud safeguard */}
+      <div style={{ marginBottom:18, padding:"14px 16px", border:"1.5px solid var(--gold)", borderRadius:10, background:"#fffbee", display:"flex", alignItems:"center", justifyContent:"space-between", gap:14 }}>
+        <div>
+          <div style={{ fontSize:13, fontWeight:800, color:"var(--navy)" }}>
+            <i className="ti ti-shield-check" style={{ color:"var(--gold2)", marginRight:6 }} />
+            Notify me on WhatsApp when a Complete Invoice is printed
+          </div>
+          <div style={{ fontSize:11, color:"var(--text3)", marginTop:3, lineHeight:1.6 }}>
+            Sends you (the owner's configured WhatsApp number, set up under the Hall side's SMS panel) a copy of the guest, room, and final total
+            every time staff prints a Complete Invoice or Complete + T&amp;C — an independent record they can't suppress. Sent once per booking, not on every reprint.
+          </div>
+        </div>
+        <button onClick={togglePrintAlert} style={{
+          flexShrink:0, padding:"8px 16px", borderRadius:20, border:"none", cursor:"pointer", fontSize:12, fontWeight:800,
+          background: waCfg.hotelPrintAlert ? "var(--green)" : "#ddd", color: waCfg.hotelPrintAlert ? "#fff" : "#666",
+        }}>
+          {waCfg.hotelPrintAlert ? "ON ✓" : "OFF"}
+        </button>
       </div>
 
       <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
