@@ -679,7 +679,7 @@ function InvForm({ inv, onSave, onSavePreview, onCancel, onViewHistory, invoiceC
           </div>
           <div style={{ textAlign:"right" }}>
             <div style={{ fontSize:10, color:"rgba(255,255,255,.6)", fontWeight:700, textTransform:"uppercase", letterSpacing:.5 }}>Running Total</div>
-            <div style={{ fontSize:20, fontWeight:900, color:C.gold, lineHeight:1.1 }}>৳{sub.toLocaleString()}</div>
+            <div style={{ fontSize:20, fontWeight:900, color:C.gold, lineHeight:1.1 }}>৳{totalPayable.toLocaleString()}</div>
           </div>
         </div>
 
