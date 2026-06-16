@@ -48,10 +48,11 @@ function calcExtras(inv) {
 function calcGrand(inv) {
   const svcSub = calcSub(inv.services || []);
   const extras = calcExtras(inv);
-  const sub    = svcSub + extras.total;
+  const hallSub = svcSub + extras.wRental + extras.hRental;
   const disc   = parseFloat(inv.discount) || 0;
-  const grand  = Math.max(0, sub - disc);
-  return { svcSub, extras, sub, disc, grand };
+  const grand  = Math.max(0, hallSub - disc); // hall revenue only — waiter cost tracked separately
+  const waiterTotal = extras.wWaiters + extras.hWaiters;
+  return { svcSub, extras, hallSub, disc, grand, waiterTotal };
 }
 
 function newInvObj(num) {
@@ -119,12 +120,17 @@ export default function HallInvoice() {
   function openHistory()   { setView("list"); }
 
   function computeAndSave(inv, isLead, andView) {
-    const { disc, grand } = calcGrand(inv);
+    const { disc, grand, waiterTotal } = calcGrand(inv);
     const bal   = Math.max(0, grand - (parseFloat(inv.adv) || 0));
     const payStatus = grand === 0 ? "Unpaid"
       : bal === 0 ? "Paid"
       : (parseFloat(inv.adv) || 0) > 0 ? "Partial" : "Unpaid";
-    const final = { ...inv, grand, balance:bal, payStatus, discount:disc, isLead: isLead || false };
+    const waiterPaid    = parseFloat(inv.waiterPaid) || 0;
+    const waiterBalance = Math.max(0, waiterTotal - waiterPaid);
+    const waiterPayStatus = waiterTotal === 0 ? "Unpaid"
+      : waiterBalance === 0 ? "Paid"
+      : waiterPaid > 0 ? "Partial" : "Unpaid";
+    const final = { ...inv, grand, balance:bal, payStatus, discount:disc, waiterTotal, waiterPaid, waiterBalance, waiterPayStatus, isLead: isLead || false };
 
     if (inv.id) {
       setInvoices(prev => prev.map(i => i.id === inv.id ? final : i));
@@ -346,14 +352,20 @@ function InvForm({ inv, onSave, onSavePreview, onCancel, onViewHistory, invoiceC
   const extras    = calcExtras(d);
   const wWaiterTotal = extras.wWaiters;
   const hWaiterTotal = extras.hWaiters;
-  const sub       = svcSub + extras.total;
+  const waiterTotal  = wWaiterTotal + hWaiterTotal;
   const discount  = parseFloat(d.discount) || 0;
-  const grand     = Math.max(0, sub - discount);
   const hallTotal = Math.max(0, svcSub + extras.wRental + extras.hRental - discount);
+  const grand     = hallTotal; // hall revenue only — waiter cost tracked separately below
+  const totalPayable = hallTotal + waiterTotal; // what the guest pays in total, informational
   const adv       = parseFloat(d.adv) || 0;
   const balance   = Math.max(0, grand - adv);
   const payStatus = grand===0 ? "Unpaid" : balance===0 ? "Paid" : adv>0 ? "Partial" : "Unpaid";
   const psStyle   = PS_STYLE[payStatus];
+
+  const waiterPaid    = parseFloat(d.waiterPaid) || 0;
+  const waiterBalance = Math.max(0, waiterTotal - waiterPaid);
+  const waiterPayStatus = waiterTotal===0 ? "Unpaid" : waiterBalance===0 ? "Paid" : waiterPaid>0 ? "Partial" : "Unpaid";
+  const waiterPsStyle   = PS_STYLE[waiterPayStatus];
 
   const et        = EV_TYPES.find(t => t.v === d.evType);
   const isWedding = et?.g === "wedding" || et?.v === "Wedding + Holud";
@@ -812,48 +824,50 @@ function InvForm({ inv, onSave, onSavePreview, onCancel, onViewHistory, invoiceC
             </div>
           </div>
           <div style={{ borderTop:"1.5px solid #e8d898",paddingTop:14,display:"flex",justifyContent:"space-between",alignItems:"center" }}>
-            <span style={{ fontWeight:800,fontSize:15 }}>Hall Charges Total</span>
-            <span style={{ fontWeight:800,fontSize:18,color:C.maroon }}>৳{hallTotal.toLocaleString()}</span>
+            <span style={{ fontWeight:800,fontSize:17 }}>Hall Charges Total</span>
+            <span style={{ fontWeight:800,fontSize:24,color:C.maroon }}>৳{hallTotal.toLocaleString()}</span>
           </div>
 
-          {(wWaiterTotal > 0 || hWaiterTotal > 0) && (
-            <div style={{ marginTop:18,paddingTop:14,paddingBottom:14,paddingLeft:14,paddingRight:14,borderRadius:10,border:"1.5px dashed #c9a84c",background:"#fffaf0" }}>
-              <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10 }}>
-                <div style={{ fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:.5,color:"#8a6200" }}>🍽️ WAITER COST BOX</div>
-                <span style={{ fontSize:9,fontWeight:800,color:"#fff",background:"#c0392b",padding:"3px 9px",borderRadius:10,letterSpacing:.5 }}>DUE AFTER CEREMONY</span>
-              </div>
-              {isHolud && hWaiterTotal > 0 && (
-                <div style={{ display:"flex",justifyContent:"space-between",fontSize:14,marginBottom:10 }}>
-                  <span>Holud Waiters</span><span style={{ fontWeight:700 }}>৳{hWaiterTotal.toLocaleString()}</span>
+          <div style={{ display:"flex",justifyContent:"flex-end",marginTop:14 }}>
+            {(wWaiterTotal > 0 || hWaiterTotal > 0) && (
+              <div style={{ width:200,padding:"10px 12px",borderRadius:8,border:"1px solid #ddd",background:"#fafafa" }}>
+                <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6 }}>
+                  <span style={{ fontSize:9,fontWeight:700,textTransform:"uppercase",letterSpacing:.4,color:"#888" }}>🍽️ Waiter Cost</span>
+                  <span style={{ fontSize:8,fontWeight:700,color:"#999",background:"#eee",padding:"2px 6px",borderRadius:8 }}>DUE LATER</span>
                 </div>
-              )}
-              {isWedding && wWaiterTotal > 0 && (
-                <div style={{ display:"flex",justifyContent:"space-between",fontSize:14,marginBottom:10 }}>
-                  <span>Wedding Day Waiters</span><span style={{ fontWeight:700 }}>৳{wWaiterTotal.toLocaleString()}</span>
+                {isHolud && hWaiterTotal > 0 && (
+                  <div style={{ fontSize:11,color:"#777",marginBottom:3,display:"flex",justifyContent:"space-between" }}>
+                    <span>Holud {d.hWaiters||0}×{(parseFloat(d.hWaiterPrice)||0).toLocaleString()}</span><span>৳{hWaiterTotal.toLocaleString()}</span>
+                  </div>
+                )}
+                {isWedding && wWaiterTotal > 0 && (
+                  <div style={{ fontSize:11,color:"#777",marginBottom:3,display:"flex",justifyContent:"space-between" }}>
+                    <span>Wedding {d.wWaiters||0}×{(parseFloat(d.wWaiterPrice)||0).toLocaleString()}</span><span>৳{wWaiterTotal.toLocaleString()}</span>
+                  </div>
+                )}
+                <div style={{ borderTop:"1px dashed #ccc",marginTop:6,paddingTop:6,display:"flex",justifyContent:"space-between" }}>
+                  <span style={{ fontSize:11,fontWeight:700,color:"#666" }}>Total</span>
+                  <span style={{ fontSize:13,fontWeight:700,color:"#666" }}>৳{(wWaiterTotal+hWaiterTotal).toLocaleString()}</span>
                 </div>
-              )}
-              <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",borderTop:"1px dashed #c9a84c",paddingTop:10 }}>
-                <span style={{ fontWeight:700,fontSize:14,color:"#8a6200" }}>Waiter Charges Total</span>
-                <span style={{ fontWeight:800,fontSize:16,color:"#8a6200" }}>৳{(wWaiterTotal+hWaiterTotal).toLocaleString()}</span>
+                <div style={{ fontSize:9,color:"#aaa",fontStyle:"italic",marginTop:5 }}>Pass-through — not hall revenue.</div>
               </div>
-              <div style={{ fontSize:10,color:"#999",fontStyle:"italic",marginTop:6 }}>Collected from guest, paid directly to waiters — not hall revenue or expense. Settled once the ceremony is complete.</div>
-            </div>
-          )}
+            )}
+          </div>
 
-          <div style={{ borderTop:"2px solid #7B1212",marginTop:18,paddingTop:14,display:"flex",justifyContent:"space-between",alignItems:"center" }}>
-            <span style={{ fontWeight:800,fontSize:16 }}>Total Payable</span>
-            <span style={{ fontWeight:800,fontSize:20,color:C.red }}>৳{grand.toLocaleString()}</span>
+          <div style={{ borderTop:"1px solid #eee",marginTop:14,paddingTop:10,display:"flex",justifyContent:"space-between",alignItems:"center" }}>
+            <span style={{ fontSize:12,color:"#888" }}>Total collectible (Hall + Waiter)</span>
+            <span style={{ fontSize:13,fontWeight:700,color:"#888" }}>৳{totalPayable.toLocaleString()}</span>
           </div>
         </div>
       </Section>
 
       {/* ── PAYMENT ── */}
-      <Section label="💳 PAYMENT">
+      <Section label="💳 PAYMENT — HALL REVENUE">
         <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:14 }}>
-          <Field label="Advance Paid (৳)">
+          <Field label="Hall Advance Paid (৳)">
             <input type="number" min="0" value={d.adv||0} onChange={e=>set("adv",parseFloat(e.target.value)||0)} style={inputStyle()} />
           </Field>
-          <Field label="Balance Due (৳)">
+          <Field label="Hall Balance Due (৳)">
             <input readOnly value={"৳ "+balance.toLocaleString()} style={inputStyle({ background:"#fffdf0",borderColor:"#d4a800",fontWeight:700,color:C.maroon })} />
           </Field>
         </div>
@@ -874,12 +888,31 @@ function InvForm({ inv, onSave, onSavePreview, onCancel, onViewHistory, invoiceC
             <Field label="Account / Ref"><input value={d.bankRef||""} onChange={e=>set("bankRef",e.target.value)} style={inputStyle()} /></Field>
           </div>
         )}
-        <Field label="Payment Status (auto-calculated)">
+        <Field label="Hall Payment Status (auto-calculated)">
           <div style={{ display:"inline-flex",alignItems:"center",gap:10,padding:"11px 20px",borderRadius:10,fontWeight:700,fontSize:15,border:"2px solid "+psStyle.border,background:psStyle.bg,color:psStyle.color }}>
             <span>{psStyle.icon}</span><span>{payStatus}</span>
           </div>
         </Field>
       </Section>
+
+      {waiterTotal > 0 && (
+        <Section label="🍽️ PAYMENT — WAITER COST (Separate, Pass-through)">
+          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:14 }}>
+            <Field label="Waiter Cost Paid (৳)">
+              <input type="number" min="0" value={d.waiterPaid||0} onChange={e=>set("waiterPaid",parseFloat(e.target.value)||0)} style={inputStyle()} />
+            </Field>
+            <Field label="Waiter Cost Balance (৳)">
+              <input readOnly value={"৳ "+waiterBalance.toLocaleString()} style={inputStyle({ background:"#fafafa",borderColor:"#ccc",fontWeight:700,color:"#666" })} />
+            </Field>
+          </div>
+          <Field label="Waiter Payment Status (auto-calculated)">
+            <div style={{ display:"inline-flex",alignItems:"center",gap:10,padding:"11px 20px",borderRadius:10,fontWeight:700,fontSize:15,border:"2px solid "+waiterPsStyle.border,background:waiterPsStyle.bg,color:waiterPsStyle.color }}>
+              <span>{waiterPsStyle.icon}</span><span>{waiterPayStatus}</span>
+            </div>
+          </Field>
+          <div style={{ fontSize:11,color:"#999",fontStyle:"italic",marginTop:8 }}>Tracked separately from hall revenue — this money is collected from the guest and paid out to waiter staff, usually after the ceremony.</div>
+        </Section>
+      )}
 
       {/* ── NOTES & TERMS ── */}
       <Section label="📋 NOTES & TERMS">
@@ -957,11 +990,20 @@ function InvDetail({ inv, onEdit, onBack, onDelete, deleteModal, delPass, setDel
   const [payMethod, setPayMethod] = useState("Cash");
   const [payDone, setPayDone]     = useState(null); // { newPaid, newBal, status } after payment
 
+  const [waiterPayModal, setWaiterPayModal] = useState(false);
+  const [waiterPayAmt, setWaiterPayAmt]     = useState(0);
+  const [waiterPayDone, setWaiterPayDone]   = useState(null);
+
   const et    = EV_TYPES.find(t=>t.v===inv.evType);
   const grand = inv.grand || 0;
   const paid  = parseFloat(inv.adv) || 0;
   const bal   = Math.max(0, grand - paid);
   const ps    = PS_STYLE[inv.payStatus] || PS_STYLE["Unpaid"];
+
+  const waiterTotal = inv.waiterTotal || 0;
+  const waiterPaid  = parseFloat(inv.waiterPaid) || 0;
+  const waiterBal   = Math.max(0, waiterTotal - waiterPaid);
+  const wps         = PS_STYLE[inv.waiterPayStatus] || PS_STYLE["Unpaid"];
 
   function collectPayment() {
     const a = parseFloat(payAmt) || 0;
@@ -970,9 +1012,21 @@ function InvDetail({ inv, onEdit, onBack, onDelete, deleteModal, delPass, setDel
     const newBal  = Math.max(0, grand - newPaid);
     const status  = newBal === 0 ? "Paid" : "Partial";
     setInvoices(prev => prev.map(i => i.id===inv.id ? {...i,adv:newPaid,balance:newBal,payStatus:status,advMethod:payMethod} : i));
-    notify("Payment recorded ✅","success");
+    notify("Hall payment recorded ✅","success");
     setPayModal(false);
     setPayDone({ newPaid, newBal, status });
+  }
+
+  function collectWaiterPayment() {
+    const a = parseFloat(waiterPayAmt) || 0;
+    if (a <= 0) { notify("Enter valid amount","error"); return; }
+    const newPaid = waiterPaid + a;
+    const newBal  = Math.max(0, waiterTotal - newPaid);
+    const status  = newBal === 0 ? "Paid" : "Partial";
+    setInvoices(prev => prev.map(i => i.id===inv.id ? {...i,waiterPaid:newPaid,waiterBalance:newBal,waiterPayStatus:status} : i));
+    notify("Waiter cost collection recorded ✅","success");
+    setWaiterPayModal(false);
+    setWaiterPayDone({ newPaid, newBal, status });
   }
 
   function printInvoice(withTerms = true) {
@@ -1020,10 +1074,10 @@ function InvDetail({ inv, onEdit, onBack, onDelete, deleteModal, delPass, setDel
     // Waiter cost is collected on the guest's behalf for waiter staff — not hall revenue.
     // Kept in its own box, shown separately from the hall charges table, Holud first.
     const waiterLines = [
-      isHolud   && extras.hWaiters > 0 ? ['Holud Waiters', extras.hWaiters] : null,
-      isWedding && extras.wWaiters > 0 ? ['Wedding Day Waiters', extras.wWaiters] : null,
+      isHolud   && extras.hWaiters > 0 ? ['Holud', inv.hWaiters, inv.hWaiterPrice, extras.hWaiters] : null,
+      isWedding && extras.wWaiters > 0 ? ['Wedding', inv.wWaiters, inv.wWaiterPrice, extras.wWaiters] : null,
     ].filter(Boolean);
-    const waiterTotal = waiterLines.reduce((s,[,amt])=>s+amt, 0);
+    const waiterTotal = waiterLines.reduce((s,[,,,amt])=>s+amt, 0);
 
     const hallSubtotal = (inv.services||[]).filter(s=>s.included!==false).reduce((s,it)=>s+(parseFloat(it.rate)||0), 0) + extras.wRental + extras.hRental;
     const disc = parseFloat(inv.discount) || 0;
@@ -1140,52 +1194,41 @@ function InvDetail({ inv, onEdit, onBack, onDelete, deleteModal, delPass, setDel
           <tfoot>
             ${disc>0?`<tr style="background:#fff5f5"><td style="padding:6px 13px;font-size:12px;color:#900;font-weight:700">Discount</td><td style="padding:6px 13px;text-align:right;font-size:12px;font-weight:800;color:#900">– ৳ ${disc.toLocaleString()}</td></tr>`:''}
             <tr style="background:#f5ede0;border-top:2px solid #c9a84c">
-              <td style="padding:9px 13px;font-size:13px;font-weight:800;color:#7B1212;letter-spacing:.5px">Hall Charges Total</td>
-              <td style="padding:9px 13px;text-align:right;font-size:16px;font-weight:800;color:#7B1212">৳ ${hallTotal.toLocaleString()}</td>
+              <td style="padding:13px 13px;font-size:16px;font-weight:800;color:#7B1212;letter-spacing:.5px">Hall Rent Total</td>
+              <td style="padding:13px 13px;text-align:right;font-size:24px;font-weight:800;color:#7B1212;font-family:'Playfair Display',serif">৳ ${hallTotal.toLocaleString()}</td>
             </tr>
           </tfoot>
         </table>
       </div>
 
+      <!-- Hall payment status -->
+      <div style="padding:0 18px;margin-top:10px;display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap">
+        <div style="font-size:12px;color:#555">Advance Paid: <strong style="color:#1a5c30">৳ ${paid.toLocaleString()}</strong> &nbsp;·&nbsp; Balance Due: <strong style="color:#7a0000">৳ ${bal.toLocaleString()}</strong></div>
+      </div>
+
       ${waiterLines.length ? `
-      <!-- Waiter charges box — pass-through, not hall revenue -->
-      <div style="padding:0 18px;margin-top:12px">
-        <table style="width:100%;border-collapse:collapse;border:1.5px dashed #c9a84c;border-radius:6px;overflow:hidden">
-          <thead>
-            <tr style="background:#f8f0dd">
-              <th style="padding:8px 13px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:1.5px;color:#7B1212;font-weight:700">🍽️ Waiter Cost Box</th>
-              <th style="padding:8px 13px;text-align:right;font-size:10px;text-transform:uppercase;letter-spacing:1.5px;color:#7B1212;font-weight:700;width:140px">Amount (৳)</th>
-            </tr>
-          </thead>
-          <tbody>${waiterLines.map(([label,amt])=>itemRow(label,amt)).join('')}</tbody>
-          <tfoot>
-            <tr style="background:#f8f0dd;border-top:1.5px dashed #c9a84c">
-              <td style="padding:8px 13px;font-size:13px;font-weight:800;color:#7B1212">Waiter Charges Total &nbsp;<span style="font-size:9px;font-weight:800;color:#fff;background:#c0392b;padding:2px 8px;border-radius:10px;letter-spacing:.5px">DUE AFTER CEREMONY</span></td>
-              <td style="padding:8px 13px;text-align:right;font-size:15px;font-weight:800;color:#7B1212">৳ ${waiterTotal.toLocaleString()}</td>
-            </tr>
-          </tfoot>
-        </table>
-        <div style="font-size:10px;color:#999;font-style:italic;margin-top:4px;padding:0 4px">Note: Waiter cost is collected on the guest's behalf and paid directly to the waiters — not part of hall revenue or expenses. Payable once the ceremony is complete.</div>
+      <!-- Small waiter cost box — kept low-key, separate from hall revenue -->
+      <div style="padding:0 18px;margin-top:14px;display:flex;justify-content:flex-end">
+        <div style="width:230px;border:1px solid #ddd;border-radius:8px;padding:9px 11px;background:#fafafa">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+            <span style="font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#888">🍽️ Waiter Cost</span>
+            <span style="font-size:7.5px;font-weight:700;color:#999;background:#eee;padding:2px 6px;border-radius:8px">DUE LATER</span>
+          </div>
+          ${waiterLines.map(([label,n,price,amt]) =>
+            `<div style="display:flex;justify-content:space-between;font-size:10.5px;color:#777;margin-bottom:3px"><span>${label} ${n||0}×${(parseFloat(price)||0).toLocaleString()}</span><span>৳${amt.toLocaleString()}</span></div>`
+          ).join('')}
+          <div style="border-top:1px dashed #ccc;margin-top:5px;padding-top:5px;display:flex;justify-content:space-between">
+            <span style="font-size:10.5px;font-weight:700;color:#666">Total</span>
+            <span style="font-size:12.5px;font-weight:700;color:#666">৳ ${waiterTotal.toLocaleString()}</span>
+          </div>
+          <div style="font-size:8px;color:#aaa;font-style:italic;margin-top:4px">Pass-through — not hall revenue. Collected on behalf of waiters.</div>
+        </div>
       </div>` : ''}
 
-      <!-- Total payable -->
-      <div style="padding:0 18px;margin-top:12px">
-        <table style="width:100%;border-collapse:collapse;border:1.5px solid #ddd;border-radius:6px;overflow:hidden">
-          <tbody>
-            <tr style="background:#3d1010">
-              <td style="padding:11px 13px;font-size:15px;font-weight:800;color:#f2dfc0;letter-spacing:.5px">Total Payable</td>
-              <td style="padding:11px 13px;text-align:right;font-size:22px;font-weight:800;color:#c9a84c;font-family:'Playfair Display',serif">৳ ${totalPayable.toLocaleString()}</td>
-            </tr>
-            <tr style="background:#eaf7ee">
-              <td style="padding:7px 13px;font-size:13px;font-weight:700;color:#1a5c30">Advance Paid</td>
-              <td style="padding:7px 13px;text-align:right;font-size:14px;font-weight:800;color:#1a5c30">৳ ${paid.toLocaleString()}</td>
-            </tr>
-            <tr style="background:#fff0f0;border-bottom:2px solid #7B1212">
-              <td style="padding:7px 13px;font-size:13px;font-weight:700;color:#7a0000">Balance Due</td>
-              <td style="padding:7px 13px;text-align:right;font-size:14px;font-weight:800;color:#7a0000">৳ ${bal.toLocaleString()}</td>
-            </tr>
-          </tbody>
-        </table>
+      <!-- Total collectible (informational, de-emphasised) -->
+      <div style="padding:0 18px;margin-top:14px;border-top:1px solid #eee;padding-top:8px;display:flex;justify-content:space-between">
+        <span style="font-size:11px;color:#999">Total collectible (Hall + Waiter)</span>
+        <span style="font-size:12px;font-weight:700;color:#999">৳ ${totalPayable.toLocaleString()}</span>
       </div>
 
       <!-- Pay status badge -->
@@ -1257,7 +1300,8 @@ function InvDetail({ inv, onEdit, onBack, onDelete, deleteModal, delPass, setDel
       <div className="hall-btn-row" style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18,flexWrap:"wrap",gap:10 }}>
         <button onClick={onBack} style={btnStyle()}>‹ Back</button>
         <div className="hall-btn-row" style={{ display:"flex",gap:8,flexWrap:"wrap" }}>
-          {bal>0&&<button onClick={()=>setPayModal(true)} style={btnStyle("primary","sm")}>💳 Collect Payment</button>}
+          {bal>0&&<button onClick={()=>setPayModal(true)} style={btnStyle("primary","sm")}>💳 Collect Hall Payment</button>}
+          {waiterBal>0&&<button onClick={()=>setWaiterPayModal(true)} style={{ ...btnStyle("","sm"),borderColor:"#c9a84c",color:"#8a6200" }}>🍽️ Collect Waiter Cost</button>}
           <button onClick={onEdit}  style={btnStyle("","sm")}>✏️ Edit</button>
           <button onClick={()=>printInvoice(true)}  style={btnStyle("","sm")}>🖨 Print Booking</button>
           <button onClick={()=>printInvoice(false)} style={btnStyle("","sm")}>🧾 Reprint Receipt</button>
@@ -1280,6 +1324,23 @@ function InvDetail({ inv, onEdit, onBack, onDelete, deleteModal, delPass, setDel
             </div>
           </div>
           <button onClick={()=>printInvoice(false)} style={{ ...btnStyle("primary","sm"),flexShrink:0 }}>🧾 Print Final Receipt</button>
+        </div>
+      )}
+
+      {waiterPayDone && (
+        <div style={{ marginBottom:14,padding:"14px 18px",borderRadius:10,background:"#fafafa",border:"1.5px solid #ccc",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12 }}>
+          <div style={{ display:"flex",alignItems:"center",gap:10 }}>
+            <span style={{ fontSize:22 }}>🍽️</span>
+            <div>
+              <div style={{ fontWeight:800,color:"#444",fontSize:14 }}>Waiter Cost Collection Updated</div>
+              <div style={{ fontSize:12,color:"#666",marginTop:2 }}>
+                Total Collected: <strong>৳{waiterPayDone.newPaid.toLocaleString()}</strong>
+                {waiterPayDone.newBal > 0
+                  ? <> &nbsp;·&nbsp; Remaining: <strong>৳{waiterPayDone.newBal.toLocaleString()}</strong></>
+                  : <> &nbsp;·&nbsp; <strong>Fully Settled ✅</strong></>}
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
@@ -1381,8 +1442,8 @@ function InvDetail({ inv, onEdit, onBack, onDelete, deleteModal, delPass, setDel
               <button className="modal-close" onClick={()=>setPayModal(false)}>✕</button>
             </div>
             <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14,padding:10,background:"#f8f8f8",borderRadius:8,fontSize:12 }}>
-              <div>Grand Total<br/><strong>৳{grand.toLocaleString()}</strong></div>
-              <div>Balance Due<br/><strong style={{ color:C.red }}>৳{bal.toLocaleString()}</strong></div>
+              <div>Hall Charges Total<br/><strong>৳{grand.toLocaleString()}</strong></div>
+              <div>Hall Balance Due<br/><strong style={{ color:C.red }}>৳{bal.toLocaleString()}</strong></div>
             </div>
             <div className="form-group"><label>Amount Received (৳) *</label>
               <input type="number" min="0" max={bal} value={payAmt} onChange={e=>setPayAmt(e.target.value)} autoFocus />
@@ -1394,7 +1455,30 @@ function InvDetail({ inv, onEdit, onBack, onDelete, deleteModal, delPass, setDel
             </div>
             <div className="modal-actions">
               <button className="btn" onClick={()=>setPayModal(false)}>Cancel</button>
-              <button className="btn primary" onClick={collectPayment}>✓ Confirm Payment</button>
+              <button className="btn primary" onClick={collectPayment}>✓ Confirm Hall Payment</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {waiterPayModal&&(
+        <div className="modal-overlay open" onClick={e=>e.target===e.currentTarget&&setWaiterPayModal(false)}>
+          <div className="modal-box" style={{ maxWidth:380 }}>
+            <div className="modal-header">
+              <div className="modal-title">🍽️ Collect Waiter Cost</div>
+              <button className="modal-close" onClick={()=>setWaiterPayModal(false)}>✕</button>
+            </div>
+            <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14,padding:10,background:"#fafafa",borderRadius:8,fontSize:12 }}>
+              <div>Waiter Cost Total<br/><strong>৳{waiterTotal.toLocaleString()}</strong></div>
+              <div>Waiter Balance<br/><strong style={{ color:"#8a6200" }}>৳{waiterBal.toLocaleString()}</strong></div>
+            </div>
+            <div className="form-group"><label>Amount Received (৳) *</label>
+              <input type="number" min="0" max={waiterBal} value={waiterPayAmt} onChange={e=>setWaiterPayAmt(e.target.value)} autoFocus />
+            </div>
+            <div style={{ fontSize:11,color:"#999",fontStyle:"italic",marginBottom:10 }}>This is separate from hall revenue — collected on behalf of waiter staff.</div>
+            <div className="modal-actions">
+              <button className="btn" onClick={()=>setWaiterPayModal(false)}>Cancel</button>
+              <button className="btn primary" onClick={collectWaiterPayment}>✓ Confirm Waiter Collection</button>
             </div>
           </div>
         </div>
