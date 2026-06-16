@@ -290,7 +290,7 @@ function hotelPrint(invHTML, tcHTML) {
 
 // ─── Main Invoice Component ────────────────────────────────────────────────
 export default function Invoice() {
-  const { curUser, curRole, bookings, rooms, updateBookings, revenues, updateRevenues, notify } = useApp();
+  const { curUser, curRole, bookings, rooms, updateBookings, revenues, updateRevenues, notify, pendingInvoiceId, setPendingInvoiceId } = useApp();
 
   const [selId,    setSelId]    = useState("");
   const [mode,     setMode]     = useState("room");
@@ -303,6 +303,13 @@ export default function Invoice() {
   const [extNote,  setExtNote]  = useState("");
 
   const selBk = useMemo(() => bookings.find(b => b.id === parseInt(selId)), [bookings, selId, extras]);
+
+  useEffect(() => {
+    if (pendingInvoiceId != null) {
+      setSelId(String(pendingInvoiceId));
+      setPendingInvoiceId(null);
+    }
+  }, [pendingInvoiceId]);
 
   useEffect(() => {
     if (!selBk) { setExtras([]); setRoomAmt(""); setExtAmt(""); return; }

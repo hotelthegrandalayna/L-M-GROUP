@@ -89,6 +89,7 @@ export function AppProvider({ children }) {
   const [adminTab,       setAdminTab]       = useState('finance');
   const [notification,   setNotification]   = useState(null);
   const [modal,          setModal]          = useState(null); // { content: JSX }
+  const [pendingInvoiceId, setPendingInvoiceId] = useState(null);
 
   // Persist helpers
   const save = useCallback((nextBookings, nextRevenues, nextExpenses, nextRooms) => {
@@ -169,6 +170,7 @@ export function AppProvider({ children }) {
       notification,
       notify,
       modal, setModal,
+      pendingInvoiceId, setPendingInvoiceId,
     }}>
       {children}
     </AppContext.Provider>

@@ -251,7 +251,7 @@ const FILTERS = ["all","confirmed","checked-in","checked-out","cancelled"];
 
 // ─── New Booking Modal (full original form) ────────────────────────────────
 function SMSSendModal({ booking, refName, refPhone, status, onClose }) {
-  const { smsTemplates } = useApp();
+  const { smsTemplates, setActiveTab, setPendingInvoiceId } = useApp();
   const [copied, setCopied] = useState("");
 
   const isCheckin = status === "checked-in";
@@ -348,7 +348,18 @@ function SMSSendModal({ booking, refName, refPhone, status, onClose }) {
         )}
 
         <div className="modal-actions">
-          <button className="btn primary" onClick={onClose}><i className="ti ti-check" /> Done</button>
+          {isCheckin ? (
+            <>
+              <button className="btn" onClick={onClose}><i className="ti ti-check" /> Done</button>
+              <button className="btn primary" onClick={() => {
+                setPendingInvoiceId(booking.id);
+                setActiveTab("invoice");
+                onClose();
+              }}><i className="ti ti-file-invoice" /> Go to Invoice</button>
+            </>
+          ) : (
+            <button className="btn primary" onClick={onClose}><i className="ti ti-check" /> Done</button>
+          )}
         </div>
       </div>
     </div>
