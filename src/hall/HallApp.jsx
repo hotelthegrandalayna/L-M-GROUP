@@ -23,15 +23,29 @@ function HallInner({ onSwitchApp }) {
       <HallNavbar onSwitchApp={onSwitchApp} />
       <HallNotification />
       <main style={{ flex:1, overflowY:"auto" }}>
-        <ErrorBoundary key={activeTab}>
-          {activeTab === "invoice"  && <HallInvoice  />}
-          {activeTab === "calendar" && <HallCalendar />}
-          {activeTab === "crm"      && <HallCRM      />}
-          {activeTab === "cutlery"  && <HallCutlery  />}
-          {activeTab === "expenses" && <HallExpenses />}
-          {activeTab === "insights" && <HallInsights />}
-          {activeTab === "admin"    && <HallAdmin    />}
-        </ErrorBoundary>
+        {/* Tabs stay mounted (hidden via display:none) instead of unmounting on switch,
+            so in-progress form data (e.g. a half-typed invoice) survives navigating away and back. */}
+        <div style={{ display: activeTab === "invoice" ? "block" : "none" }}>
+          <ErrorBoundary><HallInvoice /></ErrorBoundary>
+        </div>
+        <div style={{ display: activeTab === "calendar" ? "block" : "none" }}>
+          <ErrorBoundary><HallCalendar /></ErrorBoundary>
+        </div>
+        <div style={{ display: activeTab === "crm" ? "block" : "none" }}>
+          <ErrorBoundary><HallCRM /></ErrorBoundary>
+        </div>
+        <div style={{ display: activeTab === "cutlery" ? "block" : "none" }}>
+          <ErrorBoundary><HallCutlery /></ErrorBoundary>
+        </div>
+        <div style={{ display: activeTab === "expenses" ? "block" : "none" }}>
+          <ErrorBoundary><HallExpenses /></ErrorBoundary>
+        </div>
+        <div style={{ display: activeTab === "insights" ? "block" : "none" }}>
+          <ErrorBoundary><HallInsights /></ErrorBoundary>
+        </div>
+        <div style={{ display: activeTab === "admin" ? "block" : "none" }}>
+          <ErrorBoundary><HallAdmin /></ErrorBoundary>
+        </div>
       </main>
     </div>
   );

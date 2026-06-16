@@ -82,6 +82,8 @@ export function HallProvider({ children }) {
   const [leads,    setLeadsRaw]    = useState(() => loadLS("a_crm_leads", []));
   const [activeTab, setActiveTab] = useState("invoice");
   const [notification, setNotification] = useState(null);
+  const [invoiceJumpSignal, setInvoiceJumpSignal] = useState(0);
+  const bumpInvoiceJump = useCallback(() => setInvoiceJumpSignal(n => n+1), []);
 
   const setInvoices = useCallback(next => { const v = typeof next === "function" ? next(invoices) : next; setInvoicesRaw(v); localStorage.setItem("a_inv", JSON.stringify(v)); }, [invoices]);
   const setExpenses = useCallback(next => { const v = typeof next === "function" ? next(expenses) : next; setExpensesRaw(v); localStorage.setItem("a_exp", JSON.stringify(v)); }, [expenses]);
@@ -97,7 +99,7 @@ export function HallProvider({ children }) {
   }, []);
 
   return (
-    <Ctx.Provider value={{ curUser, curRole, login, logout, invoices, setInvoices, expenses, setExpenses, revenues, setRevenues, leads, setLeads, activeTab, setActiveTab, notification, notify }}>
+    <Ctx.Provider value={{ curUser, curRole, login, logout, invoices, setInvoices, expenses, setExpenses, revenues, setRevenues, leads, setLeads, activeTab, setActiveTab, notification, notify, invoiceJumpSignal, bumpInvoiceJump }}>
       {children}
     </Ctx.Provider>
   );

@@ -13,12 +13,13 @@ const TABS = [
 ];
 
 export default function HallNavbar({ onSwitchApp }) {
-  const { curUser, curRole, activeTab, setActiveTab, logout } = useHall();
+  const { curUser, curRole, activeTab, setActiveTab, logout, bumpInvoiceJump } = useHall();
   const [menuOpen, setMenuOpen] = useState(false);
 
   const visibleTabs = TABS.filter(t => curRole === "admin" || (t.id !== "insights" && t.id !== "admin"));
 
   function handleTab(id) {
+    if (id === "invoice") bumpInvoiceJump();
     setActiveTab(id);
     setMenuOpen(false);
   }

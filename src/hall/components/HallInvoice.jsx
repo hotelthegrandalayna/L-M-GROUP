@@ -1,5 +1,5 @@
 
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { useHall, EV_TYPES, checkHallAdminPass } from "../HallContext";
 import useIsMobile from "../useIsMobile";
 import { sendSmsForInvoice } from "./HallAdmin";
@@ -81,13 +81,13 @@ function newInvObj(num) {
     discount:0, stageImgData:"", stageImgName:"",
     adv:0, advMethod:"Cash", bankName:"", bankRef:"",
     balance:0, payStatus:"Unpaid",
-    hearAbout:"", note:"", grand:0, isLead:false,
+    hearAbout:"", note:"", grand:0, isLead:false, confirmed:false,
   };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 export default function HallInvoice() {
-  const { invoices, setInvoices, notify } = useHall();
+  const { invoices, setInvoices, notify, invoiceJumpSignal } = useHall();
   const isMobile = useIsMobile();
   const [view, setView] = useState("form");   // default: create form
   const [editInv, setEditInv] = useState(() => null);  // will init in effect
@@ -98,26 +98,49 @@ export default function HallInvoice() {
   const [filterMonth, setFilterMonth] = useState(() => new Date().toISOString().slice(0,7));
   const [deleteModal, setDeleteModal] = useState(null);
   const [delPass, setDelPass] = useState("");
+  const [formKey, setFormKey] = useState(0);
+  const [clearConfirm, setClearConfirm] = useState(false);
 
-  function newNum() {
-    if (!invoices.length) return "ACH-00001";
-    const nums = invoices.map(i => parseInt(i.num?.replace(/\D/g,"")) || 0);
-    return "ACH-" + String(Math.max(...nums) + 1).padStart(5,"0");
+  // Real ACH-000xx numbers are only assigned at Confirm & Print time (see confirmAndPrint
+  // in InvDetail), so drafts/leads that get abandoned never burn a slot in the sequence —
+  // confirmed invoices always stay perfectly back-to-back with no gaps.
+  function nextAchNum() {
+    const achNums = invoices.filter(i => /^ACH-\d+$/.test(i.num||"")).map(i => parseInt(i.num.replace(/\D/g,"")) || 0);
+    if (!achNums.length) return "ACH-00001";
+    return "ACH-" + String(Math.max(...achNums) + 1).padStart(5,"0");
   }
+  function draftNum() { return "DRAFT-" + String(Date.now()).slice(-6); }
 
   // Initialise a blank form on first render
-  const currentForm = editInv || newInvObj(newNum());
+  const currentForm = editInv || newInvObj(draftNum());
 
-  function openNew()   { setEditInv(newInvObj(newNum())); setView("form"); }
+  const jumpSignalRef = useRef(invoiceJumpSignal);
+  const viewRef = useRef(view);
+  viewRef.current = view;
+  useEffect(() => {
+    if (invoiceJumpSignal !== jumpSignalRef.current) {
+      jumpSignalRef.current = invoiceJumpSignal;
+      // Only jump to a fresh create-form when coming from history/detail —
+      // if the manager is already mid-typing in the form, clicking "Invoice"
+      // in the navbar (e.g. on the way back from Calendar/CRM) must NOT wipe their work.
+      if (viewRef.current !== "form") openNew();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [invoiceJumpSignal]);
+
+  function openNew()   { setEditInv(newInvObj(draftNum())); setView("form"); setFormKey(k=>k+1); }
   function openEdit(inv) {
     setEditInv({ ...newInvObj(inv.num), ...inv,
       services: inv.services?.length ? inv.services.map(s=>({...s}))
         : newInvObj(inv.num).services });
     setView("form");
+    setFormKey(k=>k+1);
   }
   function openDetail(inv) { setDetailInv(inv); setView("detail"); }
   function backToForm()    { setEditInv(null); setDetailInv(null); setView("form"); }
   function openHistory()   { setView("list"); }
+  function requestClear()  { setClearConfirm(true); }
+  function confirmClear()  { setClearConfirm(false); backToForm(); setFormKey(k=>k+1); }
 
   function computeAndSave(inv, isLead, andView) {
     const { disc, grand, waiterTotal } = calcGrand(inv);
@@ -132,24 +155,29 @@ export default function HallInvoice() {
       : waiterPaid > 0 ? "Partial" : "Unpaid";
     const final = { ...inv, grand, balance:bal, payStatus, discount:disc, waiterTotal, waiterPaid, waiterBalance, waiterPayStatus, isLead: isLead || false };
 
+    let savedRecord;
     if (inv.id) {
+      savedRecord = final;
       setInvoices(prev => prev.map(i => i.id === inv.id ? final : i));
       notify("Invoice updated", "success");
     } else {
       const id = String(Date.now());
-      const withId = { ...final, id };
-      setInvoices(prev => [...prev, withId]);
+      savedRecord = { ...final, id };
+      setInvoices(prev => [...prev, savedRecord]);
       notify("Invoice saved", "success");
       if (!isLead) {
-        sendSmsForInvoice(withId).then(ok => {
+        sendSmsForInvoice(savedRecord).then(ok => {
           if (ok) notify("SMS sent to client ✓", "success");
         }).catch(() => {});
-        sendWhatsAppAlert(buildHallWaMessage(withId)).catch(() => {});
+        sendWhatsAppAlert(buildHallWaMessage(savedRecord)).catch(() => {});
       }
-      if (andView) { setDetailInv(withId); setView("detail"); setEditInv(null); return; }
     }
-    if (andView && inv.id) { setDetailInv(final); setView("detail"); setEditInv(null); }
-    else { setEditInv(null); setView("form"); }   // back to blank create form
+    if (andView) { setDetailInv(savedRecord); setView("detail"); setEditInv(null); return; }
+    // Keep editing the same now-saved record (rather than resetting to a blank form) —
+    // a saved draft must stay loaded until the manager explicitly clears or confirms it.
+    setEditInv(savedRecord);
+    setFormKey(k=>k+1);
+    setView("form");
   }
 
   function startDelete(inv) { setDeleteModal(inv); setDelPass(""); }
@@ -168,23 +196,44 @@ export default function HallInvoice() {
       i.phone?.includes(search) || i.num?.includes(search));
     if (filterType)   list = list.filter(i => i.evType === filterType);
     if (filterStatus) list = list.filter(i => i.payStatus === filterStatus);
-    if (filterMonth)  list = list.filter(i => (i.evDate||"").startsWith(filterMonth));
+    // Drafts/leads with no event date set yet always stay visible, regardless of the month filter —
+    // a saved-but-incomplete invoice must never disappear from history until cleared or deleted.
+    if (filterMonth)  list = list.filter(i => !i.evDate || i.evDate.startsWith(filterMonth));
     return list;
   }, [invoices, search, filterType, filterStatus, filterMonth]);
 
-  if (view === "form")   return <InvForm inv={currentForm}
-    onSave={(d, lead) => computeAndSave(d, lead, false)}
-    onSavePreview={(d, lead) => computeAndSave(d, lead, true)}
-    onCancel={backToForm}
-    onViewHistory={openHistory}
-    isMobile={isMobile}
-    invoiceCount={invoices.length} />;
-  if (view === "detail") return <InvDetail inv={detailInv}
+  if (view === "form")   return <>
+    <InvForm key={formKey} inv={currentForm}
+      onSave={(d, lead) => computeAndSave(d, lead, false)}
+      onSavePreview={(d, lead) => computeAndSave(d, lead, true)}
+      onCancel={requestClear}
+      onViewHistory={openHistory}
+      isMobile={isMobile}
+      invoices={invoices}
+      invoiceCount={invoices.length} />
+    {clearConfirm && (
+      <div className="modal-overlay open" onClick={e=>e.target===e.currentTarget&&setClearConfirm(false)}>
+        <div className="modal-box" style={{ maxWidth:380 }}>
+          <div className="modal-header">
+            <div className="modal-title">🗑 Clear Invoice Form</div>
+            <button className="modal-close" onClick={()=>setClearConfirm(false)}>✕</button>
+          </div>
+          <p style={{ fontSize:13,color:"#555",margin:"4px 0 16px" }}>This will erase everything you've entered in this form. This cannot be undone. Are you sure?</p>
+          <div className="modal-actions">
+            <button className="btn" onClick={()=>setClearConfirm(false)}>Cancel</button>
+            <button className="btn primary" onClick={confirmClear} style={{ background:C.red,borderColor:C.red }}>Yes, Clear It</button>
+          </div>
+        </div>
+      </div>
+    )}
+  </>;
+  if (view === "detail") return <InvDetail inv={detailInv} setDetailInv={setDetailInv}
     onEdit={()=>openEdit(detailInv)} onBack={()=>setView("list")}
     onDelete={()=>startDelete(detailInv)}
     deleteModal={deleteModal} delPass={delPass} setDelPass={setDelPass}
     confirmDelete={confirmDelete} setDeleteModal={setDeleteModal}
     notify={notify} setInvoices={setInvoices} invoices={invoices}
+    getNextNum={nextAchNum}
     isMobile={isMobile} />;
 
   // ── Invoice History (list) ─────────────────────────────────────────────────
@@ -269,7 +318,7 @@ export default function HallInvoice() {
                 <div style={{ fontWeight:800,fontSize:13 }}>৳{(inv.grand||0).toLocaleString()}</div>
                 <div style={{ fontSize:10,fontWeight:700,color:sc[inv.payStatus]||C.dim }}>{inv.payStatus}</div>
               </div>
-              {inv.isLead && <button onClick={e=>{e.stopPropagation();openEdit(inv);}} style={btnStyle("sm")}>✏️</button>}
+              {(inv.isLead || !inv.confirmed) && <button onClick={e=>{e.stopPropagation();openEdit(inv);}} style={btnStyle("sm")}>✏️</button>}
             </div>
           );
         })}
@@ -284,7 +333,7 @@ export default function HallInvoice() {
 // ─── Invoice Form ─────────────────────────────────────────────────────────────
 const TOGGLABLE_SVCS = ["Stage Decoration", "Lighting Decoration"];
 
-function InvForm({ inv, onSave, onSavePreview, onCancel, onViewHistory, invoiceCount, isMobile }) {
+function InvForm({ inv, onSave, onSavePreview, onCancel, onViewHistory, invoiceCount, isMobile, invoices }) {
   const [d, setD] = useState(() => ({ ...inv }));
   const imgRef = useRef();
   const [saveBlocked, setSaveBlocked] = useState(false);
@@ -377,6 +426,17 @@ function InvForm({ inv, onSave, onSavePreview, onCancel, onViewHistory, invoiceC
     ? fixedSvcsAll.filter(s => s.desc !== "Hall Rental")
     : fixedSvcsAll;
 
+  const todayStr = new Date().toISOString().slice(0,10);
+  function findBookingConflict(dateStr) {
+    if (!dateStr) return null;
+    return (invoices||[]).find(i =>
+      i.id && i.id !== d.id && !i.isLead &&
+      ((i.evDate && i.evDate === dateStr) || (i.hDate && i.hDate === dateStr))
+    ) || null;
+  }
+  const evDateConflict = findBookingConflict(d.evDate);
+  const hDateConflict  = findBookingConflict(d.hDate);
+
   function handleImg(e) {
     const file = e.target.files[0]; if (!file) return;
     const reader = new FileReader();
@@ -395,6 +455,100 @@ function InvForm({ inv, onSave, onSavePreview, onCancel, onViewHistory, invoiceC
     { label:"Groom's Side", opts:["Groom Himself","Groom's Father","Groom's Mother","Groom's Brother","Groom's Sister","Groom's Uncle","Groom's Guardian"] },
     { label:"Other", opts:["Friend of Family","Event Organiser","Other"] },
   ];
+
+  function ConflictWarning({ conflict }) {
+    if (!conflict) return null;
+    return (
+      <div style={{ background:"#fff8e1",border:"1.5px solid #f0b429",borderRadius:8,padding:"10px 14px",marginBottom:12,fontSize:12,color:"#7a4a00" }}>
+        ⚠️ This date already has a booking: <strong>Invoice #{conflict.num}</strong> — {conflict.client} ({conflict.evType})
+      </div>
+    );
+  }
+
+  function renderWeddingCard() {
+    return (
+      <div key="wedding-card" style={{ ...card(), borderLeft:"4px solid "+C.maroon }}>
+        <div style={{ marginBottom:14 }}><span style={sectionBadge()}>{et?.i||"💒"} {(et?.v||"WEDDING").toUpperCase()} EVENT DETAILS</span></div>
+
+        <SubSection label="📅 EVENT SCHEDULE">
+          <ConflictWarning conflict={evDateConflict} />
+          <div style={{ display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12 }}>
+            <Field label={isWH?`${et?.v||"Wedding"} Date *`:"Event Date *"}>
+              <input type="date" min={todayStr} value={d.evDate||""} onChange={e=>set("evDate",e.target.value)} style={inputStyle(evDateConflict?{ borderColor:"#f0b429" }:{})} />
+            </Field>
+            <Field label="Time of Day">
+              <select value={d.wTod||""} onChange={e=>set("wTod",e.target.value)} style={inputStyle()}>
+                <option value="">—</option>
+                <option value="day">☀️ Day</option>
+                <option value="night">🌙 Night</option>
+              </select>
+            </Field>
+            <Field label="Start Time"><input value={d.wStart||""} onChange={e=>set("wStart",e.target.value)} placeholder="e.g. 10:00 AM" style={inputStyle()} /></Field>
+            <Field label="End Time"><input value={d.wEnd||""} onChange={e=>set("wEnd",e.target.value)} placeholder="e.g. 10:00 PM" style={inputStyle()} /></Field>
+            <Field label="Guests *"><input type="number" value={d.wGuests||""} onChange={e=>set("wGuests",e.target.value)} placeholder="e.g. 300" style={inputStyle()} /></Field>
+          </div>
+        </SubSection>
+
+        <SubSection label="🪑 TABLES & WAITERS">
+          <div style={{ display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12 }}>
+            <Field label="Tables"><input type="number" value={d.wTables||""} onChange={e=>set("wTables",e.target.value)} placeholder="0" style={inputStyle()} /></Field>
+            <Field label="Waiters"><input type="number" value={d.wWaiters||""} onChange={e=>set("wWaiters",e.target.value)} placeholder="0" style={inputStyle()} /></Field>
+            <Field label="Price / Waiter (৳)"><input type="number" value={d.wWaiterPrice||""} onChange={e=>set("wWaiterPrice",e.target.value)} placeholder="0" style={inputStyle()} /></Field>
+            <Field label="Waiters Total (auto)">
+              <input readOnly value={wWaiterTotal>0?"৳"+wWaiterTotal.toLocaleString():""} placeholder="0" style={inputStyle({ background:"#f8f8f8" })} />
+            </Field>
+          </div>
+        </SubSection>
+
+        <SubSection label={`🏛️ ${(et?.v||"WEDDING").toUpperCase()} / HALL RENTAL`}>
+          <div style={{ background:"#fffaf0",border:"2px solid "+C.gold,borderRadius:10,padding:"14px 16px" }}>
+            <Field label={`${et?.v||"Wedding"} / Hall Rental (৳) *`}>
+              <input type="number" min="0" value={d.wRental||""} onChange={e=>set("wRental",e.target.value)} placeholder="0"
+                style={{ width:"100%",padding:"14px 16px",border:`2px solid ${C.gold}`,borderRadius:9,fontSize:20,fontWeight:800,textAlign:"right",fontFamily:"inherit",outline:"none",boxSizing:"border-box",background:"#fff",color:C.maroon,boxShadow:"0 2px 10px rgba(201,168,76,.25)" }} />
+            </Field>
+          </div>
+        </SubSection>
+      </div>
+    );
+  }
+
+  function renderHoludCard() {
+    return (
+      <div key="holud-card" style={{ ...card(), borderLeft:"4px solid #d4a800" }}>
+        <div style={{ marginBottom:14 }}><span style={{ ...sectionBadge(), background:"#8a6200" }}>🌼 {isWH?"HOLUD PROGRAMME DETAILS":"HOLUD EVENT DETAILS"}</span></div>
+        {isWH && <p style={{ fontSize:12,color:"#c97f00",marginBottom:12 }}>Holud is a separate ceremony — its charge is listed separately in the bill.</p>}
+
+        <SubSection label="📅 EVENT SCHEDULE">
+          <ConflictWarning conflict={hDateConflict} />
+          <div style={{ display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12 }}>
+            <Field label="Holud Date *">
+              <input type="date" min={todayStr} value={d.hDate||""} onChange={e=>set("hDate",e.target.value)} style={inputStyle(hDateConflict?{ borderColor:"#f0b429" }:{})} />
+            </Field>
+            <Field label="Ceremony Time"><input value={d.hTime||""} onChange={e=>set("hTime",e.target.value)} placeholder="e.g. 4:00 PM – 9:00 PM" style={inputStyle()} /></Field>
+            <Field label="Guests *"><input type="number" value={d.hGuests||""} onChange={e=>set("hGuests",e.target.value)} placeholder="e.g. 150" style={inputStyle()} /></Field>
+            <Field label="Tables"><input type="number" value={d.hTables||""} onChange={e=>set("hTables",e.target.value)} placeholder="0" style={inputStyle()} /></Field>
+          </div>
+        </SubSection>
+
+        <SubSection label="🪑 WAITERS">
+          <div style={{ display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12 }}>
+            <Field label="Waiters"><input type="number" value={d.hWaiters||""} onChange={e=>set("hWaiters",e.target.value)} placeholder="0" style={inputStyle()} /></Field>
+            <Field label="Price / Waiter (৳)"><input type="number" value={d.hWaiterPrice||""} onChange={e=>set("hWaiterPrice",e.target.value)} placeholder="0" style={inputStyle()} /></Field>
+            <Field label="Waiters Total (auto)"><input readOnly value={hWaiterTotal>0?"৳"+hWaiterTotal.toLocaleString():""} placeholder="0" style={inputStyle({ background:"#f8f8f8" })} /></Field>
+          </div>
+        </SubSection>
+
+        <SubSection label="🏛️ HOLUD / HALL RENTAL">
+          <div style={{ background:"#fffaf0",border:"2px solid "+C.gold,borderRadius:10,padding:"14px 16px" }}>
+            <Field label="Holud / Hall Rental (৳) *">
+              <input type="number" min="0" value={d.hRental||""} onChange={e=>set("hRental",e.target.value)} placeholder="0"
+                style={{ width:"100%",padding:"14px 16px",border:`2px solid ${C.gold}`,borderRadius:9,fontSize:20,fontWeight:800,textAlign:"right",fontFamily:"inherit",outline:"none",boxSizing:"border-box",background:"#fff",color:"#8a6200",boxShadow:"0 2px 10px rgba(201,168,76,.25)" }} />
+            </Field>
+          </div>
+        </SubSection>
+      </div>
+    );
+  }
 
   return (
     <div className="hall-page" style={{ padding: isMobile?"10px 8px":"22px 32px", maxWidth:1200, margin:"0 auto", width:"100%" }}>
@@ -421,18 +575,6 @@ function InvForm({ inv, onSave, onSavePreview, onCancel, onViewHistory, invoiceC
           <Field label="Invoice Date">
             <input readOnly value={fmtDate(d.invDate)} style={inputStyle({ background:"#fffdf0",borderColor:"#d4a800" })} />
           </Field>
-        </div>
-      </Section>
-
-      {/* ── CLIENT INFORMATION ── */}
-      <Section label="CLIENT INFORMATION">
-        <div style={{ display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12 }}>
-          <Field label="Client Name *"><input value={d.client} onChange={e=>set("client",e.target.value)} placeholder="Client Name *" style={inputStyle()} /></Field>
-          <Field label="Phone *"><input value={d.phone} onChange={e=>set("phone",e.target.value)} placeholder="+880 1XXX-XXXXXX" style={inputStyle()} /></Field>
-          <Field label="Phone 2"><input value={d.phone2||""} onChange={e=>set("phone2",e.target.value)} placeholder="+880 1XXX-XXXXXX" style={inputStyle()} /></Field>
-          <Field label="Phone 3"><input value={d.phone3||""} onChange={e=>set("phone3",e.target.value)} placeholder="+880 1XXX-XXXXXX" style={inputStyle()} /></Field>
-          <Field label="Email"><input value={d.email||""} onChange={e=>set("email",e.target.value)} placeholder="email@example.com" style={inputStyle()} /></Field>
-          <Field label="Address"><input value={d.address||""} onChange={e=>set("address",e.target.value)} placeholder="City, Area, Street" style={inputStyle()} /></Field>
         </div>
       </Section>
 
@@ -478,176 +620,85 @@ function InvForm({ inv, onSave, onSavePreview, onCancel, onViewHistory, invoiceC
         </div>
       </Section>
 
-      {/* ── WEDDING EVENT DETAILS ── */}
-      {isWedding && (
-        <div style={{ ...card(), borderLeft:"4px solid "+C.maroon }}>
-          <div style={{ marginBottom:14 }}><span style={sectionBadge()}>💒 WEDDING EVENT DETAILS</span></div>
+      {/* ── CLIENT INFORMATION ── */}
+      <Section label="CLIENT INFORMATION">
+        <div style={{ display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:12 }}>
+          <Field label="Client Name *"><input value={d.client} onChange={e=>set("client",e.target.value)} placeholder="Client Name *" style={inputStyle()} /></Field>
+          <Field label="Phone *"><input value={d.phone} onChange={e=>set("phone",e.target.value)} placeholder="+880 1XXX-XXXXXX" style={inputStyle()} /></Field>
+          <Field label="Phone 2"><input value={d.phone2||""} onChange={e=>set("phone2",e.target.value)} placeholder="+880 1XXX-XXXXXX" style={inputStyle()} /></Field>
+          <Field label="Email"><input value={d.email||""} onChange={e=>set("email",e.target.value)} placeholder="email@example.com" style={inputStyle()} /></Field>
+        </div>
+        <div style={{ marginTop:12 }}>
+          <Field label="Address">
+            <textarea value={d.address||""} onChange={e=>set("address",e.target.value)} placeholder="House, Road, Area, City" rows={3} style={{ ...inputStyle(),resize:"vertical",fontFamily:"inherit" }} />
+          </Field>
+        </div>
+      </Section>
 
-          {/* Event Schedule */}
-          <SubSection label="📅 EVENT SCHEDULE">
-            <div style={{ display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12 }}>
-              <Field label={isWH?"Wedding Date *":"Event Date *"}>
-                <input type="date" value={d.evDate||""} onChange={e=>set("evDate",e.target.value)} style={inputStyle()} />
-              </Field>
-              <Field label="Time of Day">
-                <select value={d.wTod||""} onChange={e=>set("wTod",e.target.value)} style={inputStyle()}>
-                  <option value="">—</option>
-                  <option value="day">☀️ Day</option>
-                  <option value="night">🌙 Night</option>
-                </select>
-              </Field>
-              <Field label="Duration">
-                <select value={d.wDur||"Full Day"} onChange={e=>set("wDur",e.target.value)} style={inputStyle()}>
-                  <option>Full Day</option><option>Half Day (Morning)</option><option>Half Day (Evening)</option><option>Custom Hours</option>
-                </select>
-              </Field>
-              <Field label="Start Time"><input value={d.wStart||""} onChange={e=>set("wStart",e.target.value)} placeholder="e.g. 10:00 AM" style={inputStyle()} /></Field>
-              <Field label="End Time"><input value={d.wEnd||""} onChange={e=>set("wEnd",e.target.value)} placeholder="e.g. 10:00 PM" style={inputStyle()} /></Field>
-              <Field label="Guests *"><input type="number" value={d.wGuests||""} onChange={e=>set("wGuests",e.target.value)} placeholder="e.g. 300" style={inputStyle()} /></Field>
+      {/* ── COUPLE DETAILS (shared across Wedding/Holud) ── */}
+      {(isWedding || isHolud) && (
+        <Section label="👰🤵 COUPLE DETAILS">
+          <div style={{ marginBottom:12 }}>
+            <label style={{ fontSize:12,fontWeight:700,color:C.text,textTransform:"uppercase",letterSpacing:.5,display:"block",marginBottom:8 }}>Client is from *</label>
+            <div style={{ display:"flex",gap:8,flexWrap:"wrap" }}>
+              {["👰 Bride's Side","🤵 Groom's Side","🤝 Both Sides"].map(opt => {
+                const val = opt.replace(/^[^\s]+\s/,"");
+                return (
+                  <button key={val} onClick={()=>set("wSide",val)} style={{
+                    padding:"8px 18px",borderRadius:8,border:"1.5px solid",cursor:"pointer",fontSize:13,fontWeight:700,
+                    borderColor:d.wSide===val?C.maroon:C.border,
+                    background: d.wSide===val?C.maroon:C.white,
+                    color:      d.wSide===val?"#fff":C.text,
+                  }}>{opt}</button>
+                );
+              })}
             </div>
-          </SubSection>
-
-          {/* Couple Details */}
-          <SubSection label="👰🤵 COUPLE DETAILS">
-            <div style={{ marginBottom:12 }}>
-              <label style={{ fontSize:12,fontWeight:700,color:C.text,textTransform:"uppercase",letterSpacing:.5,display:"block",marginBottom:8 }}>Client is from *</label>
-              <div style={{ display:"flex",gap:8,flexWrap:"wrap" }}>
-                {["👰 Bride's Side","🤵 Groom's Side","🤝 Both Sides"].map(opt => {
-                  const val = opt.replace(/^[^\s]+\s/,"");
-                  return (
-                    <button key={val} onClick={()=>set("wSide",val)} style={{
-                      padding:"8px 18px",borderRadius:8,border:"1.5px solid",cursor:"pointer",fontSize:13,fontWeight:700,
-                      borderColor:d.wSide===val?C.maroon:C.border,
-                      background: d.wSide===val?C.maroon:C.white,
-                      color:      d.wSide===val?"#fff":C.text,
-                    }}>{opt}</button>
-                  );
-                })}
-              </div>
-            </div>
-            <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:12 }}>
-              <Field label="Bride's Name *"><input value={d.wBride||""} onChange={e=>set("wBride",e.target.value)} style={inputStyle()} /></Field>
-              <Field label="Bride's Religion">
-                <select value={d.wBrideRel||""} onChange={e=>set("wBrideRel",e.target.value)} style={inputStyle()}>
-                  {RELIGIONS.map(r=><option key={r}>{r}</option>)}
-                </select>
-              </Field>
-              <Field label="Groom's Name *"><input value={d.wGroom||""} onChange={e=>set("wGroom",e.target.value)} style={inputStyle()} /></Field>
-              <Field label="Groom's Religion">
-                <select value={d.wGroomRel||""} onChange={e=>set("wGroomRel",e.target.value)} style={inputStyle()}>
-                  {RELIGIONS.map(r=><option key={r}>{r}</option>)}
-                </select>
-              </Field>
-            </div>
-            <div style={{ marginTop:4 }}>
+          </div>
+          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:12 }}>
+            <Field label="Bride's Name *"><input value={d.wBride||""} onChange={e=>set("wBride",e.target.value)} style={inputStyle()} /></Field>
+            <Field label="Bride's Religion">
+              <select value={d.wBrideRel||""} onChange={e=>set("wBrideRel",e.target.value)} style={inputStyle()}>
+                {RELIGIONS.map(r=><option key={r}>{r}</option>)}
+              </select>
+            </Field>
+            <Field label="Groom's Name *"><input value={d.wGroom||""} onChange={e=>set("wGroom",e.target.value)} style={inputStyle()} /></Field>
+            <Field label="Groom's Religion">
+              <select value={d.wGroomRel||""} onChange={e=>set("wGroomRel",e.target.value)} style={inputStyle()}>
+                {RELIGIONS.map(r=><option key={r}>{r}</option>)}
+              </select>
+            </Field>
+          </div>
+          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginTop:12 }}>
+            <div>
               <label style={{ fontSize:13,fontWeight:700,color:C.text,display:"block",marginBottom:6 }}>
-                💑 Couple's WhatsApp Number <span style={{ fontSize:11,color:C.dim,fontWeight:400 }}>(for anniversary wishes & offers)</span>
+                💑 Couple's WhatsApp Number <span style={{ fontSize:11,color:C.dim,fontWeight:400 }}>(for anniversary wishes)</span>
               </label>
               <input value={d.wCouplePhone||""} onChange={e=>set("wCouplePhone",e.target.value)}
-                placeholder="+880 1XXX-XXXXXX" style={{ ...inputStyle(),maxWidth:320 }} />
+                placeholder="+880 1XXX-XXXXXX" style={inputStyle()} />
             </div>
-            <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginTop:12 }}>
-              <Field label="Client's Relation *">
-                <select value={d.wRelation||""} onChange={e=>set("wRelation",e.target.value)} style={inputStyle()}>
-                  <option value="">— Select —</option>
-                  {RELATIONS.map(g=><optgroup key={g.label} label={g.label}>{g.opts.map(o=><option key={o}>{o}</option>)}</optgroup>)}
-                </select>
-              </Field>
-              <Field label="Venue / Hall Section">
-                <input value={d.wVenue||""} onChange={e=>set("wVenue",e.target.value)} placeholder="e.g. Main Hall, Garden" style={inputStyle()} />
-              </Field>
-            </div>
-          </SubSection>
-
-          {/* Tables & Waiters */}
-          <SubSection label="🪑 TABLES & WAITERS">
-            <div style={{ display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12 }}>
-              <Field label="Tables"><input type="number" value={d.wTables||""} onChange={e=>set("wTables",e.target.value)} placeholder="0" style={inputStyle()} /></Field>
-              <Field label="Waiters"><input type="number" value={d.wWaiters||""} onChange={e=>set("wWaiters",e.target.value)} placeholder="0" style={inputStyle()} /></Field>
-              <Field label="Price / Waiter (৳)"><input type="number" value={d.wWaiterPrice||""} onChange={e=>set("wWaiterPrice",e.target.value)} placeholder="0" style={inputStyle()} /></Field>
-              <Field label="Waiters Total (auto)">
-                <input readOnly value={wWaiterTotal>0?"৳"+wWaiterTotal.toLocaleString():""} placeholder="0" style={inputStyle({ background:"#f8f8f8" })} />
-              </Field>
-            </div>
-          </SubSection>
-
-          {/* Wedding Hall Rental */}
-          <SubSection label="🏛️ WEDDING / HALL RENTAL">
-            <Field label="Wedding / Hall Rental (৳)">
-              <input type="number" min="0" value={d.wRental||""} onChange={e=>set("wRental",e.target.value)} placeholder="0" style={inputStyle()} />
+            <Field label="Client's Relation *">
+              <select value={d.wRelation||""} onChange={e=>set("wRelation",e.target.value)} style={inputStyle()}>
+                <option value="">— Select —</option>
+                {RELATIONS.map(g=><optgroup key={g.label} label={g.label}>{g.opts.map(o=><option key={o}>{o}</option>)}</optgroup>)}
+              </select>
             </Field>
-          </SubSection>
-        </div>
+          </div>
+        </Section>
       )}
 
-      {/* ── HOLUD EVENT DETAILS ── */}
-      {isHolud && (
-        <div style={{ ...card(), borderLeft:"4px solid #d4a800" }}>
-          <div style={{ marginBottom:14 }}><span style={{ ...sectionBadge(), background:"#8a6200" }}>🌼 {isWH?"HOLUD PROGRAMME DETAILS":"HOLUD EVENT DETAILS"}</span></div>
-          {isWH && <p style={{ fontSize:12,color:"#c97f00",marginBottom:12 }}>Holud is a separate ceremony — its charge is listed separately in the bill.</p>}
-
-          <SubSection label="📅 EVENT SCHEDULE">
-            <div style={{ display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12 }}>
-              <Field label="Holud Date *"><input type="date" value={d.hDate||""} onChange={e=>set("hDate",e.target.value)} style={inputStyle()} /></Field>
-              <Field label="Booking Slot">
-                <select value={d.hSlot||""} onChange={e=>set("hSlot",e.target.value)} style={inputStyle()}>
-                  <option value="">— Select —</option>
-                  <option>Morning (9 AM – 1 PM)</option><option>Afternoon (1 PM – 5 PM)</option>
-                  <option>Evening (5 PM – 9 PM)</option><option>Full Day</option>
-                </select>
-              </Field>
-              <Field label="Ceremony Time"><input value={d.hTime||""} onChange={e=>set("hTime",e.target.value)} placeholder="e.g. 4:00 PM – 9:00 PM" style={inputStyle()} /></Field>
-              <Field label="Guests *"><input type="number" value={d.hGuests||""} onChange={e=>set("hGuests",e.target.value)} placeholder="e.g. 150" style={inputStyle()} /></Field>
-              <Field label="Tables"><input type="number" value={d.hTables||""} onChange={e=>set("hTables",e.target.value)} placeholder="0" style={inputStyle()} /></Field>
-            </div>
-          </SubSection>
-
-          {!isWH && (
-            <SubSection label="👰🤵 COUPLE DETAILS">
-              <div style={{ marginBottom:12 }}>
-                <label style={{ fontSize:12,fontWeight:700,color:C.text,textTransform:"uppercase",letterSpacing:.5,display:"block",marginBottom:8 }}>Client is from</label>
-                <div style={{ display:"flex",gap:8,flexWrap:"wrap" }}>
-                  {["👰 Bride's Side","🤵 Groom's Side","🤝 Both Sides"].map(opt=>{
-                    const val=opt.replace(/^[^\s]+\s/,"");
-                    return <button key={val} onClick={()=>set("hSide",val)} style={{ padding:"8px 18px",borderRadius:8,border:"1.5px solid",cursor:"pointer",fontSize:13,fontWeight:700,borderColor:d.hSide===val?"#8a6200":C.border,background:d.hSide===val?"#8a6200":C.white,color:d.hSide===val?"#fff":C.text }}>{opt}</button>;
-                  })}
-                </div>
-              </div>
-              <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:12 }}>
-                <Field label="Bride's Name"><input value={d.hBride||""} onChange={e=>set("hBride",e.target.value)} style={inputStyle()} /></Field>
-                <Field label="Bride's Religion"><select value={d.hBrideRel||""} onChange={e=>set("hBrideRel",e.target.value)} style={inputStyle()}>{RELIGIONS.map(r=><option key={r}>{r}</option>)}</select></Field>
-                <Field label="Groom's Name"><input value={d.hGroom||""} onChange={e=>set("hGroom",e.target.value)} style={inputStyle()} /></Field>
-                <Field label="Groom's Religion"><select value={d.hGroomRel||""} onChange={e=>set("hGroomRel",e.target.value)} style={inputStyle()}>{RELIGIONS.map(r=><option key={r}>{r}</option>)}</select></Field>
-              </div>
-              <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginTop:8 }}>
-                <Field label="Client's Relation"><select value={d.hRelation||""} onChange={e=>set("hRelation",e.target.value)} style={inputStyle()}><option value="">— Select —</option>{RELATIONS.map(g=><optgroup key={g.label} label={g.label}>{g.opts.map(o=><option key={o}>{o}</option>)}</optgroup>)}</select></Field>
-                <Field label="Venue / Hall Section"><input value={d.hVenue||""} onChange={e=>set("hVenue",e.target.value)} placeholder="e.g. Garden" style={inputStyle()} /></Field>
-              </div>
-            </SubSection>
-          )}
-
-          <SubSection label="🪑 WAITERS">
-            <div style={{ display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12 }}>
-              <Field label="Waiters"><input type="number" value={d.hWaiters||""} onChange={e=>set("hWaiters",e.target.value)} placeholder="0" style={inputStyle()} /></Field>
-              <Field label="Price / Waiter (৳)"><input type="number" value={d.hWaiterPrice||""} onChange={e=>set("hWaiterPrice",e.target.value)} placeholder="0" style={inputStyle()} /></Field>
-              <Field label="Waiters Total (auto)"><input readOnly value={hWaiterTotal>0?"৳"+hWaiterTotal.toLocaleString():""} placeholder="0" style={inputStyle({ background:"#f8f8f8" })} /></Field>
-            </div>
-          </SubSection>
-
-          {/* Holud Hall Rental */}
-          <SubSection label="🏛️ HOLUD / HALL RENTAL">
-            <Field label="Holud / Hall Rental (৳)">
-              <input type="number" min="0" value={d.hRental||""} onChange={e=>set("hRental",e.target.value)} placeholder="0" style={inputStyle()} />
-            </Field>
-          </SubSection>
-        </div>
-      )}
+      {/* ── EVENT DETAILS — Holud first when both selected ── */}
+      {isWH ? (
+        <>
+          {renderHoludCard()}
+          {renderWeddingCard()}
+        </>
+      ) : isHolud ? renderHoludCard() : isWedding ? renderWeddingCard() : null}
 
       {/* ── GENERIC EVENT DETAILS ── */}
       {isGeneric && (
         <Section label="📋 EVENT DETAILS">
           <div style={{ display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12,marginBottom:12 }}>
-            <Field label="Event Date *"><input type="date" value={d.evDate||""} onChange={e=>set("evDate",e.target.value)} style={inputStyle()} /></Field>
+            <Field label="Event Date *"><input type="date" min={todayStr} value={d.evDate||""} onChange={e=>set("evDate",e.target.value)} style={inputStyle()} /></Field>
             <Field label="Time of Day">
               <select value={d.wTod||""} onChange={e=>set("wTod",e.target.value)} style={inputStyle()}>
                 <option value="">—</option><option value="day">☀️ Day</option><option value="night">🌙 Night</option>
@@ -693,8 +744,9 @@ function InvForm({ inv, onSave, onSavePreview, onCancel, onViewHistory, invoiceC
             const rowBg     = isUnanswered ? "#fffbf0" : isExcluded ? "#fff8f8" : "#fafdf7";
             const rowBorder = isUnanswered ? "#f0b429" : isExcluded ? "#f5c5c5" : "#d4edda";
             const accentClr = isUnanswered ? "#f0b429" : isExcluded ? C.red : meta.bg?.includes("7B1212") ? C.maroon : meta.bg?.includes("6030b0") ? "#6030b0" : "#1a7a40";
+            const isHallRental = s.desc === "Hall Rental";
             return (
-              <div key={s.desc} style={{ display:"flex", alignItems:"center", gap:14, padding:"12px 10px", margin:"6px 0", borderRadius:10, background:rowBg, border:`2px solid ${rowBorder}`, position:"relative", overflow:"hidden", transition:"border-color .2s, background .2s" }}>
+              <div key={s.desc} style={{ display:"flex", alignItems:"center", gap:14, padding: isHallRental?"16px 10px":"12px 10px", margin:"6px 0", borderRadius:10, background: isHallRental?"#fffaf0":rowBg, border:`${isHallRental?3:2}px solid ${isHallRental?C.gold:rowBorder}`, position:"relative", overflow:"hidden", transition:"border-color .2s, background .2s", boxShadow: isHallRental?"0 3px 12px rgba(201,168,76,.25)":"none" }}>
                 {/* Left accent stripe */}
                 <div style={{ position:"absolute", left:0, top:0, bottom:0, width:5, background:accentClr }} />
                 <div style={{ paddingLeft:8, display:"flex", alignItems:"center", gap:14, flex:1 }}>
@@ -759,9 +811,9 @@ function InvForm({ inv, onSave, onSavePreview, onCancel, onViewHistory, invoiceC
                   </div>
                 </div>
                 <div style={{ textAlign:"right", flexShrink:0 }}>
-                  <div style={{ fontSize:10, fontWeight:800, color: isExcluded ? "#ccc" : C.maroon, textTransform:"uppercase", letterSpacing:.5, marginBottom:5 }}>Amount (৳)</div>
-                  <input type="number" min="0" value={s.rate||0} onChange={e=>setFixedRate(s.desc,e.target.value)} disabled={isExcluded||isUnanswered}
-                    style={{ width:150, padding:"10px 14px", border:`2px solid ${isExcluded||isUnanswered ? "#eee" : C.gold}`, borderRadius:9, fontSize:16, fontWeight:800, textAlign:"right", fontFamily:"inherit", outline:"none", boxSizing:"border-box", background:isExcluded||isUnanswered?"#f8f8f8":"#fffdf5", color:isExcluded||isUnanswered?"#ccc":C.text, boxShadow:isExcluded||isUnanswered?"none":"0 2px 8px rgba(201,168,76,.2)" }} />
+                  <div style={{ fontSize: isHallRental?11:10, fontWeight:800, color: isExcluded ? "#ccc" : C.maroon, textTransform:"uppercase", letterSpacing:.5, marginBottom:5 }}>Amount (৳)</div>
+                  <input type="number" min="0" value={s.rate||""} onChange={e=>setFixedRate(s.desc,e.target.value)} disabled={isExcluded||isUnanswered} placeholder="0"
+                    style={{ width: isHallRental?180:150, padding: isHallRental?"14px 16px":"10px 14px", border:`${isHallRental?3:2}px solid ${isExcluded||isUnanswered ? "#eee" : C.gold}`, borderRadius:9, fontSize: isHallRental?20:16, fontWeight:800, textAlign:"right", fontFamily:"inherit", outline:"none", boxSizing:"border-box", background:isExcluded||isUnanswered?"#f8f8f8":"#fffdf5", color:isExcluded||isUnanswered?"#ccc":C.text, boxShadow:isExcluded||isUnanswered?"none":"0 2px 8px rgba(201,168,76,.2)" }} />
                 </div>
               </div>
             );
@@ -772,7 +824,7 @@ function InvForm({ inv, onSave, onSavePreview, onCancel, onViewHistory, invoiceC
               <input value={s.desc||""} onChange={e=>setCustom(ci,"desc",e.target.value)} placeholder="Service description" style={{ ...inputStyle(), flex:1, border:"1.5px solid #d0c8f0" }} />
               <div style={{ flexShrink:0 }}>
                 <div style={{ fontSize:9, color:C.dim, fontWeight:700, textTransform:"uppercase", marginBottom:2 }}>Amount (৳)</div>
-                <input type="number" min="0" value={s.rate||0} onChange={e=>setCustom(ci,"rate",e.target.value)} style={{ ...inputStyle(), width:140, textAlign:"right", border:`2px solid ${C.gold}` }} />
+                <input type="number" min="0" value={s.rate||""} onChange={e=>setCustom(ci,"rate",e.target.value)} style={{ ...inputStyle(), width:140, textAlign:"right", border:`2px solid ${C.gold}` }} />
               </div>
               <button onClick={()=>removeCustom(ci)} style={{ background:"none", border:"none", cursor:"pointer", color:C.red, fontSize:20, padding:"4px", flexShrink:0 }}>✕</button>
             </div>
@@ -812,13 +864,13 @@ function InvForm({ inv, onSave, onSavePreview, onCancel, onViewHistory, invoiceC
           )}
           {isWedding && extras.wRental > 0 && (
             <div style={{ display:"flex",justifyContent:"space-between",fontSize:14,marginBottom:12 }}>
-              <span>Wedding / Hall Rental</span><span style={{ fontWeight:700 }}>৳{extras.wRental.toLocaleString()}</span>
+              <span>{et?.v||"Wedding"} / Hall Rental</span><span style={{ fontWeight:700 }}>৳{extras.wRental.toLocaleString()}</span>
             </div>
           )}
           <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:14,marginBottom:14 }}>
             <span>Discount (৳)</span>
             <div style={{ display:"flex",alignItems:"center",gap:8 }}>
-              <input type="number" min="0" value={d.discount||0} onChange={e=>set("discount",parseFloat(e.target.value)||0)}
+              <input type="number" min="0" value={d.discount||""} onChange={e=>set("discount",parseFloat(e.target.value)||0)}
                 style={{ width:120,padding:"7px 10px",border:"1.5px solid "+C.border,borderRadius:7,fontSize:14,textAlign:"right",fontFamily:"inherit",outline:"none" }} />
               <span style={{ color:C.dim }}>৳</span>
             </div>
@@ -844,7 +896,7 @@ function InvForm({ inv, onSave, onSavePreview, onCancel, onViewHistory, invoiceC
                 )}
                 {isWedding && wWaiterTotal > 0 && (
                   <div style={{ fontSize:12,color:"#666",marginBottom:4,display:"flex",justifyContent:"space-between" }}>
-                    <span>Wedding {d.wWaiters||0}×{(parseFloat(d.wWaiterPrice)||0).toLocaleString()}</span><span style={{ fontWeight:600 }}>৳{wWaiterTotal.toLocaleString()}</span>
+                    <span>{et?.v||"Wedding"} {d.wWaiters||0}×{(parseFloat(d.wWaiterPrice)||0).toLocaleString()}</span><span style={{ fontWeight:600 }}>৳{wWaiterTotal.toLocaleString()}</span>
                   </div>
                 )}
                 <div style={{ borderTop:"1px dashed #c9a84c",marginTop:7,paddingTop:7,display:"flex",justifyContent:"space-between" }}>
@@ -879,7 +931,7 @@ function InvForm({ inv, onSave, onSavePreview, onCancel, onViewHistory, invoiceC
       <Section label="💳 PAYMENT — HALL REVENUE">
         <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:14 }}>
           <Field label="Hall Advance Paid (৳)">
-            <input type="number" min="0" value={d.adv||0} onChange={e=>set("adv",parseFloat(e.target.value)||0)} style={inputStyle()} />
+            <input type="number" min="0" value={d.adv||""} onChange={e=>set("adv",parseFloat(e.target.value)||0)} style={inputStyle()} />
           </Field>
           <Field label="Hall Balance Due (৳)">
             <input readOnly value={"৳ "+balance.toLocaleString()} style={inputStyle({ background:"#fffdf0",borderColor:"#d4a800",fontWeight:700,color:C.maroon })} />
@@ -913,7 +965,7 @@ function InvForm({ inv, onSave, onSavePreview, onCancel, onViewHistory, invoiceC
         <Section label="🍽️ PAYMENT — WAITER COST (Separate, Pass-through)">
           <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:14 }}>
             <Field label="Waiter Cost Paid (৳)">
-              <input type="number" min="0" value={d.waiterPaid||0} onChange={e=>set("waiterPaid",parseFloat(e.target.value)||0)} style={inputStyle()} />
+              <input type="number" min="0" value={d.waiterPaid||""} onChange={e=>set("waiterPaid",parseFloat(e.target.value)||0)} style={inputStyle()} />
             </Field>
             <Field label="Waiter Cost Balance (৳)">
               <input readOnly value={"৳ "+waiterBalance.toLocaleString()} style={inputStyle({ background:"#fafafa",borderColor:"#ccc",fontWeight:700,color:"#666" })} />
@@ -993,20 +1045,37 @@ function InvForm({ inv, onSave, onSavePreview, onCancel, onViewHistory, invoiceC
           </div>
         );
       })()}
+
+      {/* Floating save button — stays on screen while scrolling, so an incomplete
+          invoice can be saved as a draft at any point and resumed later. */}
+      <button
+        onClick={()=>onSave(d,true)}
+        title="Save your progress now — come back and finish this invoice later from Invoice History."
+        style={{
+          position:"fixed", bottom:24, right:24, zIndex:150,
+          display:"flex", alignItems:"center", gap:8,
+          padding:"13px 22px", borderRadius:30, border:"none",
+          background:"linear-gradient(135deg,#c9a84c,#e8c96c)", color:"#1a1a2e",
+          fontWeight:800, fontSize:13, fontFamily:"inherit", cursor:"pointer",
+          boxShadow:"0 6px 20px rgba(201,168,76,.45)",
+        }}
+      >💾 Save &amp; Continue Later</button>
     </div>
   );
 }
 
 // ─── Invoice Detail / Print View ──────────────────────────────────────────────
-function InvDetail({ inv, onEdit, onBack, onDelete, deleteModal, delPass, setDelPass, confirmDelete, setDeleteModal, notify, setInvoices, invoices, isMobile }) {
+function InvDetail({ inv, setDetailInv, onEdit, onBack, onDelete, deleteModal, delPass, setDelPass, confirmDelete, setDeleteModal, notify, setInvoices, invoices, getNextNum, isMobile }) {
   const [payModal, setPayModal]   = useState(false);
-  const [payAmt, setPayAmt]       = useState(0);
+  const [payAmt, setPayAmt]       = useState("");
   const [payMethod, setPayMethod] = useState("Cash");
   const [payDone, setPayDone]     = useState(null); // { newPaid, newBal, status } after payment
 
   const [waiterPayModal, setWaiterPayModal] = useState(false);
-  const [waiterPayAmt, setWaiterPayAmt]     = useState(0);
+  const [waiterPayAmt, setWaiterPayAmt]     = useState("");
   const [waiterPayDone, setWaiterPayDone]   = useState(null);
+
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   const et    = EV_TYPES.find(t=>t.v===inv.evType);
   const grand = inv.grand || 0;
@@ -1025,9 +1094,12 @@ function InvDetail({ inv, onEdit, onBack, onDelete, deleteModal, delPass, setDel
     const newPaid = paid + a;
     const newBal  = Math.max(0, grand - newPaid);
     const status  = newBal === 0 ? "Paid" : "Partial";
-    setInvoices(prev => prev.map(i => i.id===inv.id ? {...i,adv:newPaid,balance:newBal,payStatus:status,advMethod:payMethod} : i));
+    const updated = {...inv,adv:newPaid,balance:newBal,payStatus:status,advMethod:payMethod};
+    setInvoices(prev => prev.map(i => i.id===inv.id ? updated : i));
+    setDetailInv && setDetailInv(updated);
     notify("Hall payment recorded ✅","success");
     setPayModal(false);
+    setPayAmt("");
     setPayDone({ newPaid, newBal, status });
   }
 
@@ -1037,13 +1109,46 @@ function InvDetail({ inv, onEdit, onBack, onDelete, deleteModal, delPass, setDel
     const newPaid = waiterPaid + a;
     const newBal  = Math.max(0, waiterTotal - newPaid);
     const status  = newBal === 0 ? "Paid" : "Partial";
-    setInvoices(prev => prev.map(i => i.id===inv.id ? {...i,waiterPaid:newPaid,waiterBalance:newBal,waiterPayStatus:status} : i));
+    const updated = {...inv,waiterPaid:newPaid,waiterBalance:newBal,waiterPayStatus:status};
+    setInvoices(prev => prev.map(i => i.id===inv.id ? updated : i));
+    setDetailInv && setDetailInv(updated);
     notify("Waiter cost collection recorded ✅","success");
     setWaiterPayModal(false);
+    setWaiterPayAmt("");
     setWaiterPayDone({ newPaid, newBal, status });
   }
 
+  function confirmAndPrint() {
+    // Assign the real, sequential ACH-000xx number right now — not before — so
+    // confirmed invoices always stay gapless regardless of how many drafts were
+    // started and abandoned along the way.
+    const oldNum = inv.num;
+    const needsRealNum = !/^ACH-\d+$/.test(oldNum||"");
+    const newNum = needsRealNum && getNextNum ? getNextNum() : oldNum;
+    const updated = {...inv, confirmed:true, num:newNum};
+    setInvoices(prev => prev.map(i => i.id===inv.id ? updated : i));
+    setDetailInv && setDetailInv(updated);
+    notify("Invoice confirmed ✅","success");
+    setTimeout(() => {
+      const html = buildInvoiceHtml(true, true).split(oldNum).join(newNum);
+      const w = window.open("","_blank");
+      w.document.write(html);
+      w.document.close();
+    }, 50);
+  }
+
   function printInvoice(withTerms = true) {
+    const html = buildInvoiceHtml(withTerms, true);
+    const w = window.open("","_blank");
+    w.document.write(html);
+    w.document.close();
+  }
+
+  function previewInvoice() {
+    setPreviewOpen(true);
+  }
+
+  function buildInvoiceHtml(withTerms = true, autoPrint = true) {
     const logoSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 190 90" width="72" height="34">
       <polygon points="8,78 19,78 46,18 35,18" fill="#f2dfc0"/>
       <polygon points="35,18 46,18 71,78 60,78" fill="#f2dfc0"/>
@@ -1078,10 +1183,12 @@ function InvDetail({ inv, onEdit, onBack, onDelete, deleteModal, delPass, setDel
       return `<tr style="border-bottom:1px solid #eee"><td style="padding:8px 13px;font-size:13px;color:#111;font-weight:500">${s.desc}</td><td style="padding:8px 13px;text-align:right;font-size:13px;font-weight:700;color:#111">৳ ${(parseFloat(s.rate)||0).toLocaleString()}</td></tr>`;
     }).join('');
 
+    const wLabel = et?.v || 'Wedding';
+
     // Hall Rental is real hall revenue — keep it in the main charges table. Holud listed before Wedding.
     const rentalRows =
       (isHolud   && extras.hRental > 0 ? itemRow('Holud / Hall Rental', extras.hRental) : '') +
-      (isWedding && extras.wRental > 0 ? itemRow('Wedding / Hall Rental', extras.wRental) : '');
+      (isWedding && extras.wRental > 0 ? itemRow(`${wLabel} / Hall Rental`, extras.wRental) : '');
 
     const serviceRows = baseServiceRows + rentalRows;
 
@@ -1089,7 +1196,7 @@ function InvDetail({ inv, onEdit, onBack, onDelete, deleteModal, delPass, setDel
     // Kept in its own box, shown separately from the hall charges table, Holud first.
     const waiterLines = [
       isHolud   && extras.hWaiters > 0 ? ['Holud', inv.hWaiters, inv.hWaiterPrice, extras.hWaiters] : null,
-      isWedding && extras.wWaiters > 0 ? ['Wedding', inv.wWaiters, inv.wWaiterPrice, extras.wWaiters] : null,
+      isWedding && extras.wWaiters > 0 ? [wLabel, inv.wWaiters, inv.wWaiterPrice, extras.wWaiters] : null,
     ].filter(Boolean);
     const waiterTotal = waiterLines.reduce((s,[,,,amt])=>s+amt, 0);
 
@@ -1192,6 +1299,7 @@ function InvDetail({ inv, onEdit, onBack, onDelete, deleteModal, delPass, setDel
           ${(inv.wGuests||inv.wTables)?`<div style="display:flex;gap:6px;margin-bottom:4px"><span style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#7B1212;font-weight:700;min-width:90px">${isHolud ? 'WEDDING G/T' : 'GUESTS/TABLES'}</span><span style="font-size:13px;color:#111;font-weight:600">${inv.wGuests?inv.wGuests+' guests':''}${(inv.wGuests&&inv.wTables)?' · ':''}${inv.wTables?inv.wTables+' tables':''}</span></div>`:''}
           ${(inv.wBride||inv.wGroom)?`<div style="margin-top:8px;padding-top:8px;border-top:1px solid #eee;font-size:11px;color:#555">${inv.wBride?`<div><strong style="color:#7B1212">Bride:</strong> ${inv.wBride}</div>`:''}${inv.wGroom?`<div><strong style="color:#7B1212">Groom:</strong> ${inv.wGroom}</div>`:''}</div>`:''}
           ${inv.wDur?`<div style="display:flex;gap:6px;margin-bottom:4px"><span style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#7B1212;font-weight:700;min-width:90px">SLOT</span><span style="font-size:13px;color:#111;font-weight:600">${inv.wDur}</span></div>`:''}
+          ${(inv.wStart||inv.wEnd)?`<div style="display:flex;gap:6px;margin-bottom:4px"><span style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#7B1212;font-weight:700;min-width:90px">TIME</span><span style="font-size:13px;color:#111;font-weight:600">${inv.wStart||'?'}${(inv.wStart||inv.wEnd)?' – ':''}${inv.wEnd||'?'}</span></div>`:''}
         </div>
       </div>
 
@@ -1303,12 +1411,10 @@ function InvDetail({ inv, onEdit, onBack, onDelete, deleteModal, delPass, setDel
       </div>
     </div>` : ''}
 
-    <script>window.onload=function(){window.print();}</script>
+    ${autoPrint ? '<script>window.onload=function(){window.print();}</script>' : ''}
     </body></html>`;
 
-    const w = window.open("","_blank");
-    w.document.write(html);
-    w.document.close();
+    return html;
   }
 
   return (
@@ -1316,13 +1422,32 @@ function InvDetail({ inv, onEdit, onBack, onDelete, deleteModal, delPass, setDel
       <div className="hall-btn-row" style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18,flexWrap:"wrap",gap:10 }}>
         <button onClick={onBack} style={btnStyle()}>‹ Back</button>
         <div className="hall-btn-row" style={{ display:"flex",gap:8,flexWrap:"wrap" }}>
-          {bal>0&&<button onClick={()=>setPayModal(true)} style={btnStyle("primary","sm")}>💳 Collect Hall Payment</button>}
-          {waiterBal>0&&<button onClick={()=>setWaiterPayModal(true)} style={{ ...btnStyle("","sm"),borderColor:"#c9a84c",color:"#8a6200" }}>🍽️ Collect Waiter Cost</button>}
-          {inv.isLead && <button onClick={onEdit}  style={btnStyle("","sm")}>✏️ Edit</button>}
-          <button onClick={()=>printInvoice(true)}  style={btnStyle("","sm")}>🖨 Print Booking</button>
-          <button onClick={()=>printInvoice(false)} style={btnStyle("","sm")}>🧾 Reprint Receipt</button>
+          {inv.confirmed && bal>0 && <button onClick={()=>setPayModal(true)} style={btnStyle("primary","sm")}>💳 Collect Hall Payment</button>}
+          {inv.confirmed && waiterBal>0 && <button onClick={()=>setWaiterPayModal(true)} style={{ ...btnStyle("","sm"),borderColor:"#c9a84c",color:"#8a6200" }}>🍽️ Collect Waiter Cost</button>}
+          {(inv.isLead || !inv.confirmed) && <button onClick={onEdit}  style={btnStyle("","sm")}>✏️ Edit</button>}
+          {!inv.confirmed && !inv.isLead && (
+            <button onClick={confirmAndPrint} style={{ ...btnStyle("primary","sm"),background:"#1a7a40",borderColor:"#1a7a40" }}>✅ Confirm &amp; Print</button>
+          )}
+          {inv.isLead && <>
+            <button onClick={()=>printInvoice(true)}  style={btnStyle("","sm")}>🖨 Print Booking</button>
+            <button onClick={()=>printInvoice(false)} style={btnStyle("","sm")}>🧾 Reprint Receipt</button>
+          </>}
+          {inv.confirmed && <>
+            <button onClick={previewInvoice} style={btnStyle("","sm")}>👁 Preview</button>
+            <button onClick={()=>printInvoice(false)} style={btnStyle("","sm")}>🧾 Reprint</button>
+          </>}
         </div>
       </div>
+
+      {!inv.confirmed && !inv.isLead && (
+        <div style={{ marginBottom:14,padding:"14px 18px",borderRadius:10,background:"#fff8e1",border:"1.5px solid #f0b429",display:"flex",alignItems:"center",gap:10 }}>
+          <span style={{ fontSize:22 }}>🔎</span>
+          <div>
+            <div style={{ fontWeight:800,color:"#7a4a00",fontSize:14 }}>Preview — Not Yet Confirmed</div>
+            <div style={{ fontSize:12,color:"#7a4a00",marginTop:2 }}>Review every detail below. If something is wrong, click <strong>Edit</strong> to fix it and come back. Once everything looks correct, click <strong>Confirm &amp; Print</strong> to finalize this invoice.</div>
+          </div>
+        </div>
+      )}
 
       {/* Post-payment banner */}
       {payDone && (
@@ -1360,94 +1485,25 @@ function InvDetail({ inv, onEdit, onBack, onDelete, deleteModal, delPass, setDel
         </div>
       )}
 
-      {/* Invoice header */}
+      {/* Quick status strip */}
       <div style={card({ marginBottom:14 })}>
-        <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:14 }}>
+        <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:10 }}>
           <div>
             <div style={{ fontSize:22,fontWeight:800,fontFamily:"'Playfair Display',serif",color:C.maroon }}>Invoice #{inv.num}</div>
-            <div style={{ fontSize:12,color:C.dim }}>Date: {fmtDate(inv.invDate)}</div>
+            <div style={{ fontSize:12,color:C.dim }}>{inv.client} · {inv.evType} · {fmtDate(inv.evDate)}</div>
             {inv.isLead&&<span style={{ fontSize:10,fontWeight:800,background:"#fef3c7",color:"#92400e",padding:"2px 8px",borderRadius:20,border:"1px solid #fcd34d" }}>LEAD</span>}
           </div>
-          <div style={{ textAlign:"right" }}>
-            <div style={{ display:"flex",alignItems:"center",gap:8,justifyContent:"flex-end" }}>
-              <div style={{ width:32,height:32,borderRadius:8,background:et?.bg,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,border:"1.5px solid "+(et?.border||"#ccc") }}>{et?.i}</div>
-              <div style={{ fontSize:14,fontWeight:800,color:et?.accent }}>{inv.evType}</div>
-            </div>
-            <div style={{ fontSize:11,color:C.dim,marginTop:4 }}>{inv.evDate}</div>
-          </div>
-        </div>
-        <div className="hall-2col" style={{ display:"grid",gridTemplateColumns: isMobile?"1fr":"1fr 1fr",gap:14 }}>
-          <div>
-            <div style={{ fontSize:10,fontWeight:800,color:C.dim,textTransform:"uppercase",marginBottom:5 }}>Client</div>
-            <div style={{ fontWeight:700 }}>{inv.client}</div>
-            <div style={{ fontSize:12,color:C.dim }}>{inv.phone}{inv.phone2?" · "+inv.phone2:""}{inv.phone3?" · "+inv.phone3:""}</div>
-            {inv.email&&<div style={{ fontSize:12,color:C.dim }}>{inv.email}</div>}
-            {inv.address&&<div style={{ fontSize:12,color:C.dim }}>{inv.address}</div>}
-          </div>
-          <div>
-            <div style={{ fontSize:10,fontWeight:800,color:C.dim,textTransform:"uppercase",marginBottom:5 }}>Event</div>
-            <div style={{ fontWeight:700 }}>{inv.guests ? inv.guests+" guests" : "—"}</div>
-            {inv.hearAbout&&<div style={{ fontSize:12,color:C.dim }}>Via: {inv.hearAbout}</div>}
-          </div>
-        </div>
-        {(inv.wGroomName||inv.wBrideName)&&<div style={{ background:"#fff0f0",padding:10,borderRadius:8,marginTop:10,fontSize:12 }}>
-          <strong style={{ color:C.maroon }}>💒 Wedding:</strong> {inv.wGroomName} & {inv.wBrideName}
-          {inv.wGroomPhone&&<span style={{ color:C.dim }}> · G: {inv.wGroomPhone}</span>}
-          {inv.wBridePhone&&<span style={{ color:C.dim }}> · B: {inv.wBridePhone}</span>}
-        </div>}
-        {(inv.hGroomName||inv.hBrideName)&&<div style={{ background:"#fffbe8",padding:10,borderRadius:8,marginTop:6,fontSize:12 }}>
-          <strong style={{ color:"#8a6200" }}>🌼 Holud:</strong> {inv.hGroomName} & {inv.hBrideName}
-        </div>}
-        {inv.stageImgData&&<img src={inv.stageImgData} alt="stage" style={{ maxWidth:"100%",maxHeight:160,borderRadius:8,marginTop:10 }} />}
-      </div>
-
-      {/* Services */}
-      <div style={card({ padding:0,marginBottom:14 })}>
-        <div style={{ padding:"12px 16px",borderBottom:"1px solid "+C.border,fontWeight:800,fontSize:13,color:C.maroon }}>💼 Services & Charges</div>
-        <table style={{ width:"100%",borderCollapse:"collapse",fontSize:13 }}>
-          <thead><tr style={{ background:C.maroon }}>
-            <th style={{ padding:"8px 14px",textAlign:"left",fontSize:10,textTransform:"uppercase",color:"#f2dfc0",fontWeight:700 }}>Description</th>
-            <th style={{ padding:"8px 14px",textAlign:"right",fontSize:10,textTransform:"uppercase",color:"#f2dfc0",fontWeight:700,width:130 }}>Amount</th>
-          </tr></thead>
-          <tbody>
-            {(inv.services||[]).filter(s=>s.included!==false).map((s,i)=>(
-              <tr key={i} style={{ borderBottom:"1px solid "+C.border }}>
-                <td style={{ padding:"9px 14px" }}>{s.desc}</td>
-                <td style={{ padding:"9px 14px",textAlign:"right",fontWeight:700 }}>৳{(parseFloat(s.rate)||0).toLocaleString()}</td>
-              </tr>
-            ))}
-            {(inv.discount>0)&&<tr style={{ background:"#fff5f5" }}>
-              <td style={{ padding:"7px 14px",color:"#900",fontWeight:700 }}>Discount</td>
-              <td style={{ padding:"7px 14px",textAlign:"right",fontWeight:800,color:"#900" }}>– ৳{(inv.discount||0).toLocaleString()}</td>
-            </tr>}
-            <tr style={{ background:"#f8f6f0",fontWeight:800 }}>
-              <td style={{ padding:"10px 14px",textAlign:"right" }}>Grand Total</td>
-              <td style={{ padding:"10px 14px",textAlign:"right",color:C.red,fontSize:15 }}>৳{grand.toLocaleString()}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      {/* Payment */}
-      <div style={card()}>
-        <div style={{ fontWeight:800,fontSize:13,color:C.maroon,marginBottom:14 }}>💳 Payment Summary</div>
-        <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:14,marginBottom:12 }}>
-          {[["Grand Total", "৳"+grand.toLocaleString(), C.gold],
-            ["Advance Paid", "৳"+paid.toLocaleString()+" ("+(inv.advMethod||"Cash")+")", C.green],
-            ["Balance Due", "৳"+bal.toLocaleString(), bal>0?C.red:C.green]].map(([l,v,c])=>(
-            <div key={l} style={{ textAlign:"center",padding:"12px 0" }}>
-              <div style={{ fontSize:17,fontWeight:800,color:c }}>{v}</div>
-              <div style={{ fontSize:10,color:C.dim }}>{l}</div>
-            </div>
-          ))}
-        </div>
-        <div style={{ textAlign:"center" }}>
           <span style={{ padding:"6px 18px",borderRadius:20,fontSize:12,fontWeight:800,
             background:ps.bg,color:ps.color,border:"1.5px solid "+ps.border }}>
             {ps.icon} {inv.payStatus}
           </span>
         </div>
-        {inv.note&&<div style={{ fontSize:12,color:C.dim,marginTop:10,textAlign:"center" }}>Note: {inv.note}</div>}
+      </div>
+
+      {/* Full invoice replica — exactly what the customer receives */}
+      <div style={card({ padding:0,marginBottom:14,overflow:"hidden" })}>
+        <div style={{ padding:"10px 16px",borderBottom:"1px solid "+C.border,fontWeight:800,fontSize:12,color:C.maroon,background:"#faf8f3" }}>📄 Invoice Preview — exactly as the customer receives it</div>
+        <iframe title="Invoice preview" srcDoc={buildInvoiceHtml(false,false)} style={{ width:"100%", height:1400, border:"none", display:"block" }} />
       </div>
 
       {payModal&&(
@@ -1502,6 +1558,19 @@ function InvDetail({ inv, onEdit, onBack, onDelete, deleteModal, delPass, setDel
 
       {deleteModal&&<DeleteModal modal={deleteModal} delPass={delPass} setDelPass={setDelPass}
         onConfirm={confirmDelete} onClose={()=>setDeleteModal(null)} />}
+
+      {previewOpen && (
+        <div className="modal-overlay open" onClick={e=>e.target===e.currentTarget&&setPreviewOpen(false)}
+          style={{ display:"flex",alignItems:"center",justifyContent:"center",padding:20 }}>
+          <div style={{ background:"#fff",borderRadius:12,width:"min(900px,95vw)",height:"90vh",display:"flex",flexDirection:"column",overflow:"hidden",boxShadow:"0 20px 60px rgba(0,0,0,.35)" }}>
+            <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 18px",borderBottom:"1px solid "+C.border,background:"#faf8f3" }}>
+              <div style={{ fontWeight:800,fontSize:14,color:C.maroon }}>👁 Invoice Preview</div>
+              <button onClick={()=>setPreviewOpen(false)} style={{ background:"none",border:"none",fontSize:20,cursor:"pointer",color:"#888",lineHeight:1 }}>✕</button>
+            </div>
+            <iframe title="Invoice preview" srcDoc={buildInvoiceHtml(false,false)} style={{ flex:1,width:"100%",border:"none" }} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1539,7 +1608,7 @@ const PS_STYLE = {
 // ─── Style Helpers ────────────────────────────────────────────────────────────
 function card(extra={}) {
   return { background:C.white,borderRadius:14,border:"1px solid rgba(0,0,0,.07)",
-    boxShadow:"0 1px 4px rgba(0,0,0,.06)",padding:"20px 22px",marginBottom:14, ...extra };
+    boxShadow:"0 1px 4px rgba(0,0,0,.06)",padding:"16px 20px",marginBottom:12, ...extra };
 }
 function inputStyle(extra={}) {
   return { padding:"9px 12px",border:"1.5px solid "+C.border,borderRadius:8,fontSize:13,
@@ -1561,15 +1630,15 @@ function sectionBadge() {
 function Section({ label, children }) {
   return (
     <div style={card()}>
-      <div style={{ marginBottom:14 }}><span style={sectionBadge()}>{label}</span></div>
+      <div style={{ marginBottom:10 }}><span style={sectionBadge()}>{label}</span></div>
       {children}
     </div>
   );
 }
 function SubSection({ label, children }) {
   return (
-    <div style={{ marginBottom:18 }}>
-      <div style={{ display:"flex",alignItems:"center",gap:8,marginBottom:12,padding:"8px 12px",background:"#fff5f0",borderRadius:8,borderLeft:"3px solid "+C.maroon }}>
+    <div style={{ marginBottom:12 }}>
+      <div style={{ display:"flex",alignItems:"center",gap:8,marginBottom:8,padding:"6px 12px",background:"#fff5f0",borderRadius:8,borderLeft:"3px solid "+C.maroon }}>
         <span style={{ fontSize:11,fontWeight:800,textTransform:"uppercase",letterSpacing:.5,color:C.maroon }}>{label}</span>
       </div>
       {children}
@@ -1578,7 +1647,7 @@ function SubSection({ label, children }) {
 }
 function Field({ label, children }) {
   return (
-    <div style={{ display:"flex",flexDirection:"column",gap:5,marginBottom:10 }}>
+    <div style={{ display:"flex",flexDirection:"column",gap:4,marginBottom:8 }}>
       <label style={{ fontSize:11,fontWeight:700,color:"#444",textTransform:"uppercase",letterSpacing:.5 }}>{label}</label>
       {children}
     </div>
