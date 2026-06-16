@@ -269,7 +269,7 @@ export default function HallInvoice() {
                 <div style={{ fontWeight:800,fontSize:13 }}>৳{(inv.grand||0).toLocaleString()}</div>
                 <div style={{ fontSize:10,fontWeight:700,color:sc[inv.payStatus]||C.dim }}>{inv.payStatus}</div>
               </div>
-              <button onClick={e=>{e.stopPropagation();openEdit(inv);}} style={btnStyle("sm")}>✏️</button>
+              {inv.isLead && <button onClick={e=>{e.stopPropagation();openEdit(inv);}} style={btnStyle("sm")}>✏️</button>}
             </div>
           );
         })}
@@ -833,7 +833,9 @@ function InvForm({ inv, onSave, onSavePreview, onCancel, onViewHistory, invoiceC
               <div style={{ width:220,padding:"12px 14px",borderRadius:9,border:"1.5px solid #c9a84c",background:"#fffaf0" }}>
                 <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8 }}>
                   <span style={{ fontSize:10,fontWeight:800,textTransform:"uppercase",letterSpacing:.4,color:"#8a6200" }}>🍽️ Waiter Cost</span>
-                  <span style={{ fontSize:8,fontWeight:700,color:"#fff",background:"#c9a84c",padding:"2px 7px",borderRadius:8 }}>DUE LATER</span>
+                  <span style={{ fontSize:8,fontWeight:700,color:"#fff",background: waiterPayStatus==="Paid"?"#2e8b57":waiterPayStatus==="Partial"?"#c8960a":"#c9a84c",padding:"2px 7px",borderRadius:8 }}>
+                    {waiterPayStatus==="Paid"?"PAID":waiterPayStatus==="Partial"?"PARTIALLY PAID":"DUE LATER"}
+                  </span>
                 </div>
                 {isHolud && hWaiterTotal > 0 && (
                   <div style={{ fontSize:12,color:"#666",marginBottom:4,display:"flex",justifyContent:"space-between" }}>
@@ -849,6 +851,18 @@ function InvForm({ inv, onSave, onSavePreview, onCancel, onViewHistory, invoiceC
                   <span style={{ fontSize:12,fontWeight:800,color:"#8a6200" }}>Total</span>
                   <span style={{ fontSize:15,fontWeight:800,color:"#8a6200" }}>৳{(wWaiterTotal+hWaiterTotal).toLocaleString()}</span>
                 </div>
+                {waiterPaid > 0 && (
+                  <div style={{ display:"flex",justifyContent:"space-between",marginTop:4 }}>
+                    <span style={{ fontSize:11,color:"#2e8b57",fontWeight:700 }}>Paid</span>
+                    <span style={{ fontSize:11,color:"#2e8b57",fontWeight:700 }}>৳{waiterPaid.toLocaleString()}</span>
+                  </div>
+                )}
+                {waiterBalance > 0 && waiterPaid > 0 && (
+                  <div style={{ display:"flex",justifyContent:"space-between" }}>
+                    <span style={{ fontSize:11,color:"#8a6200" }}>Remaining</span>
+                    <span style={{ fontSize:11,color:"#8a6200" }}>৳{waiterBalance.toLocaleString()}</span>
+                  </div>
+                )}
                 <div style={{ fontSize:9,color:"#aa9560",fontStyle:"italic",marginTop:5 }}>Pass-through — not hall revenue.</div>
               </div>
             )}
@@ -1212,7 +1226,7 @@ function InvDetail({ inv, onEdit, onBack, onDelete, deleteModal, delPass, setDel
         <div style="width:250px;border:1.5px solid #c9a84c;border-radius:9px;padding:11px 13px;background:#fffaf0">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px">
             <span style="font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:#8a6200">🍽️ Waiter Cost</span>
-            <span style="font-size:7.5px;font-weight:700;color:#fff;background:#c9a84c;padding:2px 7px;border-radius:8px">DUE LATER</span>
+            <span style="font-size:7.5px;font-weight:700;color:#fff;background:${inv.waiterPayStatus==='Paid'?'#2e8b57':inv.waiterPayStatus==='Partial'?'#c8960a':'#c9a84c'};padding:2px 7px;border-radius:8px">${inv.waiterPayStatus==='Paid'?'PAID':inv.waiterPayStatus==='Partial'?'PARTIALLY PAID':'DUE LATER'}</span>
           </div>
           ${waiterLines.map(([label,n,price,amt]) =>
             `<div style="display:flex;justify-content:space-between;font-size:11.5px;color:#666;margin-bottom:4px"><span>${label} ${n||0}×${(parseFloat(price)||0).toLocaleString()}</span><span style="font-weight:600">৳${amt.toLocaleString()}</span></div>`
@@ -1221,6 +1235,8 @@ function InvDetail({ inv, onEdit, onBack, onDelete, deleteModal, delPass, setDel
             <span style="font-size:11.5px;font-weight:800;color:#8a6200">Total</span>
             <span style="font-size:14px;font-weight:800;color:#8a6200">৳ ${waiterTotal.toLocaleString()}</span>
           </div>
+          ${waiterPaid>0?`<div style="display:flex;justify-content:space-between;margin-top:5px"><span style="font-size:10.5px;color:#2e8b57;font-weight:700">Paid</span><span style="font-size:10.5px;color:#2e8b57;font-weight:700">৳ ${waiterPaid.toLocaleString()}</span></div>`:''}
+          ${(waiterPaid>0 && waiterBal>0)?`<div style="display:flex;justify-content:space-between"><span style="font-size:10.5px;color:#8a6200">Remaining</span><span style="font-size:10.5px;color:#8a6200">৳ ${waiterBal.toLocaleString()}</span></div>`:''}
           <div style="font-size:8px;color:#aa9560;font-style:italic;margin-top:5px">Pass-through — not hall revenue. Collected on behalf of waiters.</div>
         </div>
       </div>` : ''}
@@ -1302,7 +1318,7 @@ function InvDetail({ inv, onEdit, onBack, onDelete, deleteModal, delPass, setDel
         <div className="hall-btn-row" style={{ display:"flex",gap:8,flexWrap:"wrap" }}>
           {bal>0&&<button onClick={()=>setPayModal(true)} style={btnStyle("primary","sm")}>💳 Collect Hall Payment</button>}
           {waiterBal>0&&<button onClick={()=>setWaiterPayModal(true)} style={{ ...btnStyle("","sm"),borderColor:"#c9a84c",color:"#8a6200" }}>🍽️ Collect Waiter Cost</button>}
-          <button onClick={onEdit}  style={btnStyle("","sm")}>✏️ Edit</button>
+          {inv.isLead && <button onClick={onEdit}  style={btnStyle("","sm")}>✏️ Edit</button>}
           <button onClick={()=>printInvoice(true)}  style={btnStyle("","sm")}>🖨 Print Booking</button>
           <button onClick={()=>printInvoice(false)} style={btnStyle("","sm")}>🧾 Reprint Receipt</button>
         </div>
