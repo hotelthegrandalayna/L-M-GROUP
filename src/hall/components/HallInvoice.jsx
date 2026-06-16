@@ -986,22 +986,37 @@ function InvDetail({ inv, onEdit, onBack, onDelete, deleteModal, delPass, setDel
 
     const phones = `📞 ${inv.phone}${inv.phone2 ? ' &nbsp;|&nbsp; 📞 '+inv.phone2 : ''}${inv.phone3 ? ' &nbsp;|&nbsp; 📞 '+inv.phone3 : ''}`;
 
-    const extras = calcExtras(inv);
-    const extraRows = [
-      extras.wWaiters > 0 ? ["Wedding Day Waiters", extras.wWaiters] : null,
-      extras.hWaiters > 0 ? ["Holud Waiters", extras.hWaiters] : null,
-      extras.wRental  > 0 ? ["Wedding / Hall Rental", extras.wRental] : null,
-      extras.hRental  > 0 ? ["Holud / Hall Rental", extras.hRental] : null,
-    ].filter(Boolean).map(([label,amt]) =>
-      `<tr style="border-bottom:1px solid #eee"><td style="padding:8px 13px;font-size:13px;color:#111;font-weight:500">${label}</td><td style="padding:8px 13px;text-align:right;font-size:13px;font-weight:700;color:#111">৳ ${amt.toLocaleString()}</td></tr>`
-    ).join('');
+    const isWedding = et?.g === "wedding" || et?.v === "Wedding + Holud";
+    const isHolud   = et?.v === "Holud" || et?.v === "Wedding + Holud";
 
-    const serviceRows = (inv.services||[]).map(s => {
+    const extras = calcExtras(inv);
+
+    const sectionHeaderRow = (label) =>
+      `<tr><td colspan="2" style="padding:9px 13px 5px;font-size:10px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:#7B1212;background:#f8f0dd;border-bottom:1px solid #e8d0a0">${label}</td></tr>`;
+    const itemRow = (label, amt) =>
+      `<tr style="border-bottom:1px solid #eee"><td style="padding:8px 13px;font-size:13px;color:#111;font-weight:500">${label}</td><td style="padding:8px 13px;text-align:right;font-size:13px;font-weight:700;color:#111">৳ ${amt.toLocaleString()}</td></tr>`;
+
+    const baseServiceRows = (inv.services||[]).filter(s => !(s.desc === "Hall Rental" && (parseFloat(s.rate)||0) === 0)).map(s => {
       if (s.included === false) {
         return `<tr style="border-bottom:1px solid #eee"><td style="padding:8px 13px;font-size:13px;color:#aaa;font-style:italic">${s.desc} <span style="font-size:10px;color:#c0392b;font-weight:700">[Not Included]</span>${s.declineReason ? ' — '+s.declineReason : ''}</td><td style="padding:8px 13px;text-align:right;font-size:13px;font-weight:700;color:#aaa">—</td></tr>`;
       }
       return `<tr style="border-bottom:1px solid #eee"><td style="padding:8px 13px;font-size:13px;color:#111;font-weight:500">${s.desc}</td><td style="padding:8px 13px;text-align:right;font-size:13px;font-weight:700;color:#111">৳ ${(parseFloat(s.rate)||0).toLocaleString()}</td></tr>`;
-    }).join('') + extraRows;
+    }).join('');
+
+    let weddingRows = '';
+    if (isWedding && (extras.wWaiters > 0 || extras.wRental > 0)) {
+      weddingRows = sectionHeaderRow('💒 WEDDING')
+        + (extras.wWaiters > 0 ? itemRow('Wedding Day Waiters', extras.wWaiters) : '')
+        + (extras.wRental  > 0 ? itemRow('Wedding / Hall Rental', extras.wRental) : '');
+    }
+    let holudRows = '';
+    if (isHolud && (extras.hWaiters > 0 || extras.hRental > 0)) {
+      holudRows = sectionHeaderRow('🌼 HOLUD')
+        + (extras.hWaiters > 0 ? itemRow('Holud Waiters', extras.hWaiters) : '')
+        + (extras.hRental  > 0 ? itemRow('Holud / Hall Rental', extras.hRental) : '');
+    }
+
+    const serviceRows = baseServiceRows + weddingRows + holudRows;
 
     const psColor = inv.payStatus==='Paid' ? {bg:'#d4f5e2',color:'#074d22',border:'#2e8b57',icon:'✅',label:'Fully Paid'} :
                     inv.payStatus==='Partial' ? {bg:'#fef0b0',color:'#5a3800',border:'#c8960a',icon:'⚠️',label:'Partially Paid — Balance Remaining'} :
@@ -1091,10 +1106,11 @@ function InvDetail({ inv, onEdit, onBack, onDelete, deleteModal, delPass, setDel
         </div>
         <div style="border:1.5px solid #ddd;border-top:3px solid #c9a84c;border-radius:6px;padding:12px 14px">
           <div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#9a7000;font-weight:800;margin-bottom:10px">🎉 ${inv.evType||'Event'}</div>
-          ${inv.evDate?`<div style="display:flex;gap:6px;margin-bottom:4px"><span style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#7B1212;font-weight:700;min-width:56px">DATE</span><span style="font-size:13px;color:#111;font-weight:600">${fmtDate(inv.evDate)}</span></div>`:''}
-          ${inv.guests?`<div style="display:flex;gap:6px;margin-bottom:4px"><span style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#7B1212;font-weight:700;min-width:56px">GUESTS</span><span style="font-size:13px;color:#111;font-weight:600">${inv.guests}</span></div>`:''}
-          ${(inv.wBride||inv.wGroom)?`<div style="margin-top:8px;padding-top:8px;border-top:1px solid #eee;font-size:11px;color:#555">💒 ${inv.wGroom||''}${inv.wBride?' & '+inv.wBride:''}</div>`:''}
-          ${inv.wDur?`<div style="display:flex;gap:6px;margin-bottom:4px"><span style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#7B1212;font-weight:700;min-width:56px">SLOT</span><span style="font-size:13px;color:#111;font-weight:600">${inv.wDur}</span></div>`:''}
+          ${inv.evDate?`<div style="display:flex;gap:6px;margin-bottom:4px"><span style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#7B1212;font-weight:700;min-width:90px">${isHolud ? 'WEDDING DATE' : 'DATE'}</span><span style="font-size:13px;color:#111;font-weight:600">${fmtDate(inv.evDate)}</span></div>`:''}
+          ${(isHolud && inv.hDate)?`<div style="display:flex;gap:6px;margin-bottom:4px"><span style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#7B1212;font-weight:700;min-width:90px">HOLUD DATE</span><span style="font-size:13px;color:#111;font-weight:600">${fmtDate(inv.hDate)}</span></div>`:''}
+          ${inv.guests?`<div style="display:flex;gap:6px;margin-bottom:4px"><span style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#7B1212;font-weight:700;min-width:90px">GUESTS</span><span style="font-size:13px;color:#111;font-weight:600">${inv.guests}</span></div>`:''}
+          ${(inv.wBride||inv.wGroom)?`<div style="margin-top:8px;padding-top:8px;border-top:1px solid #eee;font-size:11px;color:#555">${inv.wBride?`<div><strong style="color:#7B1212">Bride:</strong> ${inv.wBride}</div>`:''}${inv.wGroom?`<div><strong style="color:#7B1212">Groom:</strong> ${inv.wGroom}</div>`:''}</div>`:''}
+          ${inv.wDur?`<div style="display:flex;gap:6px;margin-bottom:4px"><span style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#7B1212;font-weight:700;min-width:90px">SLOT</span><span style="font-size:13px;color:#111;font-weight:600">${inv.wDur}</span></div>`:''}
         </div>
       </div>
 
