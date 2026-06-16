@@ -17,6 +17,7 @@ function getStaffRenames() { try { return JSON.parse(localStorage.getItem("a_ren
 
 const C = { maroon:"#7B1212", gold:"#c9a84c", dim:"#666", border:"#e0d0b0", green:"#1a7040", red:"#c0392b", navy:"#1e3a5f", blue:"#1a56cb" };
 const EXP_CATS = {
+  'Waiter Charges':{ i:'🍽️', bg:'rgba(26,188,156,.15)', c:'#117a65' },
   'Salary':        { i:'👤', bg:'rgba(52,152,219,.15)',  c:'#1a5276' },
   'Electricity':   { i:'⚡', bg:'rgba(241,196,15,.18)',  c:'#7d6608' },
   'Generator Oil': { i:'🛢️', bg:'rgba(230,126,34,.18)',  c:'#784212' },

@@ -39,6 +39,7 @@ export const EV_TYPES = [
 ];
 
 export const EXP_CATS = {
+  "Waiter Charges": { i:"🍽️", bg:"rgba(26,188,156,.15)",  c:"#117a65" },
   "Salary":         { i:"👤", bg:"rgba(52,152,219,.15)",  c:"#1a5276" },
   "Electricity":    { i:"⚡", bg:"rgba(241,196,15,.18)",   c:"#7d6608" },
   "Generator Oil":  { i:"🛢️",bg:"rgba(230,126,34,.18)",   c:"#784212" },

@@ -14,6 +14,7 @@ const PAY_METHODS = [
 ];
 
 const EXP_CAT_OPTIONS = [
+  { v:"Waiter Charges", l:"🍽️ Waiter Charges" },
   { v:"Salary",         l:"👤 Employee Salary" },
   { v:"Electricity",    l:"⚡ Electricity" },
   { v:"Generator Oil",  l:"🛢️ Generator Oil" },
