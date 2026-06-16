@@ -830,26 +830,26 @@ function InvForm({ inv, onSave, onSavePreview, onCancel, onViewHistory, invoiceC
 
           <div style={{ display:"flex",justifyContent:"flex-end",marginTop:14 }}>
             {(wWaiterTotal > 0 || hWaiterTotal > 0) && (
-              <div style={{ width:200,padding:"10px 12px",borderRadius:8,border:"1px solid #ddd",background:"#fafafa" }}>
-                <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6 }}>
-                  <span style={{ fontSize:9,fontWeight:700,textTransform:"uppercase",letterSpacing:.4,color:"#888" }}>🍽️ Waiter Cost</span>
-                  <span style={{ fontSize:8,fontWeight:700,color:"#999",background:"#eee",padding:"2px 6px",borderRadius:8 }}>DUE LATER</span>
+              <div style={{ width:220,padding:"12px 14px",borderRadius:9,border:"1.5px solid #c9a84c",background:"#fffaf0" }}>
+                <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8 }}>
+                  <span style={{ fontSize:10,fontWeight:800,textTransform:"uppercase",letterSpacing:.4,color:"#8a6200" }}>🍽️ Waiter Cost</span>
+                  <span style={{ fontSize:8,fontWeight:700,color:"#fff",background:"#c9a84c",padding:"2px 7px",borderRadius:8 }}>DUE LATER</span>
                 </div>
                 {isHolud && hWaiterTotal > 0 && (
-                  <div style={{ fontSize:11,color:"#777",marginBottom:3,display:"flex",justifyContent:"space-between" }}>
-                    <span>Holud {d.hWaiters||0}×{(parseFloat(d.hWaiterPrice)||0).toLocaleString()}</span><span>৳{hWaiterTotal.toLocaleString()}</span>
+                  <div style={{ fontSize:12,color:"#666",marginBottom:4,display:"flex",justifyContent:"space-between" }}>
+                    <span>Holud {d.hWaiters||0}×{(parseFloat(d.hWaiterPrice)||0).toLocaleString()}</span><span style={{ fontWeight:600 }}>৳{hWaiterTotal.toLocaleString()}</span>
                   </div>
                 )}
                 {isWedding && wWaiterTotal > 0 && (
-                  <div style={{ fontSize:11,color:"#777",marginBottom:3,display:"flex",justifyContent:"space-between" }}>
-                    <span>Wedding {d.wWaiters||0}×{(parseFloat(d.wWaiterPrice)||0).toLocaleString()}</span><span>৳{wWaiterTotal.toLocaleString()}</span>
+                  <div style={{ fontSize:12,color:"#666",marginBottom:4,display:"flex",justifyContent:"space-between" }}>
+                    <span>Wedding {d.wWaiters||0}×{(parseFloat(d.wWaiterPrice)||0).toLocaleString()}</span><span style={{ fontWeight:600 }}>৳{wWaiterTotal.toLocaleString()}</span>
                   </div>
                 )}
-                <div style={{ borderTop:"1px dashed #ccc",marginTop:6,paddingTop:6,display:"flex",justifyContent:"space-between" }}>
-                  <span style={{ fontSize:11,fontWeight:700,color:"#666" }}>Total</span>
-                  <span style={{ fontSize:13,fontWeight:700,color:"#666" }}>৳{(wWaiterTotal+hWaiterTotal).toLocaleString()}</span>
+                <div style={{ borderTop:"1px dashed #c9a84c",marginTop:7,paddingTop:7,display:"flex",justifyContent:"space-between" }}>
+                  <span style={{ fontSize:12,fontWeight:800,color:"#8a6200" }}>Total</span>
+                  <span style={{ fontSize:15,fontWeight:800,color:"#8a6200" }}>৳{(wWaiterTotal+hWaiterTotal).toLocaleString()}</span>
                 </div>
-                <div style={{ fontSize:9,color:"#aaa",fontStyle:"italic",marginTop:5 }}>Pass-through — not hall revenue.</div>
+                <div style={{ fontSize:9,color:"#aa9560",fontStyle:"italic",marginTop:5 }}>Pass-through — not hall revenue.</div>
               </div>
             )}
           </div>
@@ -1207,21 +1207,21 @@ function InvDetail({ inv, onEdit, onBack, onDelete, deleteModal, delPass, setDel
       </div>
 
       ${waiterLines.length ? `
-      <!-- Small waiter cost box — kept low-key, separate from hall revenue -->
+      <!-- Small waiter cost box — visible but kept secondary to hall revenue -->
       <div style="padding:0 18px;margin-top:14px;display:flex;justify-content:flex-end">
-        <div style="width:230px;border:1px solid #ddd;border-radius:8px;padding:9px 11px;background:#fafafa">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-            <span style="font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#888">🍽️ Waiter Cost</span>
-            <span style="font-size:7.5px;font-weight:700;color:#999;background:#eee;padding:2px 6px;border-radius:8px">DUE LATER</span>
+        <div style="width:250px;border:1.5px solid #c9a84c;border-radius:9px;padding:11px 13px;background:#fffaf0">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px">
+            <span style="font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:#8a6200">🍽️ Waiter Cost</span>
+            <span style="font-size:7.5px;font-weight:700;color:#fff;background:#c9a84c;padding:2px 7px;border-radius:8px">DUE LATER</span>
           </div>
           ${waiterLines.map(([label,n,price,amt]) =>
-            `<div style="display:flex;justify-content:space-between;font-size:10.5px;color:#777;margin-bottom:3px"><span>${label} ${n||0}×${(parseFloat(price)||0).toLocaleString()}</span><span>৳${amt.toLocaleString()}</span></div>`
+            `<div style="display:flex;justify-content:space-between;font-size:11.5px;color:#666;margin-bottom:4px"><span>${label} ${n||0}×${(parseFloat(price)||0).toLocaleString()}</span><span style="font-weight:600">৳${amt.toLocaleString()}</span></div>`
           ).join('')}
-          <div style="border-top:1px dashed #ccc;margin-top:5px;padding-top:5px;display:flex;justify-content:space-between">
-            <span style="font-size:10.5px;font-weight:700;color:#666">Total</span>
-            <span style="font-size:12.5px;font-weight:700;color:#666">৳ ${waiterTotal.toLocaleString()}</span>
+          <div style="border-top:1px dashed #c9a84c;margin-top:6px;padding-top:6px;display:flex;justify-content:space-between">
+            <span style="font-size:11.5px;font-weight:800;color:#8a6200">Total</span>
+            <span style="font-size:14px;font-weight:800;color:#8a6200">৳ ${waiterTotal.toLocaleString()}</span>
           </div>
-          <div style="font-size:8px;color:#aaa;font-style:italic;margin-top:4px">Pass-through — not hall revenue. Collected on behalf of waiters.</div>
+          <div style="font-size:8px;color:#aa9560;font-style:italic;margin-top:5px">Pass-through — not hall revenue. Collected on behalf of waiters.</div>
         </div>
       </div>` : ''}
 
