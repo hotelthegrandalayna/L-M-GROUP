@@ -462,7 +462,7 @@ export default function Invoice() {
 
   return (
     <div style={{ padding:"18px 20px 32px" }}>
-      <div style={{ display:"grid", gridTemplateColumns:"380px 1fr", gap:16, alignItems:"start" }}>
+      <div style={{ display:"grid", gridTemplateColumns:"40% 60%", gap:16, alignItems:"start" }}>
 
         {/* ── Left Panel ── */}
         <div style={{ display:"flex", flexDirection:"column", gap:9 }}>
