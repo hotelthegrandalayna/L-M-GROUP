@@ -86,7 +86,7 @@ function newInvObj(num) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 export default function HallInvoice() {
-  const { invoices, setInvoices, setExpenses, notify } = useHall();
+  const { invoices, setInvoices, notify } = useHall();
   const isMobile = useIsMobile();
   const [view, setView] = useState("form");   // default: create form
   const [editInv, setEditInv] = useState(() => null);  // will init in effect
@@ -118,24 +118,6 @@ export default function HallInvoice() {
   function backToForm()    { setEditInv(null); setDetailInv(null); setView("form"); }
   function openHistory()   { setView("list"); }
 
-  function syncWaiterExpense(inv) {
-    const extras = calcExtras(inv);
-    const waiterCost = extras.wWaiters + extras.hWaiters;
-    setExpenses(prev => {
-      const rest = prev.filter(e => e.invoiceId !== inv.id);
-      if (waiterCost <= 0) return rest;
-      return [...rest, {
-        id: "wexp-" + inv.id,
-        invoiceId: inv.id,
-        cat: "Waiter Charges",
-        date: inv.invDate || inv.evDate || new Date().toISOString().slice(0,10),
-        amount: waiterCost,
-        desc: `Waiter charges — Invoice ${inv.num} (${inv.client||""})`,
-        payMethod: "Cash",
-      }];
-    });
-  }
-
   function computeAndSave(inv, isLead, andView) {
     const { disc, grand } = calcGrand(inv);
     const bal   = Math.max(0, grand - (parseFloat(inv.adv) || 0));
@@ -146,13 +128,11 @@ export default function HallInvoice() {
 
     if (inv.id) {
       setInvoices(prev => prev.map(i => i.id === inv.id ? final : i));
-      if (!isLead) syncWaiterExpense(final);
       notify("Invoice updated", "success");
     } else {
       const id = String(Date.now());
       const withId = { ...final, id };
       setInvoices(prev => [...prev, withId]);
-      if (!isLead) syncWaiterExpense(withId);
       notify("Invoice saved", "success");
       if (!isLead) {
         sendSmsForInvoice(withId).then(ok => {
@@ -170,7 +150,6 @@ export default function HallInvoice() {
   function confirmDelete() {
     if (!checkHallAdminPass(delPass)) { notify("Incorrect password","error"); return; }
     setInvoices(prev => prev.filter(i => i.id !== deleteModal.id));
-    setExpenses(prev => prev.filter(e => e.invoiceId !== deleteModal.id));
     notify("Invoice deleted","success");
     setDeleteModal(null);
     if (view === "detail") backToForm();
@@ -838,8 +817,11 @@ function InvForm({ inv, onSave, onSavePreview, onCancel, onViewHistory, invoiceC
           </div>
 
           {(wWaiterTotal > 0 || hWaiterTotal > 0) && (
-            <div style={{ marginTop:18,paddingTop:14,borderTop:"1.5px dashed #c9a84c" }}>
-              <div style={{ fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:.5,color:"#8a6200",marginBottom:10 }}>🍽️ WAITER CHARGES (Not Hall Revenue — Pass-through)</div>
+            <div style={{ marginTop:18,paddingTop:14,paddingBottom:14,paddingLeft:14,paddingRight:14,borderRadius:10,border:"1.5px dashed #c9a84c",background:"#fffaf0" }}>
+              <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10 }}>
+                <div style={{ fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:.5,color:"#8a6200" }}>🍽️ WAITER COST BOX</div>
+                <span style={{ fontSize:9,fontWeight:800,color:"#fff",background:"#c0392b",padding:"3px 9px",borderRadius:10,letterSpacing:.5 }}>DUE AFTER CEREMONY</span>
+              </div>
               {isHolud && hWaiterTotal > 0 && (
                 <div style={{ display:"flex",justifyContent:"space-between",fontSize:14,marginBottom:10 }}>
                   <span>Holud Waiters</span><span style={{ fontWeight:700 }}>৳{hWaiterTotal.toLocaleString()}</span>
@@ -850,11 +832,11 @@ function InvForm({ inv, onSave, onSavePreview, onCancel, onViewHistory, invoiceC
                   <span>Wedding Day Waiters</span><span style={{ fontWeight:700 }}>৳{wWaiterTotal.toLocaleString()}</span>
                 </div>
               )}
-              <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center" }}>
+              <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",borderTop:"1px dashed #c9a84c",paddingTop:10 }}>
                 <span style={{ fontWeight:700,fontSize:14,color:"#8a6200" }}>Waiter Charges Total</span>
                 <span style={{ fontWeight:800,fontSize:16,color:"#8a6200" }}>৳{(wWaiterTotal+hWaiterTotal).toLocaleString()}</span>
               </div>
-              <div style={{ fontSize:10,color:"#999",fontStyle:"italic",marginTop:6 }}>Collected on behalf of waiter staff — does not count as hall revenue.</div>
+              <div style={{ fontSize:10,color:"#999",fontStyle:"italic",marginTop:6 }}>Collected from guest, paid directly to waiters — not hall revenue or expense. Settled once the ceremony is complete.</div>
             </div>
           )}
 
@@ -1137,8 +1119,9 @@ function InvDetail({ inv, onEdit, onBack, onDelete, deleteModal, delPass, setDel
         <div style="border:1.5px solid #ddd;border-top:3px solid #c9a84c;border-radius:6px;padding:12px 14px">
           <div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#9a7000;font-weight:800;margin-bottom:10px">🎉 ${inv.evType||'Event'}</div>
           ${(isHolud && inv.hDate)?`<div style="display:flex;gap:6px;margin-bottom:4px"><span style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#7B1212;font-weight:700;min-width:90px">HOLUD DATE</span><span style="font-size:13px;color:#111;font-weight:600">${fmtDate(inv.hDate)}</span></div>`:''}
+          ${(isHolud && (inv.hGuests||inv.hTables))?`<div style="display:flex;gap:6px;margin-bottom:4px"><span style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#7B1212;font-weight:700;min-width:90px">HOLUD G/T</span><span style="font-size:13px;color:#111;font-weight:600">${inv.hGuests?inv.hGuests+' guests':''}${(inv.hGuests&&inv.hTables)?' · ':''}${inv.hTables?inv.hTables+' tables':''}</span></div>`:''}
           ${inv.evDate?`<div style="display:flex;gap:6px;margin-bottom:4px"><span style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#7B1212;font-weight:700;min-width:90px">${isHolud ? 'WEDDING DATE' : 'DATE'}</span><span style="font-size:13px;color:#111;font-weight:600">${fmtDate(inv.evDate)}</span></div>`:''}
-          ${inv.guests?`<div style="display:flex;gap:6px;margin-bottom:4px"><span style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#7B1212;font-weight:700;min-width:90px">GUESTS</span><span style="font-size:13px;color:#111;font-weight:600">${inv.guests}</span></div>`:''}
+          ${(inv.wGuests||inv.wTables)?`<div style="display:flex;gap:6px;margin-bottom:4px"><span style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#7B1212;font-weight:700;min-width:90px">${isHolud ? 'WEDDING G/T' : 'GUESTS/TABLES'}</span><span style="font-size:13px;color:#111;font-weight:600">${inv.wGuests?inv.wGuests+' guests':''}${(inv.wGuests&&inv.wTables)?' · ':''}${inv.wTables?inv.wTables+' tables':''}</span></div>`:''}
           ${(inv.wBride||inv.wGroom)?`<div style="margin-top:8px;padding-top:8px;border-top:1px solid #eee;font-size:11px;color:#555">${inv.wBride?`<div><strong style="color:#7B1212">Bride:</strong> ${inv.wBride}</div>`:''}${inv.wGroom?`<div><strong style="color:#7B1212">Groom:</strong> ${inv.wGroom}</div>`:''}</div>`:''}
           ${inv.wDur?`<div style="display:flex;gap:6px;margin-bottom:4px"><span style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#7B1212;font-weight:700;min-width:90px">SLOT</span><span style="font-size:13px;color:#111;font-weight:600">${inv.wDur}</span></div>`:''}
         </div>
@@ -1170,19 +1153,19 @@ function InvDetail({ inv, onEdit, onBack, onDelete, deleteModal, delPass, setDel
         <table style="width:100%;border-collapse:collapse;border:1.5px dashed #c9a84c;border-radius:6px;overflow:hidden">
           <thead>
             <tr style="background:#f8f0dd">
-              <th style="padding:8px 13px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:1.5px;color:#7B1212;font-weight:700">🍽️ Waiter Charges (Collected on behalf of staff)</th>
+              <th style="padding:8px 13px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:1.5px;color:#7B1212;font-weight:700">🍽️ Waiter Cost Box</th>
               <th style="padding:8px 13px;text-align:right;font-size:10px;text-transform:uppercase;letter-spacing:1.5px;color:#7B1212;font-weight:700;width:140px">Amount (৳)</th>
             </tr>
           </thead>
           <tbody>${waiterLines.map(([label,amt])=>itemRow(label,amt)).join('')}</tbody>
           <tfoot>
             <tr style="background:#f8f0dd;border-top:1.5px dashed #c9a84c">
-              <td style="padding:8px 13px;font-size:13px;font-weight:800;color:#7B1212">Waiter Charges Total</td>
+              <td style="padding:8px 13px;font-size:13px;font-weight:800;color:#7B1212">Waiter Charges Total &nbsp;<span style="font-size:9px;font-weight:800;color:#fff;background:#c0392b;padding:2px 8px;border-radius:10px;letter-spacing:.5px">DUE AFTER CEREMONY</span></td>
               <td style="padding:8px 13px;text-align:right;font-size:15px;font-weight:800;color:#7B1212">৳ ${waiterTotal.toLocaleString()}</td>
             </tr>
           </tfoot>
         </table>
-        <div style="font-size:10px;color:#999;font-style:italic;margin-top:4px;padding:0 4px">Note: Waiter charges are collected on behalf of waiter staff and are not part of hall revenue.</div>
+        <div style="font-size:10px;color:#999;font-style:italic;margin-top:4px;padding:0 4px">Note: Waiter cost is collected on the guest's behalf and paid directly to the waiters — not part of hall revenue or expenses. Payable once the ceremony is complete.</div>
       </div>` : ''}
 
       <!-- Total payable -->
