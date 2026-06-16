@@ -37,6 +37,23 @@ function calcSub(services) {
   }, 0);
 }
 
+function calcExtras(inv) {
+  const wWaiters = (parseFloat(inv.wWaiters) || 0) * (parseFloat(inv.wWaiterPrice) || 0);
+  const hWaiters = (parseFloat(inv.hWaiters) || 0) * (parseFloat(inv.hWaiterPrice) || 0);
+  const wRental  = parseFloat(inv.wRental) || 0;
+  const hRental  = parseFloat(inv.hRental) || 0;
+  return { wWaiters, hWaiters, wRental, hRental, total: wWaiters + hWaiters + wRental + hRental };
+}
+
+function calcGrand(inv) {
+  const svcSub = calcSub(inv.services || []);
+  const extras = calcExtras(inv);
+  const sub    = svcSub + extras.total;
+  const disc   = parseFloat(inv.discount) || 0;
+  const grand  = Math.max(0, sub - disc);
+  return { svcSub, extras, sub, disc, grand };
+}
+
 function newInvObj(num) {
   const today = new Date().toISOString().split("T")[0];
   return {
@@ -47,11 +64,11 @@ function newInvObj(num) {
     wTod:"", wDur:"Full Day", wStart:"", wEnd:"", wGuests:"",
     wSide:"", wBride:"", wBrideRel:"", wGroom:"", wGroomRel:"",
     wCouplePhone:"", wRelation:"", wVenue:"",
-    wTables:"", wWaiters:"", wWaiterPrice:"",
+    wTables:"", wWaiters:"", wWaiterPrice:"", wRental:"",
     // Holud fields
     hDate:"", hSlot:"", hTime:"", hGuests:"", hTables:"",
     hSide:"", hBride:"", hBrideRel:"", hGroom:"", hGroomRel:"",
-    hRelation:"", hVenue:"", hWaiters:"", hWaiterPrice:"",
+    hRelation:"", hVenue:"", hWaiters:"", hWaiterPrice:"", hRental:"",
     // Generic
     genTitle:"", genNote:"",
     // Services
@@ -102,9 +119,7 @@ export default function HallInvoice() {
   function openHistory()   { setView("list"); }
 
   function computeAndSave(inv, isLead, andView) {
-    const sub = calcSub(inv.services);
-    const disc = parseFloat(inv.discount) || 0;
-    const grand = Math.max(0, sub - disc);
+    const { disc, grand } = calcGrand(inv);
     const bal   = Math.max(0, grand - (parseFloat(inv.adv) || 0));
     const payStatus = grand === 0 ? "Unpaid"
       : bal === 0 ? "Paid"
@@ -272,8 +287,8 @@ function InvForm({ inv, onSave, onSavePreview, onCancel, onViewHistory, invoiceC
 
   const set = (k, v) => setD(p => ({ ...p, [k]:v }));
 
-  const fixedSvcs  = d.services.filter(s => s.fixed);
-  const customSvcs = d.services.filter(s => !s.fixed);
+  const fixedSvcsAll = d.services.filter(s => s.fixed);
+  const customSvcs   = d.services.filter(s => !s.fixed);
 
   function setFixedRate(desc, rate) {
     setD(p => ({ ...p, services: p.services.map(s => s.desc===desc ? {...s,rate:parseFloat(rate)||0} : s) }));
@@ -327,7 +342,11 @@ function InvForm({ inv, onSave, onSavePreview, onCancel, onViewHistory, invoiceC
     });
   }
 
-  const sub       = calcSub(d.services);
+  const svcSub    = calcSub(d.services);
+  const extras    = calcExtras(d);
+  const wWaiterTotal = extras.wWaiters;
+  const hWaiterTotal = extras.hWaiters;
+  const sub       = svcSub + extras.total;
   const discount  = parseFloat(d.discount) || 0;
   const grand     = Math.max(0, sub - discount);
   const adv       = parseFloat(d.adv) || 0;
@@ -341,8 +360,9 @@ function InvForm({ inv, onSave, onSavePreview, onCancel, onViewHistory, invoiceC
   const isWH      = et?.v === "Wedding + Holud";
   const isGeneric = et?.g === "generic";
 
-  const wWaiterTotal = (parseFloat(d.wWaiters)||0) * (parseFloat(d.wWaiterPrice)||0);
-  const hWaiterTotal = (parseFloat(d.hWaiters)||0) * (parseFloat(d.hWaiterPrice)||0);
+  const fixedSvcs = (isWedding || isHolud)
+    ? fixedSvcsAll.filter(s => s.desc !== "Hall Rental")
+    : fixedSvcsAll;
 
   function handleImg(e) {
     const file = e.target.files[0]; if (!file) return;
@@ -537,6 +557,13 @@ function InvForm({ inv, onSave, onSavePreview, onCancel, onViewHistory, invoiceC
               </Field>
             </div>
           </SubSection>
+
+          {/* Wedding Hall Rental */}
+          <SubSection label="🏛️ WEDDING / HALL RENTAL">
+            <Field label="Wedding / Hall Rental (৳)">
+              <input type="number" min="0" value={d.wRental||""} onChange={e=>set("wRental",e.target.value)} placeholder="0" style={inputStyle()} />
+            </Field>
+          </SubSection>
         </div>
       )}
 
@@ -592,6 +619,13 @@ function InvForm({ inv, onSave, onSavePreview, onCancel, onViewHistory, invoiceC
               <Field label="Price / Waiter (৳)"><input type="number" value={d.hWaiterPrice||""} onChange={e=>set("hWaiterPrice",e.target.value)} placeholder="0" style={inputStyle()} /></Field>
               <Field label="Waiters Total (auto)"><input readOnly value={hWaiterTotal>0?"৳"+hWaiterTotal.toLocaleString():""} placeholder="0" style={inputStyle({ background:"#f8f8f8" })} /></Field>
             </div>
+          </SubSection>
+
+          {/* Holud Hall Rental */}
+          <SubSection label="🏛️ HOLUD / HALL RENTAL">
+            <Field label="Holud / Hall Rental (৳)">
+              <input type="number" min="0" value={d.hRental||""} onChange={e=>set("hRental",e.target.value)} placeholder="0" style={inputStyle()} />
+            </Field>
           </SubSection>
         </div>
       )}
@@ -756,8 +790,39 @@ function InvForm({ inv, onSave, onSavePreview, onCancel, onViewHistory, invoiceC
         <div style={{ background:"#fffdf5",border:"1px solid #e8d898",borderRadius:10,padding:"18px 20px" }}>
           <div style={{ fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:.5,color:C.dim,marginBottom:12 }}>SERVICES</div>
           <div style={{ display:"flex",justifyContent:"space-between",fontSize:14,marginBottom:12 }}>
-            <span>Services Subtotal</span><span style={{ fontWeight:700 }}>৳{sub.toLocaleString()}</span>
+            <span>Services Subtotal</span><span style={{ fontWeight:700 }}>৳{svcSub.toLocaleString()}</span>
           </div>
+          {isWedding && wWaiterTotal > 0 && (
+            <>
+              <div style={{ fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:.5,color:C.dim,marginBottom:10 }}>🪑 WEDDING DAY WAITERS</div>
+              <div style={{ display:"flex",justifyContent:"space-between",fontSize:14,marginBottom:12 }}>
+                <span>Wedding Day Waiters</span><span style={{ fontWeight:700 }}>৳{wWaiterTotal.toLocaleString()}</span>
+              </div>
+            </>
+          )}
+          {isHolud && hWaiterTotal > 0 && (
+            <>
+              <div style={{ fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:.5,color:C.dim,marginBottom:10 }}>🪑 HOLUD WAITERS</div>
+              <div style={{ display:"flex",justifyContent:"space-between",fontSize:14,marginBottom:12 }}>
+                <span>Holud Waiters</span><span style={{ fontWeight:700 }}>৳{hWaiterTotal.toLocaleString()}</span>
+              </div>
+            </>
+          )}
+          {(isWedding || isHolud) && (extras.wRental > 0 || extras.hRental > 0) && (
+            <>
+              <div style={{ fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:.5,color:C.dim,marginBottom:10 }}>🏛️ HALL RENTAL</div>
+              {isWedding && (
+                <div style={{ display:"flex",justifyContent:"space-between",fontSize:14,marginBottom:12 }}>
+                  <span>Wedding / Hall Rental</span><span style={{ fontWeight:700 }}>৳{extras.wRental.toLocaleString()}</span>
+                </div>
+              )}
+              {isHolud && (
+                <div style={{ display:"flex",justifyContent:"space-between",fontSize:14,marginBottom:12 }}>
+                  <span>Holud / Hall Rental</span><span style={{ fontWeight:700 }}>৳{extras.hRental.toLocaleString()}</span>
+                </div>
+              )}
+            </>
+          )}
           <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:14,marginBottom:14 }}>
             <span>Discount (৳)</span>
             <div style={{ display:"flex",alignItems:"center",gap:8 }}>
@@ -921,12 +986,22 @@ function InvDetail({ inv, onEdit, onBack, onDelete, deleteModal, delPass, setDel
 
     const phones = `📞 ${inv.phone}${inv.phone2 ? ' &nbsp;|&nbsp; 📞 '+inv.phone2 : ''}${inv.phone3 ? ' &nbsp;|&nbsp; 📞 '+inv.phone3 : ''}`;
 
+    const extras = calcExtras(inv);
+    const extraRows = [
+      extras.wWaiters > 0 ? ["Wedding Day Waiters", extras.wWaiters] : null,
+      extras.hWaiters > 0 ? ["Holud Waiters", extras.hWaiters] : null,
+      extras.wRental  > 0 ? ["Wedding / Hall Rental", extras.wRental] : null,
+      extras.hRental  > 0 ? ["Holud / Hall Rental", extras.hRental] : null,
+    ].filter(Boolean).map(([label,amt]) =>
+      `<tr style="border-bottom:1px solid #eee"><td style="padding:8px 13px;font-size:13px;color:#111;font-weight:500">${label}</td><td style="padding:8px 13px;text-align:right;font-size:13px;font-weight:700;color:#111">৳ ${amt.toLocaleString()}</td></tr>`
+    ).join('');
+
     const serviceRows = (inv.services||[]).map(s => {
       if (s.included === false) {
         return `<tr style="border-bottom:1px solid #eee"><td style="padding:8px 13px;font-size:13px;color:#aaa;font-style:italic">${s.desc} <span style="font-size:10px;color:#c0392b;font-weight:700">[Not Included]</span>${s.declineReason ? ' — '+s.declineReason : ''}</td><td style="padding:8px 13px;text-align:right;font-size:13px;font-weight:700;color:#aaa">—</td></tr>`;
       }
       return `<tr style="border-bottom:1px solid #eee"><td style="padding:8px 13px;font-size:13px;color:#111;font-weight:500">${s.desc}</td><td style="padding:8px 13px;text-align:right;font-size:13px;font-weight:700;color:#111">৳ ${(parseFloat(s.rate)||0).toLocaleString()}</td></tr>`;
-    }).join('');
+    }).join('') + extraRows;
 
     const psColor = inv.payStatus==='Paid' ? {bg:'#d4f5e2',color:'#074d22',border:'#2e8b57',icon:'✅',label:'Fully Paid'} :
                     inv.payStatus==='Partial' ? {bg:'#fef0b0',color:'#5a3800',border:'#c8960a',icon:'⚠️',label:'Partially Paid — Balance Remaining'} :
