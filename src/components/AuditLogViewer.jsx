@@ -65,23 +65,24 @@ export default function AuditLogViewer({ scope, title, checkPassword, notify }) 
         style={{ width:"100%", padding:"9px 12px", border:"1.5px solid #ddd", borderRadius:8, fontSize:13, marginBottom:14, boxSizing:"border-box", fontFamily:"inherit" }} />
 
       <div style={{ border:"1px solid #e5e3de", borderRadius:10, overflow:"hidden" }}>
-        <div style={{ display:"grid", gridTemplateColumns:"150px 1fr 110px 130px", gap:0, background:"#2D1B69", color:"#f0e8ff", fontSize:10, fontWeight:800, textTransform:"uppercase", letterSpacing:.5, padding:"9px 12px" }}>
-          <div>When</div><div>Action / Details</div><div>Amount</div><div>Staff</div>
+        <div style={{ background:"#2D1B69", color:"#f0e8ff", fontSize:10, fontWeight:800, textTransform:"uppercase", letterSpacing:.5, padding:"9px 12px" }}>
+          Activity ({entries.length})
         </div>
         <div style={{ maxHeight:480, overflowY:"auto" }}>
           {entries.length === 0 && <div style={{ padding:24, textAlign:"center", color:"#999", fontSize:13 }}>No activity recorded yet.</div>}
           {entries.map(e => (
-            <div key={e.id} style={{ display:"grid", gridTemplateColumns:"150px 1fr 110px 130px", gap:0, padding:"9px 12px", borderBottom:"1px solid #f0eee8", fontSize:12, alignItems:"center" }}>
-              <div style={{ color:"#888", fontSize:11 }}>{fmtTs(e.ts)}</div>
-              <div>
+            <div key={e.id} style={{ display:"flex", flexWrap:"wrap", gap:"4px 14px", justifyContent:"space-between", alignItems:"flex-start", padding:"10px 12px", borderBottom:"1px solid #f0eee8", fontSize:12 }}>
+              <div style={{ flex:"1 1 220px", minWidth:0 }}>
                 <div style={{ fontWeight:700 }}>{ACTION_LABELS[e.action] || e.action}</div>
-                <div style={{ color:"#888", fontSize:11 }}>
+                <div style={{ color:"#888", fontSize:11, wordBreak:"break-word" }}>
                   {e.num ? `#${e.num} · ` : ""}{e.client || e.guest || ""}
                   {e.note ? ` — ${e.note}` : ""}
                 </div>
+                <div style={{ color:"#aaa", fontSize:10.5, marginTop:2 }}>{fmtTs(e.ts)} · {e.actor || "—"}</div>
               </div>
-              <div style={{ fontWeight:700, color:"#7B1212" }}>{e.amount != null ? "৳"+Number(e.amount).toLocaleString() : ""}</div>
-              <div style={{ color:"#555" }}>{e.actor || "—"}</div>
+              {e.amount != null && (
+                <div style={{ fontWeight:700, color:"#7B1212", flexShrink:0 }}>৳{Number(e.amount).toLocaleString()}</div>
+              )}
             </div>
           ))}
         </div>

@@ -473,7 +473,7 @@ function InvForm({ inv, onSave, onSavePreview, onCancel, onViewHistory, invoiceC
 
         <SubSection label="📅 EVENT SCHEDULE">
           <ConflictWarning conflict={evDateConflict} />
-          <div style={{ display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12 }}>
+          <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:12 }}>
             <Field label={isWH?`${et?.v||"Wedding"} Date *`:"Event Date *"}>
               <input type="date" min={todayStr} value={d.evDate||""} onChange={e=>set("evDate",e.target.value)} style={inputStyle(evDateConflict?{ borderColor:"#f0b429" }:{})} />
             </Field>
@@ -491,7 +491,7 @@ function InvForm({ inv, onSave, onSavePreview, onCancel, onViewHistory, invoiceC
         </SubSection>
 
         <SubSection label="🪑 TABLES & WAITERS">
-          <div style={{ display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12 }}>
+          <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(120px,1fr))",gap:12 }}>
             <Field label="Tables"><input type="number" value={d.wTables||""} onChange={e=>set("wTables",e.target.value)} placeholder="0" style={inputStyle()} /></Field>
             <Field label="Waiters"><input type="number" value={d.wWaiters||""} onChange={e=>set("wWaiters",e.target.value)} placeholder="0" style={inputStyle()} /></Field>
             <Field label="Price / Waiter (৳)"><input type="number" value={d.wWaiterPrice||""} onChange={e=>set("wWaiterPrice",e.target.value)} placeholder="0" style={inputStyle()} /></Field>
@@ -521,7 +521,7 @@ function InvForm({ inv, onSave, onSavePreview, onCancel, onViewHistory, invoiceC
 
         <SubSection label="📅 EVENT SCHEDULE">
           <ConflictWarning conflict={hDateConflict} />
-          <div style={{ display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12 }}>
+          <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:12 }}>
             <Field label="Holud Date *">
               <input type="date" min={todayStr} value={d.hDate||""} onChange={e=>set("hDate",e.target.value)} style={inputStyle(hDateConflict?{ borderColor:"#f0b429" }:{})} />
             </Field>
@@ -532,7 +532,7 @@ function InvForm({ inv, onSave, onSavePreview, onCancel, onViewHistory, invoiceC
         </SubSection>
 
         <SubSection label="🪑 WAITERS">
-          <div style={{ display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12 }}>
+          <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(120px,1fr))",gap:12 }}>
             <Field label="Waiters"><input type="number" value={d.hWaiters||""} onChange={e=>set("hWaiters",e.target.value)} placeholder="0" style={inputStyle()} /></Field>
             <Field label="Price / Waiter (৳)"><input type="number" value={d.hWaiterPrice||""} onChange={e=>set("hWaiterPrice",e.target.value)} placeholder="0" style={inputStyle()} /></Field>
             <Field label="Waiters Total (auto)"><input readOnly value={hWaiterTotal>0?"৳"+hWaiterTotal.toLocaleString():""} placeholder="0" style={inputStyle({ background:"#f8f8f8" })} /></Field>
@@ -581,7 +581,7 @@ function InvForm({ inv, onSave, onSavePreview, onCancel, onViewHistory, invoiceC
 
       {/* ── EVENT TYPE ── */}
       <Section label="EVENT TYPE">
-        <div style={{ display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10 }}>
+        <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(85px,1fr))",gap:10 }}>
           {EV_TYPES.map(t => {
             const sel = d.evType === t.v;
             return (
@@ -623,7 +623,7 @@ function InvForm({ inv, onSave, onSavePreview, onCancel, onViewHistory, invoiceC
 
       {/* ── CLIENT INFORMATION ── */}
       <Section label="CLIENT INFORMATION">
-        <div style={{ display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:12 }}>
+        <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:12 }}>
           <Field label="Client Name *"><input value={d.client} onChange={e=>set("client",e.target.value)} placeholder="Client Name *" style={inputStyle()} /></Field>
           <Field label="Phone *"><input value={d.phone} onChange={e=>set("phone",e.target.value)} placeholder="+880 1XXX-XXXXXX" style={inputStyle()} /></Field>
           <Field label="Phone 2"><input value={d.phone2||""} onChange={e=>set("phone2",e.target.value)} placeholder="+880 1XXX-XXXXXX" style={inputStyle()} /></Field>
@@ -698,7 +698,7 @@ function InvForm({ inv, onSave, onSavePreview, onCancel, onViewHistory, invoiceC
       {/* ── GENERIC EVENT DETAILS ── */}
       {isGeneric && (
         <Section label="📋 EVENT DETAILS">
-          <div style={{ display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12,marginBottom:12 }}>
+          <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:12,marginBottom:12 }}>
             <Field label="Event Date *"><input type="date" min={todayStr} value={d.evDate||""} onChange={e=>set("evDate",e.target.value)} style={inputStyle()} /></Field>
             <Field label="Time of Day">
               <select value={d.wTod||""} onChange={e=>set("wTod",e.target.value)} style={inputStyle()}>
@@ -1053,14 +1053,14 @@ function InvForm({ inv, onSave, onSavePreview, onCancel, onViewHistory, invoiceC
         onClick={()=>onSave(d,true)}
         title="Save your progress now — come back and finish this invoice later from Invoice History."
         style={{
-          position:"fixed", bottom:24, right:24, zIndex:150,
+          position:"fixed", bottom: isMobile?14:24, right: isMobile?14:24, zIndex:150,
           display:"flex", alignItems:"center", gap:8,
-          padding:"13px 22px", borderRadius:30, border:"none",
+          padding: isMobile?"11px 16px":"13px 22px", borderRadius:30, border:"none",
           background:"linear-gradient(135deg,#c9a84c,#e8c96c)", color:"#1a1a2e",
-          fontWeight:800, fontSize:13, fontFamily:"inherit", cursor:"pointer",
-          boxShadow:"0 6px 20px rgba(201,168,76,.45)",
+          fontWeight:800, fontSize: isMobile?12:13, fontFamily:"inherit", cursor:"pointer",
+          boxShadow:"0 6px 20px rgba(201,168,76,.45)", maxWidth: isMobile?"calc(100vw - 28px)":"none",
         }}
-      >💾 Save &amp; Continue Later</button>
+      >💾{isMobile?" Save Draft":" Save & Continue Later"}</button>
     </div>
   );
 }
@@ -1516,8 +1516,15 @@ function InvDetail({ inv, setDetailInv, onEdit, onBack, onDelete, deleteModal, d
 
       {/* Full invoice replica — exactly what the customer receives */}
       <div style={card({ padding:0,marginBottom:14,overflow:"hidden" })}>
-        <div style={{ padding:"10px 16px",borderBottom:"1px solid "+C.border,fontWeight:800,fontSize:12,color:C.maroon,background:"#faf8f3" }}>📄 Invoice Preview — exactly as the customer receives it</div>
-        <iframe title="Invoice preview" srcDoc={buildInvoiceHtml(false,false)} style={{ width:"100%", height:1400, border:"none", display:"block" }} />
+        <div style={{ padding:"10px 16px",borderBottom:"1px solid "+C.border,fontWeight:800,fontSize:12,color:C.maroon,background:"#faf8f3" }}>📄 Invoice Preview — exactly as the customer receives it{isMobile?" (pinch to zoom for detail)":""}</div>
+        {isMobile ? (
+          <div style={{ width:"100%", height:1400*0.42, overflow:"hidden" }}>
+            <iframe title="Invoice preview" srcDoc={buildInvoiceHtml(false,false)}
+              style={{ width:800, height:1400, border:"none", display:"block", transform:"scale(0.42)", transformOrigin:"top left" }} />
+          </div>
+        ) : (
+          <iframe title="Invoice preview" srcDoc={buildInvoiceHtml(false,false)} style={{ width:"100%", height:1400, border:"none", display:"block" }} />
+        )}
       </div>
 
       {payModal&&(
@@ -1581,7 +1588,14 @@ function InvDetail({ inv, setDetailInv, onEdit, onBack, onDelete, deleteModal, d
               <div style={{ fontWeight:800,fontSize:14,color:C.maroon }}>👁 Invoice Preview</div>
               <button onClick={()=>setPreviewOpen(false)} style={{ background:"none",border:"none",fontSize:20,cursor:"pointer",color:"#888",lineHeight:1 }}>✕</button>
             </div>
-            <iframe title="Invoice preview" srcDoc={buildInvoiceHtml(false,false)} style={{ flex:1,width:"100%",border:"none" }} />
+            <div style={{ flex:1, overflow:"auto" }}>
+              {isMobile ? (
+                <iframe title="Invoice preview" srcDoc={buildInvoiceHtml(false,false)}
+                  style={{ width:800, height:1400, border:"none", display:"block", transform:"scale(0.42)", transformOrigin:"top left" }} />
+              ) : (
+                <iframe title="Invoice preview" srcDoc={buildInvoiceHtml(false,false)} style={{ width:"100%", height:"100%", border:"none", display:"block" }} />
+              )}
+            </div>
           </div>
         </div>
       )}
