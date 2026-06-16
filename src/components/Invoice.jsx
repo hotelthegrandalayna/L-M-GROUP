@@ -27,7 +27,7 @@ function moneyH(n) { return "\u09F3" + (n||0).toLocaleString("en-IN"); }
 // ─── Invoice HTML builder (mirrors original renderInvoice) ─────────────────
 function buildInvoiceHTML(b, rooms, invExtras, mode) {
   if (!b) return "";
-  const disc    = b.invoiceDiscount || 0;
+  const disc    = b.discAmt || b.invoiceDiscount || 0;
   const base    = b.baseAmount || b.amount || 0;
   const roomTotal = Math.max(0, base - disc);
   const validExtras = (invExtras || []).filter(x => x.desc && x.rate > 0);
@@ -310,7 +310,7 @@ export default function Invoice() {
     setExtras(loadedExtras);
     // Auto-fill amount with current balance due
     const _base = selBk.baseAmount || selBk.amount || 0;
-    const _disc = selBk.invoiceDiscount || 0;
+    const _disc = selBk.discAmt || selBk.invoiceDiscount || 0;
     const _rTotal = Math.max(0, _base - _disc);
     const _ep = (selBk.extraPersonCharge && selBk.extraPersonCharge.total) || 0;
     const _exTotal = loadedExtras.filter(x=>x.desc&&x.rate>0).reduce((s,x)=>s+x.qty*x.rate,0);
@@ -323,7 +323,7 @@ export default function Invoice() {
   }, [selId]);
 
   // Derive computed values
-  const disc         = selBk ? (selBk.invoiceDiscount || 0) : 0;
+  const disc         = selBk ? (selBk.discAmt || selBk.invoiceDiscount || 0) : 0;
   const base         = selBk ? (selBk.baseAmount || selBk.amount || 0) : 0;
   const roomTotal    = Math.max(0, base - disc);
   const validExtras  = extras.filter(x => x.desc && x.rate > 0);
