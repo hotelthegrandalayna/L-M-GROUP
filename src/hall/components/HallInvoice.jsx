@@ -60,7 +60,7 @@ function newInvObj(num) {
   const today = new Date().toISOString().split("T")[0];
   return {
     id:"", num, invDate:today,
-    client:"", phone:"", phone2:"", phone3:"", email:"", address:"",
+    client:"", phone:"", phone2:"", phone3:"", email:"", addrArea:"", addrCity:"", addrDistrict:"",
     evType:"Wedding", evDate:today,
     // Wedding fields
     wTod:"", wDur:"Full Day", wStart:"", wEnd:"", wGuests:"",
@@ -68,7 +68,7 @@ function newInvObj(num) {
     wCouplePhone:"", wRelation:"", wVenue:"",
     wTables:"", wWaiters:"", wWaiterPrice:"", wRental:"",
     // Holud fields
-    hDate:"", hSlot:"", hTime:"", hGuests:"", hTables:"",
+    hDate:"", hSlot:"", hStart:"", hEnd:"", hGuests:"", hTables:"",
     hSide:"", hBride:"", hBrideRel:"", hGroom:"", hGroomRel:"",
     hRelation:"", hVenue:"", hWaiters:"", hWaiterPrice:"", hRental:"",
     // Generic
@@ -501,12 +501,11 @@ function InvForm({ inv, onSave, onSavePreview, onCancel, onViewHistory, invoiceC
           </div>
         </SubSection>
 
-        <SubSection label={`🏛️ ${(et?.v||"WEDDING").toUpperCase()} / HALL RENTAL`}>
-          <div style={{ background:"#fffaf0",border:"2px solid "+C.gold,borderRadius:10,padding:"14px 16px" }}>
-            <Field label={`${et?.v||"Wedding"} / Hall Rental (৳) *`}>
-              <input type="number" min="0" value={d.wRental||""} onChange={e=>set("wRental",e.target.value)} placeholder="0"
-                style={{ width:"100%",padding:"14px 16px",border:`2px solid ${C.gold}`,borderRadius:9,fontSize:20,fontWeight:800,textAlign:"right",fontFamily:"inherit",outline:"none",boxSizing:"border-box",background:"#fff",color:C.maroon,boxShadow:"0 2px 10px rgba(201,168,76,.25)" }} />
-            </Field>
+        <SubSection label="🏛️ WEDDING / HALL RENTAL">
+          <div style={{ display:"inline-flex",alignItems:"center",gap:12,background:"#fffaf0",border:`2px solid ${C.gold}`,borderRadius:10,padding:"10px 14px" }}>
+            <label style={{ fontSize:11,fontWeight:700,color:"#8a6200",textTransform:"uppercase",letterSpacing:.5,whiteSpace:"nowrap" }}>Wedding / Hall Rental (৳) *</label>
+            <input type="number" min="0" value={d.wRental||""} onChange={e=>set("wRental",e.target.value)} placeholder="0"
+              style={{ width:160,padding:"8px 12px",border:`2px solid ${C.gold}`,borderRadius:8,fontSize:16,fontWeight:800,textAlign:"right",fontFamily:"inherit",outline:"none",background:"#fff",color:C.maroon,boxShadow:"0 2px 8px rgba(201,168,76,.2)" }} />
           </div>
         </SubSection>
       </div>
@@ -525,7 +524,8 @@ function InvForm({ inv, onSave, onSavePreview, onCancel, onViewHistory, invoiceC
             <Field label="Holud Date *">
               <input type="date" min={todayStr} value={d.hDate||""} onChange={e=>set("hDate",e.target.value)} style={inputStyle(hDateConflict?{ borderColor:"#f0b429" }:{})} />
             </Field>
-            <Field label="Ceremony Time"><input value={d.hTime||""} onChange={e=>set("hTime",e.target.value)} placeholder="e.g. 4:00 PM – 9:00 PM" style={inputStyle()} /></Field>
+            <Field label="Start Time"><input value={d.hStart||""} onChange={e=>set("hStart",e.target.value)} placeholder="e.g. 4:00 PM" style={inputStyle()} /></Field>
+            <Field label="End Time"><input value={d.hEnd||""} onChange={e=>set("hEnd",e.target.value)} placeholder="e.g. 9:00 PM" style={inputStyle()} /></Field>
             <Field label="Guests *"><input type="number" value={d.hGuests||""} onChange={e=>set("hGuests",e.target.value)} placeholder="e.g. 150" style={inputStyle()} /></Field>
             <Field label="Tables"><input type="number" value={d.hTables||""} onChange={e=>set("hTables",e.target.value)} placeholder="0" style={inputStyle()} /></Field>
           </div>
@@ -540,11 +540,10 @@ function InvForm({ inv, onSave, onSavePreview, onCancel, onViewHistory, invoiceC
         </SubSection>
 
         <SubSection label="🏛️ HOLUD / HALL RENTAL">
-          <div style={{ background:"#fffaf0",border:"2px solid "+C.gold,borderRadius:10,padding:"14px 16px" }}>
-            <Field label="Holud / Hall Rental (৳) *">
-              <input type="number" min="0" value={d.hRental||""} onChange={e=>set("hRental",e.target.value)} placeholder="0"
-                style={{ width:"100%",padding:"14px 16px",border:`2px solid ${C.gold}`,borderRadius:9,fontSize:20,fontWeight:800,textAlign:"right",fontFamily:"inherit",outline:"none",boxSizing:"border-box",background:"#fff",color:"#8a6200",boxShadow:"0 2px 10px rgba(201,168,76,.25)" }} />
-            </Field>
+          <div style={{ display:"inline-flex",alignItems:"center",gap:12,background:"#fffaf0",border:`2px solid ${C.gold}`,borderRadius:10,padding:"10px 14px" }}>
+            <label style={{ fontSize:11,fontWeight:700,color:"#8a6200",textTransform:"uppercase",letterSpacing:.5,whiteSpace:"nowrap" }}>Holud / Hall Rental (৳) *</label>
+            <input type="number" min="0" value={d.hRental||""} onChange={e=>set("hRental",e.target.value)} placeholder="0"
+              style={{ width:160,padding:"8px 12px",border:`2px solid ${C.gold}`,borderRadius:8,fontSize:16,fontWeight:800,textAlign:"right",fontFamily:"inherit",outline:"none",background:"#fff",color:"#8a6200",boxShadow:"0 2px 8px rgba(201,168,76,.2)" }} />
           </div>
         </SubSection>
       </div>
@@ -629,10 +628,10 @@ function InvForm({ inv, onSave, onSavePreview, onCancel, onViewHistory, invoiceC
           <Field label="Phone 2"><input value={d.phone2||""} onChange={e=>set("phone2",e.target.value)} placeholder="+880 1XXX-XXXXXX" style={inputStyle()} /></Field>
           <Field label="Email"><input value={d.email||""} onChange={e=>set("email",e.target.value)} placeholder="email@example.com" style={inputStyle()} /></Field>
         </div>
-        <div style={{ marginTop:12 }}>
-          <Field label="Address">
-            <textarea value={d.address||""} onChange={e=>set("address",e.target.value)} placeholder="House, Road, Area, City" rows={3} style={{ ...inputStyle(),resize:"vertical",fontFamily:"inherit" }} />
-          </Field>
+        <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:12,marginTop:12 }}>
+          <Field label="Area / Road"><input value={d.addrArea||""} onChange={e=>set("addrArea",e.target.value)} placeholder="e.g. Agrabad, Hajari Road" style={inputStyle()} /></Field>
+          <Field label="City / Upazila"><input value={d.addrCity||""} onChange={e=>set("addrCity",e.target.value)} placeholder="e.g. Sitakunda" style={inputStyle()} /></Field>
+          <Field label="District"><input value={d.addrDistrict||""} onChange={e=>set("addrDistrict",e.target.value)} placeholder="e.g. Chattogram" style={inputStyle()} /></Field>
         </div>
       </Section>
 
@@ -1250,14 +1249,35 @@ function InvDetail({ inv, setDetailInv, onEdit, onBack, onDelete, deleteModal, d
       </tr>`
     ).join('');
 
-    const sigBlock = (label) => `
-      <div style="padding:14px 16px${label==='গ্রাহকের স্বাক্ষর'?';border-right:1.5px solid #8B1A1A':''}">
-        <div style="font-size:11px;font-weight:700;color:#8B1A1A;text-align:center;margin-bottom:12px;font-family:'Playfair Display',serif">${label}</div>
-        <div style="height:38px;border-bottom:1px dotted #999;margin-bottom:8px"></div>
-        <div style="display:flex;align-items:center;margin-bottom:6px"><span style="font-size:10px;color:#555;font-weight:600;min-width:50px">নাম:</span><div style="flex:1;border-bottom:1px dotted #aaa;margin-left:4px;height:18px"></div></div>
-        <div style="display:flex;align-items:center;margin-bottom:6px"><span style="font-size:10px;color:#555;font-weight:600;min-width:50px">তারিখ:</span><div style="flex:1;border-bottom:1px dotted #aaa;margin-left:4px;height:18px"></div></div>
-        <div style="display:flex;align-items:center"><span style="font-size:10px;color:#555;font-weight:600;min-width:50px">মোবাইল:</span><div style="flex:1;border-bottom:1px dotted #aaa;margin-left:4px;height:18px"></div></div>
+    const clientName = inv.client || inv.clientName || "";
+    const invDateFmt = fmtDate(inv.invDate) || "";
+    const sigBlock = (label) => {
+      const isClient = label === 'গ্রাহকের স্বাক্ষর';
+      return `
+      <div style="padding:18px 20px${isClient?';border-right:1.5px solid #8B1A1A':''}">
+        <div style="font-size:11px;font-weight:700;color:#8B1A1A;text-align:center;margin-bottom:14px;font-family:'Playfair Display',serif">${label}</div>
+        <div style="height:44px;border-bottom:1.5px dotted #aaa;margin-bottom:12px"></div>
+        ${isClient ? `
+        <div style="display:flex;align-items:baseline;margin-bottom:8px">
+          <span style="font-size:10px;color:#555;font-weight:700;min-width:52px;text-transform:uppercase;letter-spacing:.5px">নাম:</span>
+          <span style="font-size:13px;font-weight:800;color:#1a1a1a;border-bottom:1px solid #ccc;flex:1;padding-bottom:2px;">${clientName}</span>
+        </div>
+        <div style="display:flex;align-items:baseline">
+          <span style="font-size:10px;color:#555;font-weight:700;min-width:52px;text-transform:uppercase;letter-spacing:.5px">তারিখ:</span>
+          <span style="font-size:13px;font-weight:800;color:#1a1a1a;border-bottom:1px solid #ccc;flex:1;padding-bottom:2px;">${invDateFmt}</span>
+        </div>
+        ` : `
+        <div style="display:flex;align-items:baseline;margin-bottom:8px">
+          <span style="font-size:10px;color:#555;font-weight:700;min-width:52px;text-transform:uppercase;letter-spacing:.5px">নাম:</span>
+          <div style="flex:1;border-bottom:1px dotted #aaa;height:20px"></div>
+        </div>
+        <div style="display:flex;align-items:baseline">
+          <span style="font-size:10px;color:#555;font-weight:700;min-width:52px;text-transform:uppercase;letter-spacing:.5px">পদবী:</span>
+          <div style="flex:1;border-bottom:1px dotted #aaa;height:20px"></div>
+        </div>
+        `}
       </div>`;
+    };
 
     const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
     <title>Invoice ${inv.num}</title>
@@ -1303,17 +1323,18 @@ function InvDetail({ inv, setDetailInv, onEdit, onBack, onDelete, deleteModal, d
           <div style="font-size:15px;font-weight:800;color:#111;margin-bottom:5px">${inv.client||'—'}</div>
           <div style="font-size:11px;color:#555;margin-bottom:3px">${phones}</div>
           ${inv.email?`<div style="font-size:11px;color:#555;margin-bottom:3px">✉ ${inv.email}</div>`:''}
-          ${inv.address?`<div style="font-size:11px;color:#555">📍 ${inv.address}</div>`:''}
+          ${(inv.addrArea||inv.addrCity||inv.addrDistrict||inv.address)?`<div style="font-size:11px;color:#555">📍 ${[inv.addrArea,inv.addrCity,inv.addrDistrict].filter(Boolean).join(', ')||inv.address||''}</div>`:''}
         </div>
         <div style="border:1.5px solid #ddd;border-top:3px solid #c9a84c;border-radius:6px;padding:12px 14px">
           <div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#9a7000;font-weight:800;margin-bottom:10px">🎉 ${inv.evType||'Event'}</div>
           ${(isHolud && inv.hDate)?`<div style="display:flex;gap:6px;margin-bottom:4px"><span style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#7B1212;font-weight:700;min-width:90px">HOLUD DATE</span><span style="font-size:13px;color:#111;font-weight:600">${fmtDate(inv.hDate)}</span></div>`:''}
+          ${(isHolud && (inv.hStart||inv.hEnd))?`<div style="display:flex;gap:6px;margin-bottom:4px"><span style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#7B1212;font-weight:700;min-width:90px">HOLUD TIME</span><span style="font-size:13px;color:#111;font-weight:600">${inv.hStart||'?'} – ${inv.hEnd||'?'}</span></div>`:''}
           ${(isHolud && (inv.hGuests||inv.hTables))?`<div style="display:flex;gap:6px;margin-bottom:4px"><span style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#7B1212;font-weight:700;min-width:90px">HOLUD G/T</span><span style="font-size:13px;color:#111;font-weight:600">${inv.hGuests?inv.hGuests+' guests':''}${(inv.hGuests&&inv.hTables)?' · ':''}${inv.hTables?inv.hTables+' tables':''}</span></div>`:''}
           ${inv.evDate?`<div style="display:flex;gap:6px;margin-bottom:4px"><span style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#7B1212;font-weight:700;min-width:90px">${isHolud ? 'WEDDING DATE' : 'DATE'}</span><span style="font-size:13px;color:#111;font-weight:600">${fmtDate(inv.evDate)}</span></div>`:''}
           ${(inv.wGuests||inv.wTables)?`<div style="display:flex;gap:6px;margin-bottom:4px"><span style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#7B1212;font-weight:700;min-width:90px">${isHolud ? 'WEDDING G/T' : 'GUESTS/TABLES'}</span><span style="font-size:13px;color:#111;font-weight:600">${inv.wGuests?inv.wGuests+' guests':''}${(inv.wGuests&&inv.wTables)?' · ':''}${inv.wTables?inv.wTables+' tables':''}</span></div>`:''}
           ${(inv.wBride||inv.wGroom)?`<div style="margin-top:8px;padding-top:8px;border-top:1px solid #eee;font-size:11px;color:#555">${inv.wBride?`<div><strong style="color:#7B1212">Bride:</strong> ${inv.wBride}</div>`:''}${inv.wGroom?`<div><strong style="color:#7B1212">Groom:</strong> ${inv.wGroom}</div>`:''}</div>`:''}
           ${inv.wDur?`<div style="display:flex;gap:6px;margin-bottom:4px"><span style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#7B1212;font-weight:700;min-width:90px">SLOT</span><span style="font-size:13px;color:#111;font-weight:600">${inv.wDur}</span></div>`:''}
-          ${(inv.wStart||inv.wEnd)?`<div style="display:flex;gap:6px;margin-bottom:4px"><span style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#7B1212;font-weight:700;min-width:90px">TIME</span><span style="font-size:13px;color:#111;font-weight:600">${inv.wStart||'?'}${(inv.wStart||inv.wEnd)?' – ':''}${inv.wEnd||'?'}</span></div>`:''}
+          ${(inv.wStart||inv.wEnd)?`<div style="display:flex;gap:6px;margin-bottom:4px"><span style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#7B1212;font-weight:700;min-width:90px">${isHolud?'WEDDING TIME':'TIME'}</span><span style="font-size:13px;color:#111;font-weight:600">${inv.wStart||'?'} – ${inv.wEnd||'?'}</span></div>`:''}
         </div>
       </div>
 
@@ -1413,9 +1434,8 @@ function InvDetail({ inv, setDetailInv, onEdit, onBack, onDelete, deleteModal, d
         <div style="padding:16px 18px;background:#fff9f9">
           <table style="width:100%;border-collapse:collapse"><tbody>${termsRows}</tbody></table>
           <!-- Signature block -->
-          <div style="display:grid;grid-template-columns:1fr 1fr;margin-top:20px;border:1.5px solid #8B1A1A;border-radius:8px;overflow:hidden">
+          <div style="margin-top:20px;border:1.5px solid #8B1A1A;border-radius:8px;overflow:hidden;max-width:320px">
             ${sigBlock('গ্রাহকের স্বাক্ষর')}
-            ${sigBlock('কর্তৃপক্ষের স্বাক্ষর')}
           </div>
           <!-- Acceptance -->
           <div style="margin:16px 0 0;padding:10px 16px;border:2px solid #8B1A1A;border-radius:8px;background:#fff5f5;font-size:11px;color:#3d0000;font-weight:600">

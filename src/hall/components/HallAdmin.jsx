@@ -147,7 +147,7 @@ export default function HallAdmin() {
         const ok = selMonths.some(m => (i.invDate||i.evDate||"").startsWith(prefix+String(m).padStart(2,"0")));
         if (!ok) return false;
       }
-      if (invFStatus && i.payStatus?.toLowerCase() !== invFStatus) return false;
+      if (invFStatus && (i.payStatus||"").toLowerCase() !== invFStatus.toLowerCase()) return false;
       if (invFEvent  && i.evType !== invFEvent) return false;
       if (!s) return true;
       if (invSearchBy==="all") return (i.client||"").toLowerCase().includes(s)||(i.phone||"").includes(s)||(i.num||"").includes(s)||(i.evType||"").toLowerCase().includes(s);
@@ -167,10 +167,58 @@ export default function HallAdmin() {
   function clearMonths()   { setSelMonths([]); }
 
   function exportInvCSV() {
-    const headers = ["Invoice #","Client","Phone","Event","Date","Guests","Total","Balance","Status"];
-    const rows = filteredInv.map(i=>[i.num,i.client,i.phone,i.evType,i.evDate,i.wGuests||i.hGuests||"",i.grand,i.balance,i.payStatus].map(v=>`"${(v||"").toString().replace(/"/g,'""')}"`));
-    const csv = [headers,...rows].map(r=>r.join(",")).join("\n");
-    const a=document.createElement("a"); a.href="data:text/csv;charset=utf-8,"+encodeURIComponent(csv); a.download="invoices.csv"; a.click();
+    function esc(v) {
+      return String(v ?? "")
+        .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+        .replace(/"/g,"&quot;").replace(/\r?\n/g," ");
+    }
+    function numCell(v) { return `<Cell><Data ss:Type="Number">${Number(v)||0}</Data></Cell>`; }
+    function strCell(v) { return `<Cell><Data ss:Type="String">${esc(v)}</Data></Cell>`; }
+    function hdrCell(v) { return `<Cell ss:StyleID="h"><Data ss:Type="String">${esc(v)}</Data></Cell>`; }
+
+    const headers = [
+      "Invoice #","Client Name","Phone","Event Type","Event Date",
+      "Wedding Guests","Holud Guests","Hall Total (BDT)","Waiter Cost (BDT)",
+      "Advance (BDT)","Balance (BDT)","Discount (BDT)","Payment Status",
+      "Address","Notes",
+    ];
+
+    const dataRows = filteredInv.map(inv => {
+      const waiterTotal = inv.waiterTotal || 0;
+      const balance = inv.balance ?? Math.max(0,(inv.grand||0)-(parseFloat(inv.adv)||0));
+      return `<Row>
+        ${strCell(inv.num)}${strCell(inv.client)}${strCell(inv.phone)}
+        ${strCell(inv.evType)}${strCell(inv.evDate)}
+        ${numCell(inv.wGuests||0)}${numCell(inv.hGuests||0)}
+        ${numCell(inv.grand||0)}${numCell(waiterTotal)}
+        ${numCell(parseFloat(inv.adv)||0)}${numCell(balance)}
+        ${numCell(parseFloat(inv.discount)||0)}${strCell(inv.payStatus||"")}
+        ${strCell(inv.address||"")}${strCell(inv.notes||"")}
+      </Row>`;
+    }).join("\n");
+
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+  xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+  <Styles>
+    <Style ss:ID="h">
+      <Font ss:Bold="1" ss:Color="#FFFFFF"/>
+      <Interior ss:Color="#2D1B69" ss:Pattern="Solid"/>
+    </Style>
+  </Styles>
+  <Worksheet ss:Name="Hall Invoices">
+    <Table>
+      <Row>${headers.map(hdrCell).join("")}</Row>
+      ${dataRows}
+    </Table>
+  </Worksheet>
+</Workbook>`;
+
+    const blob = new Blob([xml], { type:"application/vnd.ms-excel;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href=url; a.download="hall-invoices.xls"; a.click();
+    URL.revokeObjectURL(url);
   }
 
   // ── Analytics ────────────────────────────────────────────────────────────────
@@ -459,7 +507,7 @@ export default function HallAdmin() {
               <option value="">All Events</option>
               {EV_TYPES.map(t=><option key={t.v} value={t.v}>{t.v}</option>)}
             </select>
-            <button onClick={exportInvCSV} style={{ padding:"9px 14px", borderRadius:8, border:`1.5px solid ${C.border}`, background:"#fff", cursor:"pointer", fontFamily:"inherit", fontWeight:700, fontSize:11, whiteSpace:"nowrap" }}>⬇ CSV</button>
+            <button onClick={exportInvCSV} style={{ padding:"9px 14px", borderRadius:8, border:`1.5px solid ${C.border}`, background:"#fff", cursor:"pointer", fontFamily:"inherit", fontWeight:700, fontSize:11, whiteSpace:"nowrap" }}>⬇ Excel</button>
           </div>
 
           {/* Invoice table */}
