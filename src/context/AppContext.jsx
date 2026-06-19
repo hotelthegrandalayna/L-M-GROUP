@@ -1,4 +1,5 @@
-import { createContext, useContext, useState, useCallback } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import { hasHotelSupabaseConfig, loadHotelBookingsFromSupabase } from "../lib/hotelSupabase";
 
 const GA_ROOMS_VER = 'alayna-r1';
 
@@ -83,6 +84,28 @@ export function AppProvider({ children }) {
     setSmsTemplatesRaw(val);
     localStorage.setItem('ga_sms_tpl', JSON.stringify(val));
   }, [smsTemplates]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!hasHotelSupabaseConfig()) return undefined;
+
+    loadHotelBookingsFromSupabase()
+      .then((remoteBookings) => {
+        if (cancelled) return;
+        if (Array.isArray(remoteBookings) && remoteBookings.length > 0) {
+          setBookings(remoteBookings);
+          localStorage.setItem('ga_bookings', JSON.stringify(remoteBookings));
+        }
+      })
+      .catch((err) => {
+        console.error("Failed to load hotel bookings from Supabase:", err);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // UI
   const [activeTab,      setActiveTab]      = useState('desk');

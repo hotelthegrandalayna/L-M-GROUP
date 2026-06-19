@@ -1,8 +1,9 @@
 import { useState, useMemo } from "react";
 import { useApp } from "../context/AppContext";
-import { todayStr, money, formatDate, nightsBetween, bookingConflicts, maxId } from "../utils/helpers";
+import { todayStr, money, nightsBetween, bookingConflicts, maxId } from "../utils/helpers";
 import { sendWhatsAppAlert, buildHotelWaMessage } from "../utils/whatsapp";
 import { logEvent } from "../utils/auditLog";
+import { persistHotelBookingBundle } from "../lib/hotelSupabase";
 
 const STATUS_COLORS = {
   confirmed:    { bg:"#fffbee", border:"#FCD34D", color:"#8a6200", icon:"ti-calendar-check" },
@@ -18,6 +19,16 @@ function Badge({ status }) {
       <i className={"ti "+s.icon} style={{ fontSize:11 }} />{status.replace("-"," ")}
     </span>
   );
+}
+
+function addDaysIso(iso, days) {
+  const d = new Date(iso + "T00:00:00");
+  d.setDate(d.getDate() + days);
+  return d.toISOString().split("T")[0];
+}
+
+function getHotelPaidAmount(b) {
+  return (parseFloat(b.advance) || 0) + (parseFloat(b.restPayment) || 0);
 }
 
 function BookingModal({ booking, onClose }) {
@@ -36,7 +47,7 @@ function BookingModal({ booking, onClose }) {
   const [eNotes,  setENotes]  = useState(b.notes || "");
 
   const history  = b.paymentHistory || [];
-  const totalPaid = history.reduce((s,p) => s + p.amount, 0);
+  const totalPaid = getHotelPaidAmount(b);
   const invoiceTotal = b.invoiceTotal != null ? b.invoiceTotal : b.amount;
   const balance  = Math.max(0, invoiceTotal - totalPaid);
   const room     = rooms.find(r => r.number === b.room);
@@ -52,13 +63,35 @@ function BookingModal({ booking, onClose }) {
     if (amt > balance + 0.01) { notify("Amount exceeds balance due", "error"); return; }
     const entry = { ts: new Date().toISOString(), amount: amt, method: payMtd,
       txnNumber: needsTxn ? payTxn : "", note: payNote || "Payment collected", type: "room", by: curUser || "staff" };
-    const updated = bookings.map(x => x.id === b.id ? { ...x, paymentHistory: [...history, entry], advance: (x.advance||0)+amt } : x);
+    const newRest = (parseFloat(b.restPayment) || 0) + amt;
+    const newDue = Math.max(0, invoiceTotal - (parseFloat(b.advance) || 0) - newRest);
+    const updated = bookings.map(x => x.id === b.id ? {
+      ...x,
+      paymentHistory: [...history, entry],
+      restPayment: newRest,
+      dueAmount: newDue,
+      transactionNumber: needsTxn ? payTxn : (x.transactionNumber || x.txnNumber || ""),
+      txnNumber: needsTxn ? payTxn : (x.txnNumber || x.transactionNumber || ""),
+      paymentMethod: payMtd,
+    } : x);
     updateBookings(updated);
     updateRevenues([...revenues, { id: maxId(revenues), source: "Room Rent", amount: amt, date: today,
       note: b.guest + " Rm " + b.room + " - " + (payNote || "payment") + " (" + payMtd + ")", bookingId: b.id }]);
     notify("Payment of " + money(amt) + " recorded", "success");
     logEvent("hotel", "room_payment_collected", { num:String(b.id), guest:b.guest, amount:amt, note:`Rm ${b.room} · via ${payMtd}` }, curUser);
     setPayAmt(0); setPayTxn(""); setPayNote("");
+    void persistHotelBookingBundle({
+      ...b,
+      paymentHistory: [...history, entry],
+      restPayment: newRest,
+      dueAmount: newDue,
+      transactionNumber: needsTxn ? payTxn : (b.transactionNumber || b.txnNumber || ""),
+      txnNumber: needsTxn ? payTxn : (b.txnNumber || b.transactionNumber || ""),
+      paymentMethod: payMtd,
+    }).catch((err) => {
+      console.error("Failed to sync hotel payment to Supabase:", err);
+      notify("Payment recorded locally, but Supabase sync failed", "error");
+    });
     onClose();
   }
 
@@ -373,7 +406,7 @@ function SMSSendModal({ booking, refName, refPhone, status, onClose }) {
 function NewBookingModal({ onClose }) {
   const { curUser, rooms, bookings, updateBookings, revenues, updateRevenues, notify, extraPersonRules } = useApp();
   const today = todayStr();
-  const tmr   = new Date(Date.now() + 86400000).toISOString().split("T")[0];
+  const tmr   = addDaysIso(today, 1);
 
   // Guest
   const [name,     setName]     = useState("");
@@ -383,8 +416,6 @@ function NewBookingModal({ onClose }) {
   const [refName,  setRefName]  = useState("");
   const [refPhone, setRefPhone] = useState("");
   // ID
-  const [idType,   setIdType]   = useState("");
-  const [idNum,    setIdNum]    = useState("");
   const [persons,  setPersons]  = useState([{ idType:"", idNum:"", front:[], back:[] }]);
   // Stay
   const [room,     setRoom]     = useState("");
@@ -494,15 +525,49 @@ function NewBookingModal({ onClose }) {
       status, notes: notes.trim(),
       source: src, referredByName: rn, referredByPhone: rph, referredBy: rn || rph,
       nationality: nat.trim(),
-      idType, idNum: idNum.trim(),
+      idType: persons[0]?.idType || "",
+      idNum: (persons[0]?.idNum || "").trim(),
       idFront: (persons[0]?.front||[])[0] || "", idBack: (persons[0]?.back||[])[0] || "",
       idDocs: persons.filter(p => (p.front||[]).length || (p.back||[]).length || p.idNum),
       adults: parseInt(adults) || 2, children: parseInt(children) || 0,
-      advance: a, paymentMethod: method, txnNumber: t,
+      advance: a, paymentMethod: method, txnNumber: t, transactionNumber: t,
+      restPayment: 0, dueAmount: Math.max(0, roomTotal - a),
       paymentHistory: a > 0 ? [{ ts: new Date().toISOString(), amount: a, method, txnNumber: t, note: "Advance paid", type: "room", by: curUser || "staff" }] : [],
       extraPersonCharge: (epAccepted && epCharge > 0) ? { qty: epCount, rate: epRate, total: epCharge } : null,
       createdAt: new Date().toISOString(), by: curUser || "staff" };
     updateBookings([...bookings, bkObj]);
+    void persistHotelBookingBundle(bkObj)
+      .then(({ guest, booking }) => {
+        if (!booking) return;
+        updateBookings((prev) =>
+          prev.map((x) =>
+            x.id === bkObj.id
+              ? {
+                  ...x,
+                  guest_id: guest?.id ?? x.guest_id,
+                  supabaseBookingId:
+                    booking.id ?? x.supabaseBookingId ?? x.dbBookingId ?? null,
+                  restPayment: booking.rest_payment ?? x.restPayment ?? 0,
+                  dueAmount: booking.due_amount ?? x.dueAmount ?? 0,
+                  transactionNumber:
+                    booking.transaction_number ??
+                    x.transactionNumber ??
+                    x.txnNumber ??
+                    "",
+                  txnNumber:
+                    booking.transaction_number ??
+                    x.txnNumber ??
+                    x.transactionNumber ??
+                    "",
+                }
+              : x,
+          ),
+        );
+      })
+      .catch((err) => {
+        console.error("Failed to sync hotel booking to Supabase:", err);
+        notify("Booking saved locally, but Supabase sync failed", "error");
+      });
     sendWhatsAppAlert(buildHotelWaMessage(bkObj)).catch(() => {});
     if (a > 0) updateRevenues([...revenues, {
       id: maxId(revenues), source: "Room Rent", amount: a, date: today,
@@ -783,7 +848,7 @@ function NewBookingModal({ onClose }) {
 
 
 export default function Bookings() {
-  const { rooms, bookings, notify } = useApp();
+  const { bookings } = useApp();
   const today = todayStr();
   const [filter, setFilter] = useState("all");
   const [search, setSearch] = useState("");
@@ -934,7 +999,7 @@ export default function Bookings() {
             )}
             {filtered.map((b,i) => {
               const invoiceTotal = b.invoiceTotal != null ? b.invoiceTotal : b.amount;
-              const paid = (b.paymentHistory||[]).reduce((s,p)=>s+p.amount,0);
+              const paid = getHotelPaidAmount(b);
               const bal  = Math.max(0, invoiceTotal - paid);
               return (
                 <tr key={b.id} style={{ borderBottom:"1px solid var(--border)", background: i%2===0?"":"var(--panel-alt)", cursor:"pointer" }}
@@ -969,8 +1034,8 @@ export default function Bookings() {
       <div style={{ display:"flex", gap:14, marginTop:14, fontSize:12, color:"var(--text3)", flexWrap:"wrap" }}>
         <span><i className="ti ti-list" /> Showing {filtered.length} of {bookings.length} {!showHistory && <span style={{ color:"var(--navy)", fontWeight:700 }}>(today's view)</span>}</span>
         <span><i className="ti ti-currency-taka" style={{ color:"var(--gold2)" }} /> Total: {money(filtered.reduce((s,b)=>s+(b.invoiceTotal??b.amount),0))}</span>
-        <span style={{ color:"var(--green)" }}><i className="ti ti-circle-check" /> Paid: {money(filtered.reduce((s,b)=>s+(b.paymentHistory||[]).reduce((a,p)=>a+p.amount,0),0))}</span>
-        <span style={{ color:"var(--red)" }}><i className="ti ti-alert-circle" /> Due: {money(filtered.reduce((s,b)=>{ const inv=b.invoiceTotal??b.amount; const pd=(b.paymentHistory||[]).reduce((a,p)=>a+p.amount,0); return s+Math.max(0,inv-pd); },0))}</span>
+        <span style={{ color:"var(--green)" }}><i className="ti ti-circle-check" /> Paid: {money(filtered.reduce((s,b)=>s+getHotelPaidAmount(b),0))}</span>
+        <span style={{ color:"var(--red)" }}><i className="ti ti-alert-circle" /> Due: {money(filtered.reduce((s,b)=>{ const inv=b.invoiceTotal??b.amount; const pd=getHotelPaidAmount(b); return s+Math.max(0,inv-pd); },0))}</span>
       </div>
 
       {sel     && <BookingModal  booking={sel} onClose={() => setSel(null)} />}

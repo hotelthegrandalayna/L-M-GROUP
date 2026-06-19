@@ -4,6 +4,7 @@ import { useApp } from "../context/AppContext";
 import { todayStr, money, maxId } from "../utils/helpers";
 import { logEvent } from "../utils/auditLog";
 import { loadWaConfig, sendWhatsAppAlert, buildHotelPrintAlertMessage } from "../utils/whatsapp";
+import { persistHotelBookingBundle } from "../lib/hotelSupabase";
 
 const HOTEL_INFO = {
   name: "Hotel The Grand Alayna",
@@ -38,11 +39,12 @@ function buildInvoiceHTML(b, rooms, invExtras, mode) {
   const combinedExtras = extrasTotal + epCharge;
   const grandTotal  = roomTotal + combinedExtras;
   const advance     = b.advance || 0;
+  const restPayment = b.restPayment || 0;
   const extAdv      = b.extrasAdvance || 0;
-  const totalAdv    = advance + extAdv;
+  const totalAdv    = advance + restPayment + extAdv;
   const balanceDue  = Math.max(0, grandTotal - totalAdv);
 
-  const roomStatus    = advance >= roomTotal && roomTotal > 0 ? "paid" : advance > 0 ? "partial" : "unpaid";
+  const roomStatus    = Math.max(0, grandTotal - advance - restPayment) <= 0 && roomTotal > 0 ? "paid" : totalAdv > 0 ? "partial" : "unpaid";
   const extrasStatus  = combinedExtras === 0 ? "unpaid" : extAdv >= combinedExtras ? "paid" : extAdv > 0 ? "partial" : "unpaid";
   const invNum = "GA-" + String(b.id).padStart(4,"0");
   const invDate = b.invoiceDate || todayStr();
@@ -325,8 +327,9 @@ export default function Invoice() {
     const _exTotal = loadedExtras.filter(x=>x.desc&&x.rate>0).reduce((s,x)=>s+x.qty*x.rate,0);
     const _grand = _rTotal + _exTotal + _ep;
     const _adv = selBk.advance || 0;
+    const _rest = selBk.restPayment || 0;
     const _extAdv = selBk.extrasAdvance || 0;
-    const _bal = Math.max(0, _grand - _adv - _extAdv);
+    const _bal = Math.max(0, _grand - _adv - _rest - _extAdv);
     setRoomAmt(_bal > 0 ? String(_bal) : "");
     setExtAmt(_ep + _exTotal > 0 ? String(Math.max(0, _ep + _exTotal - _extAdv)) : "");
   }, [selId]);
@@ -341,13 +344,14 @@ export default function Invoice() {
   const combinedExt  = extrasTotal + epCharge;
   const grandTotal   = roomTotal + combinedExt;
   const advance      = selBk ? (selBk.advance || 0) : 0;
+  const restPayment  = selBk ? (selBk.restPayment || 0) : 0;
   const extAdv       = selBk ? (selBk.extrasAdvance || 0) : 0;
-  const totalPaid    = advance + extAdv;
+  const totalPaid    = advance + restPayment + extAdv;
   const totalBal     = Math.max(0, grandTotal - totalPaid);
-  const roomBalDue   = Math.max(0, grandTotal - totalPaid);
+  const roomBalDue   = Math.max(0, grandTotal - advance - restPayment);
   const extBalDue    = Math.max(0, combinedExt - extAdv);
 
-  const roomStatus   = advance >= roomTotal && roomTotal > 0 ? "paid" : advance > 0 ? "partial" : "unpaid";
+  const roomStatus   = roomBalDue <= 0 && roomTotal > 0 ? "paid" : totalPaid > 0 ? "partial" : "unpaid";
   const extrasStatus = combinedExt === 0 ? "unpaid" : extAdv >= combinedExt ? "paid" : extAdv > 0 ? "partial" : "unpaid";
 
   const BADGE_MAP = {
@@ -405,9 +409,11 @@ export default function Invoice() {
     const updated = bookings.map(b => {
       if (b.id !== selBk.id) return b;
       const hist = [...(b.paymentHistory || []), entry];
-      const newAdv   = type==="room"  ? (b.advance||0)+amt : (b.advance||0);
+      const newAdv   = b.advance || 0;
+      const newRest  = type==="room"  ? (b.restPayment||0)+amt : (b.restPayment||0);
       const newExtAdv= type==="extras"? (b.extrasAdvance||0)+amt : (b.extrasAdvance||0);
-      return { ...b, paymentHistory:hist, advance:newAdv, extrasAdvance:newExtAdv };
+      const newDue   = Math.max(0, (b.invoiceTotal ?? b.amount ?? 0) - newAdv - newRest - newExtAdv);
+      return { ...b, paymentHistory:hist, advance:newAdv, restPayment:newRest, extrasAdvance:newExtAdv, dueAmount:newDue };
     });
     updateBookings(updated);
     const rev = { id:maxId(revenues), source:"Room Rent", amount:amt, date:todayStr(),
@@ -415,6 +421,26 @@ export default function Invoice() {
     updateRevenues([...revenues, rev]);
     notify("Payment of " + money(amt) + " recorded","success");
     logEvent("hotel", "room_payment_collected", { num:String(selBk.id), guest:selBk.guest, amount:amt, note:`Rm ${selBk.room} · via ${method}` }, curUser);
+    void persistHotelBookingBundle({
+      ...selBk,
+      paymentHistory: [...(selBk.paymentHistory || []), entry],
+      advance: selBk.advance || 0,
+      restPayment: type === "room" ? (selBk.restPayment || 0) + amt : (selBk.restPayment || 0),
+      extrasAdvance: type === "extras" ? (selBk.extrasAdvance || 0) + amt : (selBk.extrasAdvance || 0),
+      dueAmount: Math.max(
+        0,
+        (selBk.invoiceTotal ?? selBk.amount ?? 0)
+          - (selBk.advance || 0)
+          - (type === "room" ? (selBk.restPayment || 0) + amt : (selBk.restPayment || 0))
+          - (type === "extras" ? (selBk.extrasAdvance || 0) + amt : (selBk.extrasAdvance || 0)),
+      ),
+      paymentMethod: method,
+      transactionNumber: selBk.transactionNumber || selBk.txnNumber || "",
+      txnNumber: selBk.txnNumber || selBk.transactionNumber || "",
+    }).catch((err) => {
+      console.error("Failed to sync hotel invoice payment to Supabase:", err);
+      notify("Payment recorded locally, but Supabase sync failed", "error");
+    });
     // After payment, clear note and set remaining balance in amount field
     const remaining = Math.max(0, balDue - amt);
     if (type==="room") { setRoomAmt(remaining > 0 ? String(remaining) : ""); setRoomNote(""); }

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useApp } from "../context/AppContext";
 import { todayStr, money, bookingConflicts, getRoomDisplayStatus, maxId } from "../utils/helpers";
 import GuestSurveyOverlay from "./GuestSurveyOverlay";
+import { persistHotelBookingBundle } from "../lib/hotelSupabase";
 
 // ── Room status colours (soft tints) ──────────────────────────────────────
 const STATUS_STYLE = {
@@ -11,19 +12,33 @@ const STATUS_STYLE = {
   maintenance: { bg:"#F4F4F4", text:"#444",    border:"#ccc",    badge:"#555",    badgeTx:"#fff" },
 };
 
+function getHotelDue(b) {
+  if (b?.dueAmount != null) return Math.max(0, parseFloat(b.dueAmount) || 0);
+  const total = b?.invoiceTotal != null ? b.invoiceTotal : b?.amount || 0;
+  const paid =
+    (parseFloat(b?.advance) || 0) +
+    (parseFloat(b?.restPayment) || 0) +
+    (parseFloat(b?.extrasAdvance) || 0);
+  return Math.max(0, total - paid);
+}
+
 function RoomModal({ room, onClose, onCheckout }) {
   const { curUser, bookings, updateBookings, revenues, updateRevenues, notify } = useApp();
   const today = todayStr();
-  const tmr = new Date(Date.now() + 86400000).toISOString().split("T")[0];
-  const d2  = new Date(Date.now() + 172800000).toISOString().split("T")[0];
+  const tmr = new Date(today + "T00:00:00");
+  tmr.setDate(tmr.getDate() + 1);
+  const d2  = new Date(today + "T00:00:00");
+  d2.setDate(d2.getDate() + 2);
+  const tmrIso = tmr.toISOString().split("T")[0];
+  const d2Iso  = d2.toISOString().split("T")[0];
   const bIn  = bookings.find(b => b.room === room.number && b.status === "checked-in");
   const bRes = bookings.find(b => b.room === room.number && b.status === "confirmed" && b.checkin <= today && b.checkout > today);
   const future = bookings.filter(b => b.room === room.number && b.status === "confirmed" && b.checkin > today).sort((a,b) => a.checkin > b.checkin ? 1 : -1);
 
   const [nm,  setNm]  = useState("");
   const [ph,  setPh]  = useState("");
-  const [ci,  setCi]  = useState(bRes ? tmr : today);
-  const [co,  setCo]  = useState(bRes ? d2  : tmr);
+  const [ci,  setCi]  = useState(bRes ? tmrIso : today);
+  const [co,  setCo]  = useState(bRes ? d2Iso  : tmrIso);
   const [adv, setAdv] = useState("");
   const [acChoice, setAcChoice] = useState("AC");
   const [mtd, setMtd] = useState("Cash");
@@ -53,11 +68,43 @@ function RoomModal({ room, onClose, onCheckout }) {
     const bk  = { id, guest: nm.trim(), phone: ph.trim(), room: room.number, type: room.type,
       checkin: ci, checkout: co, nights: n, amount: amt, advance: a,
       paymentHistory: a > 0 ? [{ ts: new Date().toISOString(), amount: a, method: mtd, txnNumber: t, note: "Reservation advance", type: "room", by: curUser || "staff" }] : [],
-      paymentMethod: mtd, txnNumber: t, status: "confirmed", notes: nt.trim(),
+      paymentMethod: mtd, txnNumber: t, transactionNumber: t, restPayment: 0, dueAmount: Math.max(0, amt - a), status: "confirmed", notes: nt.trim(),
       acChoice: isDual ? acChoice : undefined, roomRate,
       source: "Walk-in", adults: 2, children: 0, nationality: "", discountType: "none",
       discountAmount: 0, createdAt: new Date().toISOString(), by: curUser || "staff" };
     updateBookings([...bookings, bk]);
+    void persistHotelBookingBundle(bk)
+      .then(({ guest, booking }) => {
+        if (!booking) return;
+        updateBookings((prev) =>
+          prev.map((x) =>
+            x.id === bk.id
+              ? {
+                  ...x,
+                  guest_id: guest?.id ?? x.guest_id,
+                  supabaseBookingId:
+                    booking.id ?? x.supabaseBookingId ?? x.dbBookingId ?? null,
+                  restPayment: booking.rest_payment ?? x.restPayment ?? 0,
+                  dueAmount: booking.due_amount ?? x.dueAmount ?? 0,
+                  transactionNumber:
+                    booking.transaction_number ??
+                    x.transactionNumber ??
+                    x.txnNumber ??
+                    "",
+                  txnNumber:
+                    booking.transaction_number ??
+                    x.txnNumber ??
+                    x.transactionNumber ??
+                    "",
+                }
+              : x,
+          ),
+        );
+      })
+      .catch((err) => {
+        console.error("Failed to sync desk reservation to Supabase:", err);
+        notify("Reservation saved locally, but Supabase sync failed", "error");
+      });
     if (a > 0) updateRevenues([...revenues, { id: maxId(revenues), source: "Room Rent", amount: a, date: today, note: nm.trim() + " Rm " + room.number + " - deposit (" + mtd + ")", bookingId: id }]);
     notify("Room " + room.number + " reserved for " + nm.trim() + (a > 0 ? " — Advance: " + money(a) : ""), "success");
     onClose();
@@ -188,7 +235,7 @@ function RoomModal({ room, onClose, onCheckout }) {
           <div style={{ background:"var(--green-bg)", border:"1.5px solid var(--green-bd)", borderRadius:9, padding:13, marginBottom:14 }}>
             <div style={{ fontSize:11, fontWeight:800, color:"var(--green)", textTransform:"uppercase", marginBottom:10 }}>Currently Checked In</div>
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:9, fontSize:12 }}>
-              {[["Guest",bIn.guest],["Phone",bIn.phone],["Check-out",bIn.checkout],["Balance Due",money(Math.max(0,(bIn.invoiceTotal??bIn.amount)-(bIn.advance||0)-(bIn.extrasAdvance||0)))]].map(([l,v]) => (
+              {[["Guest",bIn.guest],["Phone",bIn.phone],["Check-out",bIn.checkout],["Balance Due",money(getHotelDue(bIn))]].map(([l,v]) => (
                 <div key={l}><div style={{ fontSize:10, color:"var(--text3)", marginBottom:2 }}>{l}</div><strong>{v}</strong></div>
               ))}
             </div>
@@ -204,7 +251,7 @@ function RoomModal({ room, onClose, onCheckout }) {
           <div style={{ background:"#fffbee", border:"2px solid var(--gold)", borderRadius:9, padding:14, marginBottom:14 }}>
             <div style={{ fontSize:11, fontWeight:800, color:"#8a6200", textTransform:"uppercase", marginBottom:10, display:"flex", alignItems:"center", gap:6 }}><i className="ti ti-calendar-check" /> Reserved — Awaiting Check-In</div>
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:9, fontSize:12, marginBottom:10 }}>
-              {[["Guest",bRes.guest],["Mobile",bRes.phone],["Check-in",bRes.checkin],["Check-out",bRes.checkout],["Nights",bRes.nights],["Total",money(bRes.invoiceTotal??bRes.amount)],["Advance Paid",money(bRes.advance||0)],["Balance Due",money(Math.max(0,(bRes.invoiceTotal??bRes.amount)-(bRes.advance||0)-(bRes.extrasAdvance||0)))]].map(([l,v]) => (
+              {[["Guest",bRes.guest],["Mobile",bRes.phone],["Check-in",bRes.checkin],["Check-out",bRes.checkout],["Nights",bRes.nights],["Total",money(bRes.invoiceTotal??bRes.amount)],["Advance Paid",money(bRes.advance||0)],["Balance Due",money(getHotelDue(bRes))]].map(([l,v]) => (
                 <div key={l}><div style={{ fontSize:10, color:"var(--text3)", marginBottom:2 }}>{l}</div><strong>{v}</strong></div>
               ))}
             </div>
@@ -358,8 +405,7 @@ export default function Desk() {
   const occPct = rooms.length ? Math.round(occ/rooms.length*100) : 0;
 
   const pendingBal = bookings.filter(b => ["confirmed","checked-in"].includes(b.status)).map(b => {
-    const tot = b.invoiceTotal != null ? b.invoiceTotal : b.amount;
-    const due = Math.max(0, tot - (b.advance||0) - (b.extrasAdvance||0));
+    const due = getHotelDue(b);
     return { ...b, due };
   }).filter(b => b.due > 0).sort((a,b) => b.due - a.due);
 
@@ -373,11 +419,20 @@ export default function Desk() {
   // Called from CheckoutModal when staff confirms
   function doCheckout(bid, collectBalance) {
     const b = bookings.find(x => x.id === bid); if (!b) return;
-    const tot = b.invoiceTotal != null ? b.invoiceTotal : b.amount;
-    const out = Math.max(0, tot - ((b.advance || 0) + (b.extrasAdvance || 0)));
+    const out = getHotelDue(b);
     if (collectBalance && out > 0)
       updateRevenues([...revenues, { id: maxId(revenues), source: "Room Rent", amount: out, date: today, note: b.guest + " Rm " + b.room + " - collected at checkout", bookingId: bid }]);
-    updateBookings(bookings.map(x => x.id === bid ? { ...x, status: "checked-out" } : x));
+    const updatedBooking = {
+      ...b,
+      status: "checked-out",
+      restPayment: (parseFloat(b.restPayment) || 0) + (collectBalance ? out : 0),
+      dueAmount: collectBalance ? 0 : getHotelDue(b),
+    };
+    updateBookings(bookings.map(x => x.id === bid ? updatedBooking : x));
+    void persistHotelBookingBundle(updatedBooking).catch((err) => {
+      console.error("Failed to sync checkout to Supabase:", err);
+      notify("Checkout saved locally, but Supabase sync failed", "error");
+    });
     notify(b.guest + " checked out successfully", "success");
     setCheckoutTarget(null);
     setPostCheckout(b); // show post-checkout options (survey / review)
@@ -498,7 +553,7 @@ export default function Desk() {
                     </thead>
                     <tbody>
                       {inhouse.map((b,i) => {
-                        const bal = Math.max(0,(b.invoiceTotal??b.amount)-(b.advance||0)-(b.extrasAdvance||0));
+                        const bal = getHotelDue(b);
                         return (
                           <tr key={b.id} style={{ borderBottom:"1px solid var(--border)", background:i%2===0?"":"var(--bg3)" }}>
                             <td style={{ padding:"9px 12px" }}><strong style={{ color:"var(--navy)" }}>Rm {b.room}</strong></td>
