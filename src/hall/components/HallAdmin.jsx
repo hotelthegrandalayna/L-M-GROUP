@@ -4,6 +4,7 @@ import { useHall, EV_TYPES, checkHallAdminPass } from "../HallContext";
 import useIsMobile from "../useIsMobile";
 import { loadWaConfig, saveWaConfig, sendWhatsAppAlert } from "../../utils/whatsapp";
 import AuditLogViewer from "../../components/AuditLogViewer";
+import { deleteHallInvoiceFromSupabase, deleteHallInvoicesFromSupabase } from "../lib/hallSupabase";
 
 const DEFAULT_RECOVERY_EMAILS = ["mainulhasan86@gmail.com","mainulhasan86@yahoo.com"];
 function loadRecoveryEmails() {
@@ -246,6 +247,9 @@ export default function HallAdmin() {
     if (!window.confirm("Permanently delete ALL invoices? This cannot be undone.")) return;
     const backup = { invoices, at: new Date().toISOString() };
     localStorage.setItem("a_inv_backup", JSON.stringify(backup));
+    void deleteHallInvoicesFromSupabase(invoices.map(i => i.id)).catch(err => {
+      console.error("Failed to clear hall invoices from Supabase:", err);
+    });
     setInvoices([]);
     setDangerPass("");
     notify("All invoices cleared. Backup saved.", "success");
@@ -492,7 +496,7 @@ export default function HallAdmin() {
                     </td>
                     <td style={{ padding:"10px 12px" }}>
                       {isAdmin && (
-                        <button onClick={()=>{ if(window.confirm("Delete invoice "+inv.num+"?")){ setInvoices(prev=>prev.filter(i=>i.id!==inv.id)); notify("Invoice deleted","success"); } }}
+                        <button onClick={()=>{ if(window.confirm("Delete invoice "+inv.num+"?")){ setInvoices(prev=>prev.filter(i=>i.id!==inv.id)); void deleteHallInvoiceFromSupabase(inv.id).catch(err => { console.error("Failed to delete hall invoice from Supabase:", err); }); notify("Invoice deleted","success"); } }}
                           style={{ padding:"4px 8px", borderRadius:7, border:`1.5px solid ${C.red}40`, background:"#fff0f0", cursor:"pointer", fontSize:12 }}>🗑</button>
                       )}
                     </td>

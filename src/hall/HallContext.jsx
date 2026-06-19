@@ -1,5 +1,6 @@
 
-import { createContext, useContext, useState, useCallback } from "react";
+import { createContext, useContext, useState, useCallback, useEffect } from "react";
+import { hasHallSupabaseConfig, loadHallInvoicesFromSupabase } from "./lib/hallSupabase";
 
 const Ctx = createContext(null);
 
@@ -84,6 +85,27 @@ export function HallProvider({ children }) {
   const [notification, setNotification] = useState(null);
   const [invoiceJumpSignal, setInvoiceJumpSignal] = useState(0);
   const bumpInvoiceJump = useCallback(() => setInvoiceJumpSignal(n => n+1), []);
+
+  useEffect(() => {
+    let active = true;
+
+    if (!hasHallSupabaseConfig()) return () => { active = false; };
+
+    (async () => {
+      try {
+        const remoteInvoices = await loadHallInvoicesFromSupabase();
+        if (!active) return;
+        if (remoteInvoices.length) {
+          setInvoicesRaw(remoteInvoices);
+          localStorage.setItem("a_inv", JSON.stringify(remoteInvoices));
+        }
+      } catch (err) {
+        console.error("Failed to load hall invoices from Supabase:", err);
+      }
+    })();
+
+    return () => { active = false; };
+  }, []);
 
   const setInvoices = useCallback(next => { const v = typeof next === "function" ? next(invoices) : next; setInvoicesRaw(v); localStorage.setItem("a_inv", JSON.stringify(v)); }, [invoices]);
   const setExpenses = useCallback(next => { const v = typeof next === "function" ? next(expenses) : next; setExpensesRaw(v); localStorage.setItem("a_exp", JSON.stringify(v)); }, [expenses]);
