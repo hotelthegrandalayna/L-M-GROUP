@@ -121,7 +121,76 @@ export default function HallCutlery() {
   }
 
   function printCutlery() {
-    window.print();
+    const numTables = parseInt(tables) || 1;
+    const c1Total = tot1;
+    const c2Total = tot2;
+    const chart1xTables = multResult;
+    const grand = grandTotal;
+
+    function rows(arr, startIdx) {
+      return arr.filter(r => r.n).map((r, i) => `
+        <tr>
+          <td style="text-align:center;color:#555;">${startIdx + i}</td>
+          <td>${r.n}</td>
+          <td style="text-align:center;">${r.qty || "—"}</td>
+          <td style="text-align:right;">${r.rate ? r.rate.toLocaleString() : "০"}</td>
+          <td style="text-align:right;font-weight:700;color:#7B1212;">${r.total ? r.total.toLocaleString() + " ৳" : "—"}</td>
+        </tr>`).join("");
+    }
+
+    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
+    <title>কাটলারি চার্ট</title>
+    <style>
+      * { box-sizing:border-box; margin:0; padding:0; }
+      body { font-family:"Noto Sans Bengali","Segoe UI",sans-serif; background:#fff; color:#111; padding:24px; font-size:13px; }
+      h1 { font-size:20px; color:#1e3a5f; margin-bottom:4px; }
+      .sub { color:#666; font-size:12px; margin-bottom:16px; }
+      .grand-box { background:#7B1212; color:#fff; padding:10px 18px; border-radius:8px; font-size:18px; font-weight:800; display:inline-block; margin-bottom:18px; }
+      .mult-box { background:#f5f0ff; border:1.5px solid #1e3a5f; border-radius:8px; padding:8px 16px; font-size:13px; margin-bottom:16px; color:#1e3a5f; font-weight:600; }
+      table { width:100%; border-collapse:collapse; margin-bottom:20px; }
+      thead tr { background:#1e3a5f; color:#fff; }
+      thead th { padding:8px 10px; font-size:12px; font-weight:700; text-align:left; }
+      tbody tr:nth-child(even) { background:#f9f9f9; }
+      tbody td { padding:7px 10px; border-bottom:1px solid #eee; }
+      .section-title { font-size:14px; font-weight:800; color:#fff; background:#1e3a5f; padding:8px 12px; border-radius:6px 6px 0 0; margin-top:16px; }
+      .total-row { background:#f0f4ff!important; }
+      .total-row td { font-weight:800; color:#1e3a5f; font-size:13px; }
+      @media print { body { padding:10px; } }
+    </style></head><body>
+    <h1>🍽 কাটলারি চার্ট</h1>
+    <div class="sub">Grand Total Breakdown</div>
+
+    <div class="mult-box">
+      টেবিল সংখ্যা: <strong>${numTables}</strong> &nbsp;×&nbsp; Chart 1 = <strong>${chart1xTables.toLocaleString()} ৳</strong>
+      &nbsp;+&nbsp; Chart 2 = <strong>${c2Total.toLocaleString()} ৳</strong>
+    </div>
+    <div class="grand-box">গ্র্যান্ড টোটাল: ৳ ${grand.toLocaleString()}</div>
+
+    <div class="section-title">চার্ট ১ — প্রতি টেবিল (১২ জন)</div>
+    <table>
+      <thead><tr><th>#</th><th>আইটেম</th><th>পরিমাণ</th><th style="text-align:right">ইউনিট মূল্য (৳)</th><th style="text-align:right">মোট (৳)</th></tr></thead>
+      <tbody>
+        ${rows(c1, 1)}
+        <tr class="total-row"><td colspan="4" style="text-align:right;">Chart 1 Total</td><td style="text-align:right;">${c1Total.toLocaleString()} ৳</td></tr>
+      </tbody>
+    </table>
+
+    <div class="section-title">চার্ট ২ — রান্না, স্টেজ ও অন্যান্য সরবরাহ</div>
+    <table>
+      <thead><tr><th>#</th><th>আইটেম</th><th>পরিমাণ</th><th style="text-align:right">ইউনিট মূল্য (৳)</th><th style="text-align:right">মোট (৳)</th></tr></thead>
+      <tbody>
+        ${rows(c2, 11)}
+        <tr class="total-row"><td colspan="4" style="text-align:right;">Chart 2 Total</td><td style="text-align:right;">${c2Total.toLocaleString()} ৳</td></tr>
+      </tbody>
+    </table>
+
+    <script>window.onload=()=>{window.print();window.onafterprint=()=>window.close();}</script>
+    </body></html>`;
+
+    const w = window.open("", "_blank", "width=800,height=900");
+    if (!w) { notify("পপআপ ব্লক করা হয়েছে — ব্রাউজারে পপআপ অনুমতি দিন।", "error"); return; }
+    w.document.write(html);
+    w.document.close();
   }
 
   // ── Styles ──────────────────────────────────────────────────────────────────

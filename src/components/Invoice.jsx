@@ -302,9 +302,11 @@ export default function Invoice() {
   const [roomAmt,  setRoomAmt]  = useState("");
   const [roomMtd,  setRoomMtd]  = useState("Cash");
   const [roomNote, setRoomNote] = useState("");
+  const [roomTxn,  setRoomTxn]  = useState("");
   const [extAmt,   setExtAmt]   = useState("");
   const [extMtd,   setExtMtd]   = useState("Cash");
   const [extNote,  setExtNote]  = useState("");
+  const [extTxn,   setExtTxn]   = useState("");
 
   const selBk = useMemo(() => bookings.find(b => b.id === parseInt(selId)), [bookings, selId, extras]);
 
@@ -397,15 +399,20 @@ export default function Invoice() {
     if (!silent) notify("Invoice saved — GA-" + String(selBk.id).padStart(4,"0"),"success");
   }
 
+  const CASH_METHODS = ["Cash"];
+
   function collectPayment(type) {
     if (!selBk) { notify("Select a booking first","error"); return; }
     const amt    = parseFloat(type==="room" ? roomAmt : extAmt) || 0;
     const method = type==="room" ? roomMtd : extMtd;
     const note   = type==="room" ? roomNote : extNote;
+    const txn    = type==="room" ? roomTxn  : extTxn;
     const balDue = type==="room" ? roomBalDue : extBalDue;
     if (amt <= 0) { notify("Enter a valid amount","error"); return; }
-    if (amt > balDue + 0.01) { notify("Amount exceeds balance due (" + money(balDue) + ")","error"); return; }
-    const entry = { ts:new Date().toISOString(), amount:amt, method, note:note||"", type:type==="room"?"room":"service", by:curUser||"staff" };
+    if (!CASH_METHODS.includes(method) && !txn.trim()) {
+      notify("Transaction / reference number is required for " + method + " payments","error"); return;
+    }
+    const entry = { ts:new Date().toISOString(), amount:amt, method, txn:txn||"", note:note||"", type:type==="room"?"room":"service", by:curUser||"staff" };
     const updated = bookings.map(b => {
       if (b.id !== selBk.id) return b;
       const hist = [...(b.paymentHistory || []), entry];
@@ -443,8 +450,8 @@ export default function Invoice() {
     });
     // After payment, clear note and set remaining balance in amount field
     const remaining = Math.max(0, balDue - amt);
-    if (type==="room") { setRoomAmt(remaining > 0 ? String(remaining) : ""); setRoomNote(""); }
-    else               { setExtAmt(remaining > 0 ? String(remaining) : ""); setExtNote(""); }
+    if (type==="room") { setRoomAmt(remaining > 0 ? String(remaining) : ""); setRoomNote(""); setRoomTxn(""); }
+    else               { setExtAmt(remaining > 0 ? String(remaining) : ""); setExtNote("");  setExtTxn("");  }
   }
 
   function printRoomOnly() {
@@ -558,14 +565,19 @@ export default function Invoice() {
                 </div>
 
                 {/* Collect payment — only when balance > 0 */}
-                {selBk && roomBalDue > 0 && (
-                  <div style={{ border:"1.5px solid #c0392b", borderRadius:8, overflow:"hidden" }}>
-                    <div style={{ background:"#c0392b", padding:"7px 12px", display:"flex", alignItems:"center", gap:6 }}>
+                {selBk && roomBalDue > 0 && (() => {
+                  const due = roomBalDue > 0;
+                  const hdr = due ? "#c0392b" : "#2D1B69";
+                  const bg  = due ? "#fff8f8" : "#f5f3ff";
+                  const bdr = due ? "#c0392b" : "#2D1B69";
+                  return (
+                  <div style={{ border:`1.5px solid ${bdr}`, borderRadius:8, overflow:"hidden" }}>
+                    <div style={{ background:hdr, padding:"7px 12px", display:"flex", alignItems:"center", gap:6 }}>
                       <i className="ti ti-cash" style={{ color:"#fff", fontSize:13 }} />
                       <span style={{ fontSize:11, fontWeight:700, color:"#fff", textTransform:"uppercase", letterSpacing:.8 }}>Collect Payment</span>
-                      <span style={{ marginLeft:"auto", fontSize:11, fontWeight:800, color:"#ffe0e0" }}>Total Due: {money(roomBalDue)}</span>
+                      {due && <span style={{ marginLeft:"auto", fontSize:11, fontWeight:800, color:"#ffe0e0" }}>Total Due: {money(roomBalDue)}</span>}
                     </div>
-                    <div style={{ padding:"10px 12px", display:"flex", flexDirection:"column", gap:8, background:"#fff8f8" }}>
+                    <div style={{ padding:"10px 12px", display:"flex", flexDirection:"column", gap:8, background:bg }}>
                       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:7 }}>
                         <div className="form-group" style={{ marginBottom:0 }}>
                           <label>Amount (৳)</label>
@@ -573,11 +585,19 @@ export default function Invoice() {
                         </div>
                         <div className="form-group" style={{ marginBottom:0 }}>
                           <label>Method</label>
-                          <select value={roomMtd} onChange={e=>setRoomMtd(e.target.value)}>
+                          <select value={roomMtd} onChange={e=>{ setRoomMtd(e.target.value); setRoomTxn(""); }}>
                             {["Cash","bKash","Nagad","Card","Bank Transfer"].map(m=><option key={m}>{m}</option>)}
                           </select>
                         </div>
                       </div>
+                      {!CASH_METHODS.includes(roomMtd) && (
+                        <div className="form-group" style={{ marginBottom:0 }}>
+                          <label style={{ color:"#c0392b" }}>Transaction / Ref. No. <span style={{ color:"#c0392b" }}>*</span></label>
+                          <input value={roomTxn} onChange={e=>setRoomTxn(e.target.value)}
+                            placeholder={`e.g. ${roomMtd === "bKash" || roomMtd === "Nagad" ? "TrxID from " + roomMtd : "reference number"}`}
+                            style={{ borderColor: roomTxn.trim() ? "" : "#c0392b" }} />
+                        </div>
+                      )}
                       <div className="form-group" style={{ marginBottom:0 }}>
                         <label>Note (optional)</label>
                         <input value={roomNote} onChange={e=>setRoomNote(e.target.value)} placeholder="e.g. final settlement" />
@@ -587,7 +607,8 @@ export default function Invoice() {
                       </button>
                     </div>
                   </div>
-                )}
+                  );
+                })()}
               </div>
             </div>
           )}
@@ -617,14 +638,19 @@ export default function Invoice() {
                   <label>Payment Status <span style={{ fontSize:9, color:"var(--text3)", fontWeight:400 }}>(auto-calculated)</span></label>
                   <PayBadge status={selBk ? extrasStatus : "unpaid"} />
                 </div>
-                {selBk && extBalDue > 0 && (
-                  <div style={{ border:"1.5px solid #c0392b", borderRadius:8, overflow:"hidden" }}>
-                    <div style={{ background:"#c0392b", padding:"7px 12px", display:"flex", alignItems:"center", gap:6 }}>
+                {selBk && (() => {
+                  const due = extBalDue > 0;
+                  const hdr = due ? "#c0392b" : "#2D1B69";
+                  const bg  = due ? "#fff8f8" : "#f5f3ff";
+                  const bdr = due ? "#c0392b" : "#2D1B69";
+                  return (
+                  <div style={{ border:`1.5px solid ${bdr}`, borderRadius:8, overflow:"hidden" }}>
+                    <div style={{ background:hdr, padding:"7px 12px", display:"flex", alignItems:"center", gap:6 }}>
                       <i className="ti ti-cash" style={{ color:"#fff", fontSize:13 }} />
                       <span style={{ fontSize:11, fontWeight:700, color:"#fff", textTransform:"uppercase", letterSpacing:.8 }}>Collect Payment</span>
-                      <span style={{ marginLeft:"auto", fontSize:11, fontWeight:800, color:"#ffe0e0" }}>Due: {money(extBalDue)}</span>
+                      {due && <span style={{ marginLeft:"auto", fontSize:11, fontWeight:800, color:"#ffe0e0" }}>Due: {money(extBalDue)}</span>}
                     </div>
-                    <div style={{ padding:"10px 12px", display:"flex", flexDirection:"column", gap:8, background:"#fff8f8" }}>
+                    <div style={{ padding:"10px 12px", display:"flex", flexDirection:"column", gap:8, background:bg }}>
                       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:7 }}>
                         <div className="form-group" style={{ marginBottom:0 }}>
                           <label>Amount (৳)</label>
@@ -632,11 +658,19 @@ export default function Invoice() {
                         </div>
                         <div className="form-group" style={{ marginBottom:0 }}>
                           <label>Method</label>
-                          <select value={extMtd} onChange={e=>setExtMtd(e.target.value)}>
+                          <select value={extMtd} onChange={e=>{ setExtMtd(e.target.value); setExtTxn(""); }}>
                             {["Cash","bKash","Nagad","Card","Bank Transfer"].map(m=><option key={m}>{m}</option>)}
                           </select>
                         </div>
                       </div>
+                      {!CASH_METHODS.includes(extMtd) && (
+                        <div className="form-group" style={{ marginBottom:0 }}>
+                          <label style={{ color:"#c0392b" }}>Transaction / Ref. No. <span style={{ color:"#c0392b" }}>*</span></label>
+                          <input value={extTxn} onChange={e=>setExtTxn(e.target.value)}
+                            placeholder={`e.g. ${extMtd === "bKash" || extMtd === "Nagad" ? "TrxID from " + extMtd : "reference number"}`}
+                            style={{ borderColor: extTxn.trim() ? "" : "#c0392b" }} />
+                        </div>
+                      )}
                       <div className="form-group" style={{ marginBottom:0 }}>
                         <label>Note (optional)</label>
                         <input value={extNote} onChange={e=>setExtNote(e.target.value)} placeholder="e.g. game zone settled" />
@@ -646,23 +680,16 @@ export default function Invoice() {
                       </button>
                     </div>
                   </div>
-                )}
+                  );
+                })()}
               </div>
             </div>
           )}
 
-          {/* Preview + Save */}
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:7 }}>
-            <button className="btn gold" onClick={() => {
-              saveChanges(true);
-              notify("Invoice preview updated","success");
-            }} style={{ justifyContent:"center" }}>
-              <i className="ti ti-eye" /> Preview
-            </button>
-            <button onClick={() => saveChanges(false)} style={{ background:"#1a7040", color:"#fff", border:"none", borderRadius:8, padding:"10px 14px", fontWeight:700, fontSize:13, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:6, fontFamily:"'DM Sans',sans-serif" }}>
-              <i className="ti ti-device-floppy" /> Save
-            </button>
-          </div>
+          {/* Save button only — preview is already live on the right */}
+          <button onClick={() => saveChanges(false)} style={{ background:"#1a7040", color:"#fff", border:"none", borderRadius:8, padding:"11px 14px", fontWeight:700, fontSize:13, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:6, fontFamily:"'DM Sans',sans-serif" }}>
+            <i className="ti ti-device-floppy" /> Save Invoice
+          </button>
 
           {/* PRINT section */}
           <div style={{ border:"2px solid var(--navy)", borderRadius:10, overflow:"hidden", boxShadow:"0 3px 14px rgba(10,22,40,.13)" }}>
@@ -674,53 +701,52 @@ export default function Invoice() {
             {/* T&C notice */}
             {selBk && !selBk.tcPrinted && localStorage.getItem("ga_tc_enabled") !== "false" && (
               <div style={{ margin:"8px 8px 0", background:"#e8f5e9", border:"1.5px solid #27ae60", borderRadius:8, padding:"9px 12px", fontSize:11, color:"#1a5a2e", lineHeight:1.6 }}>
-                <b>📋 First Print:</b> Terms &amp; Conditions (অতিথি নিয়মাবলী) will be included as page 2.<br/>
-                <span style={{ color:"#555" }}>💡 Enable <b>Two-sided (Duplex)</b> printing in your printer dialog to print it on the back of this page.</span>
+                <b>📋 First Print:</b> Terms &amp; Conditions will be included as page 2. Enable <b>Duplex</b> printing to print on the back.
               </div>
             )}
 
-            <div style={{ padding:8, display:"flex", flexDirection:"column", gap:7, background:"var(--bg2)" }}>
+            <div style={{ padding:8, display:"grid", gridTemplateColumns:"1fr 1fr", gap:7, background:"var(--bg2)" }}>
               {/* Print Room Invoice */}
-              <button onClick={printRoomOnly} style={{ display:"flex", alignItems:"center", gap:12, padding:"12px 14px", border:"2px solid rgba(10,22,40,.18)", borderRadius:8, background:"rgba(10,22,40,.04)", cursor:"pointer", width:"100%", textAlign:"left", fontFamily:"'DM Sans',sans-serif" }}>
-                <div style={{ width:38, height:38, background:"var(--navy)", borderRadius:8, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-                  <i className="ti ti-printer" style={{ color:"#E8C96A", fontSize:17 }} />
+              <button onClick={printRoomOnly} style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:7, padding:"14px 10px", border:"2px solid rgba(10,22,40,.18)", borderRadius:8, background:"rgba(10,22,40,.04)", cursor:"pointer", textAlign:"center", fontFamily:"'DM Sans',sans-serif" }}>
+                <div style={{ width:36, height:36, background:"var(--navy)", borderRadius:8, display:"flex", alignItems:"center", justifyContent:"center" }}>
+                  <i className="ti ti-printer" style={{ color:"#E8C96A", fontSize:16 }} />
                 </div>
                 <div>
-                  <div style={{ fontSize:13, fontWeight:800, color:"var(--navy)" }}>🏠 Print Room Invoice</div>
-                  <div style={{ fontSize:10.5, color:"var(--text3)", marginTop:2 }}>Room charges only</div>
+                  <div style={{ fontSize:12, fontWeight:800, color:"var(--navy)" }}>🏠 Room Invoice</div>
+                  <div style={{ fontSize:10, color:"var(--text3)", marginTop:2 }}>Room charges only</div>
                 </div>
               </button>
 
               {/* Print Service Charge Invoice */}
-              <button onClick={printExtrasInvoice} style={{ display:"flex", alignItems:"center", gap:12, padding:"12px 14px", border:"2px solid rgba(201,168,76,.4)", borderRadius:8, background:"rgba(201,168,76,.06)", cursor:"pointer", width:"100%", textAlign:"left", fontFamily:"'DM Sans',sans-serif" }}>
-                <div style={{ width:38, height:38, background:"linear-gradient(135deg,#C9A84C,#E8C96A)", borderRadius:8, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-                  <i className="ti ti-printer" style={{ color:"#0d1b2e", fontSize:17 }} />
+              <button onClick={printExtrasInvoice} style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:7, padding:"14px 10px", border:"2px solid rgba(201,168,76,.4)", borderRadius:8, background:"rgba(201,168,76,.06)", cursor:"pointer", textAlign:"center", fontFamily:"'DM Sans',sans-serif" }}>
+                <div style={{ width:36, height:36, background:"linear-gradient(135deg,#C9A84C,#E8C96A)", borderRadius:8, display:"flex", alignItems:"center", justifyContent:"center" }}>
+                  <i className="ti ti-printer" style={{ color:"#0d1b2e", fontSize:16 }} />
                 </div>
                 <div>
-                  <div style={{ fontSize:13, fontWeight:800, color:"#7a5500" }}>🧾 Print Service Charge Invoice</div>
-                  <div style={{ fontSize:10.5, color:"var(--text3)", marginTop:2 }}>Additional service charges only</div>
+                  <div style={{ fontSize:12, fontWeight:800, color:"#7a5500" }}>🧾 Service Invoice</div>
+                  <div style={{ fontSize:10, color:"var(--text3)", marginTop:2 }}>Service charges only</div>
                 </div>
               </button>
 
               {/* Print Complete Invoice */}
-              <button onClick={printComplete} style={{ display:"flex", alignItems:"center", gap:12, padding:"12px 14px", border:"2px solid rgba(26,112,64,.3)", borderRadius:8, background:"rgba(26,112,64,.06)", cursor:"pointer", width:"100%", textAlign:"left", fontFamily:"'DM Sans',sans-serif" }}>
-                <div style={{ width:38, height:38, background:"linear-gradient(135deg,#1a7040,#22a05a)", borderRadius:8, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-                  <i className="ti ti-printer" style={{ color:"#fff", fontSize:17 }} />
+              <button onClick={printComplete} style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:7, padding:"14px 10px", border:"2px solid rgba(26,112,64,.3)", borderRadius:8, background:"rgba(26,112,64,.06)", cursor:"pointer", textAlign:"center", fontFamily:"'DM Sans',sans-serif" }}>
+                <div style={{ width:36, height:36, background:"linear-gradient(135deg,#1a7040,#22a05a)", borderRadius:8, display:"flex", alignItems:"center", justifyContent:"center" }}>
+                  <i className="ti ti-printer" style={{ color:"#fff", fontSize:16 }} />
                 </div>
                 <div>
-                  <div style={{ fontSize:13, fontWeight:800, color:"#1a5a2e" }}>📄 Print Complete Invoice</div>
-                  <div style={{ fontSize:10.5, color:"var(--text3)", marginTop:2 }}>Room + all service charges combined</div>
+                  <div style={{ fontSize:12, fontWeight:800, color:"#1a5a2e" }}>📄 Complete Invoice</div>
+                  <div style={{ fontSize:10, color:"var(--text3)", marginTop:2 }}>Room + all services</div>
                 </div>
               </button>
 
               {/* Print with T&C */}
-              <button onClick={printWithTC} style={{ display:"flex", alignItems:"center", gap:12, padding:"12px 14px", border:"2px dashed rgba(139,26,26,.4)", borderRadius:8, background:"rgba(139,26,26,.04)", cursor:"pointer", width:"100%", textAlign:"left", fontFamily:"'DM Sans',sans-serif" }}>
-                <div style={{ width:38, height:38, background:"linear-gradient(135deg,#8B1A1A,#b02020)", borderRadius:8, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-                  <i className="ti ti-file-text" style={{ color:"#f5d67a", fontSize:17 }} />
+              <button onClick={printWithTC} style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:7, padding:"14px 10px", border:"2px dashed rgba(139,26,26,.4)", borderRadius:8, background:"rgba(139,26,26,.04)", cursor:"pointer", textAlign:"center", fontFamily:"'DM Sans',sans-serif" }}>
+                <div style={{ width:36, height:36, background:"linear-gradient(135deg,#8B1A1A,#b02020)", borderRadius:8, display:"flex", alignItems:"center", justifyContent:"center" }}>
+                  <i className="ti ti-file-text" style={{ color:"#f5d67a", fontSize:16 }} />
                 </div>
                 <div>
-                  <div style={{ fontSize:13, fontWeight:800, color:"#8B1A1A" }}>📋 Print with Terms &amp; Conditions</div>
-                  <div style={{ fontSize:10.5, color:"var(--text3)", marginTop:2 }}>Complete invoice + T&amp;C page (manual override)</div>
+                  <div style={{ fontSize:12, fontWeight:800, color:"#8B1A1A" }}>📋 With T&amp;C</div>
+                  <div style={{ fontSize:10, color:"var(--text3)", marginTop:2 }}>Complete + T&amp;C page</div>
                 </div>
               </button>
             </div>
