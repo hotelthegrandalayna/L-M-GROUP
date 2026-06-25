@@ -800,10 +800,65 @@ function InvForm({
   const [d, setD] = useState(() => ({ ...inv }));
   const imgRef = useRef();
   const [saveBlocked, setSaveBlocked] = useState(false);
-  const [reasonDraft, setReasonDraft] = useState({}); // { [desc]: string } — pending reason while "No" panel open
-  const [pendingNo, setPendingNo] = useState(null); // desc name waiting for reason
+  const [reasonDraft, setReasonDraft] = useState({});
+  const [pendingNo, setPendingNo] = useState(null);
+  const [fieldErrors, setFieldErrors] = useState({});
 
-  const set = (k, v) => setD((p) => ({ ...p, [k]: v }));
+  const set = (k, v) => {
+    setD((p) => ({ ...p, [k]: v }));
+    if (fieldErrors[k]) setFieldErrors(prev => { const n = { ...prev }; delete n[k]; return n; });
+  };
+
+  function validate(d, isLead) {
+    if (isLead) {
+      if (!d.client?.trim()) {
+        setFieldErrors({ client: true });
+        notify?.("Client name is required", "error");
+        setTimeout(() => document.getElementById("field-client")?.scrollIntoView({ behavior: "smooth", block: "center" }), 50);
+        return false;
+      }
+      return true;
+    }
+
+    const errors = {};
+
+    if (!d.client?.trim())     errors.client   = "Client name is required";
+    if (!d.phone?.trim())      errors.phone    = "Phone number is required";
+    if (!d.evDate && !d.hDate) errors.evDate   = "Event date is required";
+    if (!d.addrArea?.trim() && !d.addrCity?.trim() && !d.addrDistrict?.trim())
+                               errors.addrArea = "At least one address field is required";
+
+    const isWeddingType = ["Wedding","Wedding + Holud"].includes(d.evType);
+    const isHoludType   = ["Holud","Wedding + Holud"].includes(d.evType);
+
+    if (isWeddingType && !d.wRental) errors.wRental = "Wedding Hall Rental amount is required";
+    if (isHoludType   && !d.hRental) errors.hRental = "Holud Hall Rental amount is required";
+
+    if (isWeddingType || isHoludType) {
+      if (!d.wBride?.trim() && !d.hBride?.trim()) errors.wBride = "Bride's name is required";
+      if (!d.wGroom?.trim() && !d.hGroom?.trim()) errors.wGroom = "Groom's name is required";
+    }
+
+    if (evDateConflict && !conflictConfirmed.ev) errors.conflictEv = "Confirm the date conflict";
+    if (hDateConflict  && !conflictConfirmed.h)  errors.conflictH  = "Confirm the Holud date conflict";
+
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      const missing = Object.values(errors);
+      notify?.(`Please fix ${missing.length} issue${missing.length > 1 ? "s" : ""}: ${missing[0]}${missing.length > 1 ? ` (+${missing.length - 1} more)` : ""}`, "error");
+      // Scroll to first error field
+      const firstKey = Object.keys(errors)[0];
+      setTimeout(() => {
+        const el = document.getElementById("field-" + firstKey);
+        if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 50);
+      return false;
+    }
+
+    setFieldErrors({});
+    return true;
+  }
+
 
   const fixedSvcsAll = d.services.filter((s) => s.fixed);
   const customSvcs = d.services.filter((s) => !s.fixed);
@@ -1015,23 +1070,42 @@ function InvForm({
     { label: "Other", opts: ["Friend of Family", "Event Organiser", "Other"] },
   ];
 
-  function ConflictWarning({ conflict }) {
+  const [conflictConfirmed, setConflictConfirmed] = useState({ ev: false, h: false });
+
+  function ConflictWarning({ conflict, field }) {
     if (!conflict) return null;
+    const confirmed = conflictConfirmed[field];
     return (
-      <div
-        style={{
-          background: "#fff8e1",
-          border: "1.5px solid #f0b429",
-          borderRadius: 8,
-          padding: "10px 14px",
-          marginBottom: 12,
-          fontSize: 12,
-          color: "#7a4a00",
-        }}
-      >
-        ⚠️ This date already has a booking:{" "}
-        <strong>Invoice #{conflict.num}</strong> — {conflict.client} (
-        {conflict.evType})
+      <div style={{
+        background: confirmed ? "#f0fff4" : "#fff0f0",
+        border: `2px solid ${confirmed ? "#2e8b57" : "#c0392b"}`,
+        borderRadius: 10,
+        padding: "14px 16px",
+        marginBottom: 14,
+      }}>
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+          <span style={{ fontSize: 24, lineHeight: 1 }}>🚨</span>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 800, fontSize: 13, color: "#7B1212", marginBottom: 4 }}>
+              DATE ALREADY BOOKED!
+            </div>
+            <div style={{ fontSize: 12, color: "#5a0000", lineHeight: 1.6 }}>
+              <strong>Invoice #{conflict.num}</strong> — {conflict.client} ({conflict.evType}) is already booked on this date.
+              <br />Double-booking may cause serious issues. Please verify before proceeding.
+            </div>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, cursor: "pointer" }}>
+              <input
+                type="checkbox"
+                checked={confirmed}
+                onChange={e => setConflictConfirmed(prev => ({ ...prev, [field]: e.target.checked }))}
+                style={{ width: 18, height: 18, accentColor: "#2e8b57", cursor: "pointer" }}
+              />
+              <span style={{ fontSize: 12, fontWeight: 700, color: confirmed ? "#1a5c30" : "#7B1212" }}>
+                {confirmed ? "✅ Confirmed — I acknowledge this double-booking" : "I understand and confirm this booking despite the conflict"}
+              </span>
+            </label>
+          </div>
+        </div>
       </div>
     );
   }
@@ -1049,7 +1123,7 @@ function InvForm({
         </div>
 
         <SubSection label="📅 EVENT SCHEDULE">
-          <ConflictWarning conflict={evDateConflict} />
+          <ConflictWarning conflict={evDateConflict} field="ev" />
           <div
             style={{
               display: "grid",
@@ -1061,14 +1135,17 @@ function InvForm({
               label={isWH ? `${et?.v || "Wedding"} Date *` : "Event Date *"}
             >
               <input
+                id="field-evDate"
                 type="date"
                 min={todayStr}
                 value={d.evDate || ""}
                 onChange={(e) => set("evDate", e.target.value)}
                 style={inputStyle(
+                  fieldErrors.evDate ? { borderColor: "#c0392b", background: "#fff5f5" } :
                   evDateConflict ? { borderColor: "#f0b429" } : {},
                 )}
               />
+              {fieldErrors.evDate && <div style={{ color: "#c0392b", fontSize: 11, marginTop: 4, fontWeight: 700 }}>⚠ {fieldErrors.evDate}</div>}
             </Field>
             <Field label="Time of Day">
               <select
@@ -1182,6 +1259,7 @@ function InvForm({
               Wedding / Hall Rental (৳) *
             </label>
             <input
+              id="field-wRental"
               type="number"
               min="0"
               value={d.wRental || ""}
@@ -1190,7 +1268,7 @@ function InvForm({
               style={{
                 width: 160,
                 padding: "8px 12px",
-                border: `2px solid ${C.gold}`,
+                border: `2px solid ${fieldErrors.wRental ? "#c0392b" : C.gold}`,
                 borderRadius: 8,
                 fontSize: 16,
                 fontWeight: 800,
@@ -1227,7 +1305,7 @@ function InvForm({
         )}
 
         <SubSection label="📅 EVENT SCHEDULE">
-          <ConflictWarning conflict={hDateConflict} />
+          <ConflictWarning conflict={hDateConflict} field="h" />
           <div
             style={{
               display: "grid",
@@ -1373,6 +1451,7 @@ function InvForm({
               Holud / Hall Rental (৳) *
             </label>
             <input
+              id="field-hRental"
               type="number"
               min="0"
               value={d.hRental || ""}
@@ -1381,7 +1460,7 @@ function InvForm({
               style={{
                 width: 160,
                 padding: "8px 12px",
-                border: `2px solid ${C.gold}`,
+                border: `2px solid ${fieldErrors.hRental ? "#c0392b" : C.gold}`,
                 borderRadius: 8,
                 fontSize: 16,
                 fontWeight: 800,
@@ -1569,19 +1648,23 @@ function InvForm({
         >
           <Field label="Client Name *">
             <input
+              id="field-client"
               value={d.client}
               onChange={(e) => set("client", e.target.value)}
               placeholder="Client Name *"
-              style={inputStyle()}
+              style={{ ...inputStyle(), ...(fieldErrors.client ? { borderColor: "#c0392b", background: "#fff5f5" } : {}) }}
             />
+            {fieldErrors.client && <div style={{ color: "#c0392b", fontSize: 11, marginTop: 4, fontWeight: 700 }}>⚠ {fieldErrors.client}</div>}
           </Field>
           <Field label="Phone *">
             <input
+              id="field-phone"
               value={d.phone}
               onChange={(e) => set("phone", e.target.value)}
               placeholder="+880 1XXX-XXXXXX"
-              style={inputStyle()}
+              style={{ ...inputStyle(), ...(fieldErrors.phone ? { borderColor: "#c0392b", background: "#fff5f5" } : {}) }}
             />
+            {fieldErrors.phone && <div style={{ color: "#c0392b", fontSize: 11, marginTop: 4, fontWeight: 700 }}>⚠ {fieldErrors.phone}</div>}
           </Field>
           <Field label="Phone 2">
             <input
@@ -1610,18 +1693,20 @@ function InvForm({
         >
           <Field label="Area / Road">
             <input
+              id="field-addrArea"
               value={d.addrArea || ""}
               onChange={(e) => set("addrArea", e.target.value)}
               placeholder="e.g. Agrabad, Hajari Road"
-              style={inputStyle()}
+              style={{ ...inputStyle(), ...(fieldErrors.addrArea ? { borderColor: "#c0392b", background: "#fff5f5" } : {}) }}
             />
+            {fieldErrors.addrArea && <div style={{ color: "#c0392b", fontSize: 11, marginTop: 4, fontWeight: 700 }}>⚠ {fieldErrors.addrArea}</div>}
           </Field>
           <Field label="City / Upazila">
             <input
               value={d.addrCity || ""}
               onChange={(e) => set("addrCity", e.target.value)}
               placeholder="e.g. Sitakunda"
-              style={inputStyle()}
+              style={{ ...inputStyle(), ...(fieldErrors.addrArea ? { borderColor: "#c0392b", background: "#fff5f5" } : {}) }}
             />
           </Field>
           <Field label="District">
@@ -1629,7 +1714,7 @@ function InvForm({
               value={d.addrDistrict || ""}
               onChange={(e) => set("addrDistrict", e.target.value)}
               placeholder="e.g. Chattogram"
-              style={inputStyle()}
+              style={{ ...inputStyle(), ...(fieldErrors.addrArea ? { borderColor: "#c0392b", background: "#fff5f5" } : {}) }}
             />
           </Field>
         </div>
@@ -1706,10 +1791,12 @@ function InvForm({
           >
             <Field label="Bride's Name *">
               <input
+                id="field-wBride"
                 value={d.wBride || ""}
                 onChange={(e) => set("wBride", e.target.value)}
-                style={inputStyle()}
+                style={{ ...inputStyle(), ...(fieldErrors.wBride ? { borderColor: "#c0392b", background: "#fff5f5" } : {}) }}
               />
+              {fieldErrors.wBride && <div style={{ color: "#c0392b", fontSize: 11, marginTop: 4, fontWeight: 700 }}>⚠ {fieldErrors.wBride}</div>}
             </Field>
             <Field label="Bride's Religion">
               <select
@@ -1724,10 +1811,12 @@ function InvForm({
             </Field>
             <Field label="Groom's Name *">
               <input
+                id="field-wGroom"
                 value={d.wGroom || ""}
                 onChange={(e) => set("wGroom", e.target.value)}
-                style={inputStyle()}
+                style={{ ...inputStyle(), ...(fieldErrors.wGroom ? { borderColor: "#c0392b", background: "#fff5f5" } : {}) }}
               />
+              {fieldErrors.wGroom && <div style={{ color: "#c0392b", fontSize: 11, marginTop: 4, fontWeight: 700 }}>⚠ {fieldErrors.wGroom}</div>}
             </Field>
             <Field label="Groom's Religion">
               <select
@@ -3122,7 +3211,7 @@ function InvForm({
                       "error",
                     );
                     setTimeout(() => setSaveBlocked(false), 600);
-                  } else onSave(d, true);
+                  } else if (validate(d, true)) onSave(d, true);
                 }}
                 style={{
                   ...btnStyle(),
@@ -3144,7 +3233,7 @@ function InvForm({
                       "error",
                     );
                     setTimeout(() => setSaveBlocked(false), 600);
-                  } else onSavePreview(d, false);
+                  } else if (validate(d, false)) onSavePreview(d, false);
                 }}
                 style={{
                   padding: "10px 28px",
@@ -3171,7 +3260,7 @@ function InvForm({
           invoice can be saved as a draft at any point and resumed later. */}
       <button
         type="button"
-        onClick={() => onSave(d, true)}
+        onClick={() => validate(d, true) && onSave(d, true)}
         title="Save your progress now — come back and finish this invoice later from Invoice History."
         style={{
           position: "fixed",
