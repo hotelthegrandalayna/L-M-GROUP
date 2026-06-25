@@ -253,6 +253,22 @@ export async function persistHotelBookingBundle(booking) {
   };
 }
 
+export async function deleteHotelBooking(bookingId) {
+  if (!hasHotelSupabaseConfig() || !bookingId) return;
+  await request("bookings", {
+    method: "DELETE",
+    query: { id: `eq.${bookingId}` },
+  });
+}
+
+export async function deleteHotelBookings(bookingIds = []) {
+  if (!hasHotelSupabaseConfig() || !bookingIds.length) return;
+  await request("bookings", {
+    method: "DELETE",
+    query: { id: `in.(${bookingIds.join(",")})` },
+  });
+}
+
 export async function loadHotelBookingsFromSupabase() {
   if (!hasHotelSupabaseConfig()) return [];
 

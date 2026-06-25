@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { useApp } from "../../context/AppContext";
 import { checkAdminPassword } from "../../utils/auth";
+import { deleteHotelBooking, deleteHotelBookings } from "../../lib/hotelSupabase";
 
 const STATUS_OPTS = ["All", "checked-in", "reserved", "checked-out", "cancelled"];
 
@@ -360,21 +361,27 @@ export default function AdminInvoices() {
 
   function confirmDelete() {
     if (!checkAdminPassword(delPw)) { notify("Incorrect admin password", "error"); return; }
-    updateBookings(prev => prev.filter(b => b.id !== deleteTarget.id));
-    setSelectedIds(prev => { const n = new Set(prev); n.delete(deleteTarget.id); return n; });
+    const target = deleteTarget;
+    updateBookings(prev => prev.filter(b => b.id !== target.id));
+    setSelectedIds(prev => { const n = new Set(prev); n.delete(target.id); return n; });
     notify("Invoice deleted", "success");
     setDeleteTarget(null); setDelPw("");
-    if (detail?.id === deleteTarget.id) setDetail(null);
+    if (detail?.id === target.id) setDetail(null);
+    const sbId = target.supabaseBookingId ?? target.bookingDbId ?? target.id;
+    void deleteHotelBooking(sbId).catch(err => console.error("Supabase delete failed:", err));
   }
 
   function confirmBulkDelete() {
     if (!checkAdminPassword(delPw)) { notify("Incorrect admin password", "error"); return; }
-    const ids = new Set(filtered.filter(b => selectedIds.has(b.id)).map(b => b.id));
+    const toDelete = filtered.filter(b => selectedIds.has(b.id));
+    const ids = new Set(toDelete.map(b => b.id));
     updateBookings(prev => prev.filter(b => !ids.has(b.id)));
     setSelectedIds(new Set());
     if (detail && ids.has(detail.id)) setDetail(null);
     notify(`Deleted ${ids.size} invoice${ids.size > 1 ? "s" : ""}`, "success");
     setBulkDeleteOpen(false); setDelPw("");
+    const sbIds = toDelete.map(b => b.supabaseBookingId ?? b.bookingDbId ?? b.id).filter(Boolean);
+    void deleteHotelBookings(sbIds).catch(err => console.error("Supabase bulk delete failed:", err));
   }
 
   return (
