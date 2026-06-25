@@ -5,6 +5,7 @@ import useIsMobile from "../useIsMobile";
 import { loadWaConfig, saveWaConfig, sendWhatsAppAlert } from "../../utils/whatsapp";
 import AuditLogViewer from "../../components/AuditLogViewer";
 import { deleteHallInvoiceFromSupabase, deleteHallInvoicesFromSupabase } from "../lib/hallSupabase";
+import { loadPricingRules, savePricingRules } from "../lib/pricingRules";
 
 const DEFAULT_RECOVERY_EMAILS = ["mainulhasan86@gmail.com","mainulhasan86@yahoo.com"];
 function loadRecoveryEmails() {
@@ -337,7 +338,9 @@ export default function HallAdmin() {
     { id:"overview", label:"📊 Overview" },
     { id:"invoices", label:"🗓 Invoices" },
     { id:"reports",  label:"📈 Reports"  },
+    { id:"insights", label:"💡 Insights" },
     ...(isAdmin ? [
+      { id:"pricing",  label:"💰 Pricing Rules" },
       { id:"sms",      label:"📱 SMS"      },
       { id:"audit",    label:"🕵 Audit Log" },
       { id:"password", label:"🔐 Password" },
@@ -831,9 +834,356 @@ export default function HallAdmin() {
       )}
 
       {/* ════════ SMS ════════ */}
+      {tab==="insights" && <InsightsPanel invoices={invoices} expenses={expenses} leads={leads} />}
+      {tab==="pricing" && isAdmin && <PricingRulesPanel notify={notify} />}
       {tab==="sms" && isAdmin && <SmsPanel notify={notify} isMobile={isMobile} invoices={invoices} />}
       {tab==="audit" && isAdmin && <AuditLogViewer scope="hall" title="Hall — Activity Audit Log" checkPassword={checkHallAdminPass} notify={notify} />}
 
+    </div>
+  );
+}
+
+// ── Business Insights Panel ───────────────────────────────────────────────────
+function InsightsPanel({ invoices, expenses, leads }) {
+  const now = new Date();
+  const thisMonth = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`;
+  const lastMonthDate = new Date(now.getFullYear(), now.getMonth()-1, 1);
+  const lastMonth = `${lastMonthDate.getFullYear()}-${String(lastMonthDate.getMonth()+1).padStart(2,"0")}`;
+  const MONTHS_FULL = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+
+  function fmt(n) { return Number(n||0).toLocaleString(); }
+  function fmtD(iso) {
+    if (!iso) return "—";
+    const [y,m,d] = iso.split("-");
+    const M = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    return `${parseInt(d)} ${M[parseInt(m)-1]}`;
+  }
+  function pct(a, b) {
+    if (!b) return null;
+    const diff = Math.round((a - b) / b * 100);
+    return diff;
+  }
+  function arrow(diff) {
+    if (diff === null) return null;
+    const color = diff >= 0 ? "#1a7040" : "#c0392b";
+    return <span style={{ color, fontWeight:700, fontSize:12 }}>{diff >= 0 ? "▲" : "▼"} {Math.abs(diff)}%</span>;
+  }
+
+  const thisInv  = invoices.filter(i => (i.invDate||i.evDate||"").startsWith(thisMonth));
+  const lastInv  = invoices.filter(i => (i.invDate||i.evDate||"").startsWith(lastMonth));
+  const thisExp  = expenses.filter(e => (e.date||"").startsWith(thisMonth));
+
+  const thisBilled   = thisInv.reduce((s,i)=>s+(i.grand||0),0);
+  const thisReceived = thisInv.reduce((s,i)=>s+(parseFloat(i.adv)||0),0);
+  const thisOutstand = thisInv.reduce((s,i)=>s+(i.balance??Math.max(0,(i.grand||0)-(parseFloat(i.adv)||0))),0);
+  const thisExpTotal = thisExp.reduce((s,e)=>s+(e.amount||0),0);
+
+  const lastBilled   = lastInv.reduce((s,i)=>s+(i.grand||0),0);
+  const lastReceived = lastInv.reduce((s,i)=>s+(parseFloat(i.adv)||0),0);
+
+  // Upcoming events — next 30 days
+  const today = now.toISOString().split("T")[0];
+  const in30  = new Date(now); in30.setDate(in30.getDate()+30);
+  const in30s = in30.toISOString().split("T")[0];
+  const upcoming = invoices
+    .filter(i => (i.evDate||"") >= today && (i.evDate||"") <= in30s)
+    .sort((a,b)=>(a.evDate||"")>(b.evDate||"")?1:-1);
+
+  // All overdue outstanding (event date past, balance > 0)
+  const overdue = invoices
+    .filter(i => (i.evDate||"") < today && (i.balance??Math.max(0,(i.grand||0)-(parseFloat(i.adv)||0))) > 0)
+    .sort((a,b)=>(b.balance??0)-(a.balance??0))
+    .slice(0,5);
+
+  // Best event type by avg revenue
+  const byType = {};
+  invoices.forEach(i => {
+    if (!i.evType||!i.grand) return;
+    if (!byType[i.evType]) byType[i.evType]={ total:0, count:0 };
+    byType[i.evType].total += i.grand;
+    byType[i.evType].count++;
+  });
+  const bestType = Object.entries(byType).sort((a,b)=>(b[1].total/b[1].count)-(a[1].total/a[1].count))[0];
+
+  // Busiest month historically
+  const byMonth = {};
+  invoices.forEach(i => {
+    const m = (i.invDate||i.evDate||"").slice(5,7);
+    if (m) byMonth[m] = (byMonth[m]||0)+1;
+  });
+  const busiestMonth = Object.entries(byMonth).sort((a,b)=>b[1]-a[1])[0];
+
+  // CRM conversion rate
+  const totalLeads = leads.length;
+  const converted = leads.filter(l=>l.stage==="Confirmed"||l.invoiced).length;
+  const convRate = totalLeads ? Math.round(converted/totalLeads*100) : null;
+
+  const card = (extra={}) => ({ background:"#fff", border:"1.5px solid #e0d0b0", borderRadius:12, padding:"18px 20px", marginBottom:14, ...extra });
+  const secTitle = { fontSize:10, letterSpacing:2, textTransform:"uppercase", color:"#7B1212", fontWeight:800, marginBottom:14 };
+
+  return (
+    <div>
+      {/* ── This month summary ── */}
+      <div style={card({ borderTop:"3px solid #c9a84c" })}>
+        <div style={secTitle}>📅 {MONTHS_FULL[now.getMonth()]} {now.getFullYear()} — at a glance</div>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))", gap:12, marginBottom:14 }}>
+          {[
+            { label:"Invoices", val:thisInv.length, sub:lastInv.length ? `${lastInv.length} last month` : null },
+            { label:"Billed", val:"৳"+fmt(thisBilled), diff:pct(thisBilled,lastBilled) },
+            { label:"Received", val:"৳"+fmt(thisReceived), diff:pct(thisReceived,lastReceived) },
+            { label:"Outstanding", val:"৳"+fmt(thisOutstand), color:thisOutstand>0?"#c0392b":"#1a7040" },
+            { label:"Expenses", val:"৳"+fmt(thisExpTotal) },
+            { label:"Net (Received−Exp)", val:"৳"+fmt(thisReceived-thisExpTotal), color:thisReceived-thisExpTotal>=0?"#1a7040":"#c0392b" },
+          ].map(({ label, val, diff, sub, color })=>(
+            <div key={label} style={{ background:"#fafaf8", border:"1px solid #f0ede8", borderRadius:9, padding:"12px 14px" }}>
+              <div style={{ fontSize:10, color:"#999", textTransform:"uppercase", letterSpacing:.5, marginBottom:4 }}>{label}</div>
+              <div style={{ fontSize:18, fontWeight:800, color:color||"#111" }}>{val}</div>
+              {diff !== undefined && diff !== null && <div style={{ marginTop:3 }}>{arrow(diff)} <span style={{ fontSize:11, color:"#999" }}>vs last month</span></div>}
+              {sub && <div style={{ fontSize:11, color:"#999", marginTop:3 }}>{sub}</div>}
+            </div>
+          ))}
+        </div>
+
+        {/* Plain-English summary */}
+        <div style={{ background:"#f8f5ee", border:"1px solid #e0d0b0", borderRadius:9, padding:"12px 16px", fontSize:13, lineHeight:1.8, color:"#333" }}>
+          {thisInv.length === 0
+            ? <span>No invoices recorded for {MONTHS_FULL[now.getMonth()]} yet.</span>
+            : <>
+                <strong>{MONTHS_FULL[now.getMonth()]} {now.getFullYear()}:</strong>{" "}
+                {thisInv.length} invoice{thisInv.length>1?"s":""}, ৳{fmt(thisBilled)} billed, ৳{fmt(thisReceived)} received.{" "}
+                {thisOutstand > 0
+                  ? <span style={{ color:"#c0392b" }}>৳{fmt(thisOutstand)} still outstanding.</span>
+                  : <span style={{ color:"#1a7040" }}>All payments collected ✓</span>}
+                {lastBilled > 0 && <>{" "}Compared to {MONTHS_FULL[lastMonthDate.getMonth()]}: revenue {pct(thisBilled,lastBilled) >= 0 ? "up" : "down"} {Math.abs(pct(thisBilled,lastBilled))}%.</>}
+                {bestType && <>{" "}Best event type overall: <strong>{bestType[0]}</strong> (avg ৳{fmt(Math.round(bestType[1].total/bestType[1].count))}).</>}
+              </>
+          }
+        </div>
+      </div>
+
+      {/* ── Overdue outstanding ── */}
+      {overdue.length > 0 && (
+        <div style={card({ borderTop:"3px solid #c0392b" })}>
+          <div style={secTitle}>🚨 Overdue Outstanding Payments</div>
+          <div style={{ fontSize:12, color:"#888", marginBottom:10 }}>Event date has passed but balance not fully collected.</div>
+          <table style={{ width:"100%", borderCollapse:"collapse" }}>
+            <thead>
+              <tr style={{ background:"#fafaf8" }}>
+                {["Client","Phone","Event","Event Date","Balance Due"].map(h=>(
+                  <th key={h} style={{ padding:"8px 10px", fontSize:10, color:"#999", fontWeight:700, textTransform:"uppercase", letterSpacing:.5, borderBottom:"1.5px solid #f0ede8", textAlign:"left" }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {overdue.map(inv => {
+                const bal = inv.balance ?? Math.max(0,(inv.grand||0)-(parseFloat(inv.adv)||0));
+                return (
+                  <tr key={inv.id} style={{ borderBottom:"1px solid #f9f5f0" }}>
+                    <td style={{ padding:"9px 10px", fontWeight:700, fontSize:13 }}>{inv.client}</td>
+                    <td style={{ padding:"9px 10px", fontSize:12, color:"#666" }}>{inv.phone}</td>
+                    <td style={{ padding:"9px 10px", fontSize:12 }}>{inv.evType}</td>
+                    <td style={{ padding:"9px 10px", fontSize:12 }}>{fmtD(inv.evDate)}</td>
+                    <td style={{ padding:"9px 10px", fontWeight:800, color:"#c0392b", fontSize:13 }}>৳{fmt(bal)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* ── Upcoming events ── */}
+      <div style={card({ borderTop:"3px solid #1a56cb" })}>
+        <div style={secTitle}>📅 Upcoming Events — Next 30 Days</div>
+        {upcoming.length === 0
+          ? <div style={{ color:"#999", fontSize:13 }}>No events scheduled in the next 30 days.</div>
+          : (
+            <table style={{ width:"100%", borderCollapse:"collapse" }}>
+              <thead>
+                <tr style={{ background:"#fafaf8" }}>
+                  {["Event Date","Client","Event Type","Total","Balance","Status"].map(h=>(
+                    <th key={h} style={{ padding:"8px 10px", fontSize:10, color:"#999", fontWeight:700, textTransform:"uppercase", letterSpacing:.5, borderBottom:"1.5px solid #f0ede8", textAlign:"left" }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {upcoming.map(inv => {
+                  const bal = inv.balance ?? Math.max(0,(inv.grand||0)-(parseFloat(inv.adv)||0));
+                  const psColor = inv.payStatus==="Paid"?"#1a7040":inv.payStatus==="Partial"?"#a07000":"#c0392b";
+                  const daysLeft = Math.round((new Date(inv.evDate)-now)/(1000*60*60*24));
+                  return (
+                    <tr key={inv.id} style={{ borderBottom:"1px solid #f9f5f0", background: daysLeft<=3?"#fff8f0":"transparent" }}>
+                      <td style={{ padding:"9px 10px", fontWeight:700, fontSize:13 }}>
+                        {fmtD(inv.evDate)}
+                        {daysLeft<=3 && <span style={{ marginLeft:6, fontSize:10, background:"#ffe0b0", color:"#8a4000", padding:"1px 6px", borderRadius:10, fontWeight:700 }}>{daysLeft}d</span>}
+                      </td>
+                      <td style={{ padding:"9px 10px", fontSize:13 }}>{inv.client}</td>
+                      <td style={{ padding:"9px 10px", fontSize:12 }}>{inv.evType}</td>
+                      <td style={{ padding:"9px 10px", fontSize:13, color:"#c9a84c", fontWeight:700 }}>৳{fmt(inv.grand)}</td>
+                      <td style={{ padding:"9px 10px", fontSize:13, color: bal>0?"#c0392b":"#1a7040", fontWeight:700 }}>{bal>0 ? "৳"+fmt(bal) : "✓ Paid"}</td>
+                      <td style={{ padding:"9px 10px" }}>
+                        <span style={{ fontSize:10, fontWeight:700, padding:"2px 8px", borderRadius:20, background:`${psColor}18`, color:psColor, border:`1px solid ${psColor}40` }}>{inv.payStatus}</span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+      </div>
+
+      {/* ── Historical patterns ── */}
+      <div style={card({ borderTop:"3px solid #1a7040" })}>
+        <div style={secTitle}>📈 Historical Patterns (All Time)</div>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))", gap:12 }}>
+          {[
+            { label:"Total invoices ever", val: invoices.length },
+            { label:"Total billed (all time)", val:"৳"+fmt(invoices.reduce((s,i)=>s+(i.grand||0),0)) },
+            { label:"Total received (all time)", val:"৳"+fmt(invoices.reduce((s,i)=>s+(parseFloat(i.adv)||0),0)) },
+            bestType ? { label:"Best event type", val:bestType[0], sub:`avg ৳${fmt(Math.round(bestType[1].total/bestType[1].count))} · ${bestType[1].count} bookings` } : null,
+            busiestMonth ? { label:"Historically busiest month", val: MONTHS_FULL[parseInt(busiestMonth[0])-1], sub:`${busiestMonth[1]} bookings recorded` } : null,
+            convRate !== null ? { label:"CRM conversion rate", val: convRate+"%", sub:`${converted} of ${totalLeads} leads confirmed` } : null,
+          ].filter(Boolean).map(({ label, val, sub })=>(
+            <div key={label} style={{ background:"#fafaf8", border:"1px solid #f0ede8", borderRadius:9, padding:"12px 14px" }}>
+              <div style={{ fontSize:10, color:"#999", textTransform:"uppercase", letterSpacing:.5, marginBottom:4 }}>{label}</div>
+              <div style={{ fontSize:17, fontWeight:800, color:"#111" }}>{val}</div>
+              {sub && <div style={{ fontSize:11, color:"#999", marginTop:3 }}>{sub}</div>}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Pricing Rules Panel ────────────────────────────────────────────────────────
+const blankRule = () => ({ id:"", evType:"", minGuests:"", maxGuests:"", minPrice:"", maxPrice:"", notes:"" });
+
+function PricingRulesPanel({ notify }) {
+  const [rules, setRules] = useState(loadPricingRules);
+  const [form, setForm] = useState(blankRule());
+  const [editId, setEditId] = useState(null);
+
+  const sf = (k, v) => setForm(p => ({ ...p, [k]: v }));
+
+  function saveRule() {
+    if (!form.evType) { notify("Select an event type", "error"); return; }
+    if (!form.minPrice && !form.maxPrice) { notify("Enter at least a price", "error"); return; }
+    let updated;
+    if (editId) {
+      updated = rules.map(r => r.id === editId ? { ...form, id: editId } : r);
+    } else {
+      updated = [...rules, { ...form, id: String(Date.now()) }];
+    }
+    savePricingRules(updated);
+    setRules(updated);
+    setForm(blankRule());
+    setEditId(null);
+    notify(editId ? "Rule updated ✅" : "Rule added ✅", "success");
+  }
+
+  function deleteRule(id) {
+    if (!window.confirm("Delete this pricing rule?")) return;
+    const updated = rules.filter(r => r.id !== id);
+    savePricingRules(updated);
+    setRules(updated);
+    notify("Rule deleted", "success");
+  }
+
+  function editRule(r) {
+    setForm({ ...r });
+    setEditId(r.id);
+  }
+
+  const inp2 = (s={}) => ({ padding:"9px 12px", border:"1.5px solid #e5e3de", borderRadius:8, fontSize:13, fontFamily:"inherit", background:"#fafaf9", width:"100%", boxSizing:"border-box", outline:"none", ...s });
+  const lbl2 = { fontSize:11, fontWeight:700, color:"#555", textTransform:"uppercase", letterSpacing:.5, marginBottom:4, display:"block" };
+  const C2 = { maroon:"#7B1212", gold:"#c9a84c", border:"#e0d0b0", dim:"#666", green:"#1a7040", red:"#c0392b" };
+
+  return (
+    <div>
+      <div style={{ background:"#fff", border:`1.5px solid ${C2.border}`, borderTop:`3px solid ${C2.gold}`, borderRadius:12, padding:"20px 22px", marginBottom:16 }}>
+        <div style={{ fontSize:10, letterSpacing:2, textTransform:"uppercase", color:C2.maroon, fontWeight:800, marginBottom:4 }}>💰 Pricing Rules</div>
+        <div style={{ fontSize:13, color:C2.dim, lineHeight:1.7, marginBottom:16 }}>
+          Set your standard pricing for each event type and guest range. These rules appear as hints when staff adds a new CRM enquiry — so they can quote the right price while the client is on the phone.
+        </div>
+
+        {/* Rules table */}
+        {rules.length === 0
+          ? <div style={{ background:"#fafaf8", border:"1px dashed #e0d0b0", borderRadius:9, padding:"22px", textAlign:"center", color:C2.dim, fontSize:13, marginBottom:16 }}>
+              No pricing rules yet. Add your first rule below.
+            </div>
+          : (
+            <div style={{ overflowX:"auto", marginBottom:16 }}>
+              <table style={{ width:"100%", borderCollapse:"collapse", minWidth:620 }}>
+                <thead>
+                  <tr style={{ background:"#fafaf8" }}>
+                    {["Event Type","Min Guests","Max Guests","Min Price (৳)","Max Price (৳)","Notes",""].map(h=>(
+                      <th key={h} style={{ padding:"9px 12px", fontSize:10, color:C2.dim, fontWeight:800, textTransform:"uppercase", letterSpacing:.5, borderBottom:`1.5px solid ${C2.border}`, textAlign:"left", whiteSpace:"nowrap" }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {rules.map(r => (
+                    <tr key={r.id} style={{ borderBottom:"1px solid #f0ede8" }}>
+                      <td style={{ padding:"10px 12px", fontWeight:700, fontSize:13 }}>{r.evType}</td>
+                      <td style={{ padding:"10px 12px", fontSize:13 }}>{r.minGuests||"—"}</td>
+                      <td style={{ padding:"10px 12px", fontSize:13 }}>{r.maxGuests||"any"}</td>
+                      <td style={{ padding:"10px 12px", fontSize:13, color:C2.green, fontWeight:700 }}>{r.minPrice ? "৳"+Number(r.minPrice).toLocaleString() : "—"}</td>
+                      <td style={{ padding:"10px 12px", fontSize:13, color:C2.gold, fontWeight:700 }}>{r.maxPrice ? "৳"+Number(r.maxPrice).toLocaleString() : "—"}</td>
+                      <td style={{ padding:"10px 12px", fontSize:12, color:C2.dim, maxWidth:180 }}>{r.notes||"—"}</td>
+                      <td style={{ padding:"10px 12px", whiteSpace:"nowrap" }}>
+                        <button onClick={()=>editRule(r)} style={{ padding:"4px 9px", borderRadius:6, border:`1.5px solid ${C2.border}`, background:"#fff", cursor:"pointer", fontSize:11, fontWeight:700, marginRight:6 }}>✏️</button>
+                        <button onClick={()=>deleteRule(r.id)} style={{ padding:"4px 9px", borderRadius:6, border:`1.5px solid ${C2.red}40`, background:"#fff0f0", cursor:"pointer", fontSize:11 }}>🗑</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+        {/* Add / Edit form */}
+        <div style={{ background:"#fafaf8", border:`1px solid ${C2.border}`, borderRadius:10, padding:"16px 18px" }}>
+          <div style={{ fontSize:12, fontWeight:800, color:C2.maroon, marginBottom:14 }}>{editId ? "✏️ Edit Rule" : "➕ Add New Rule"}</div>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))", gap:12, marginBottom:12 }}>
+            <div>
+              <label style={lbl2}>Event Type *</label>
+              <select value={form.evType} onChange={e=>sf("evType",e.target.value)} style={inp2()}>
+                <option value="">— Select —</option>
+                {EV_TYPES.map(t=><option key={t.v} value={t.v}>{t.v}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={lbl2}>Min Guests</label>
+              <input type="number" value={form.minGuests} onChange={e=>sf("minGuests",e.target.value)} placeholder="e.g. 100" style={inp2()} />
+            </div>
+            <div>
+              <label style={lbl2}>Max Guests</label>
+              <input type="number" value={form.maxGuests} onChange={e=>sf("maxGuests",e.target.value)} placeholder="e.g. 300" style={inp2()} />
+            </div>
+            <div>
+              <label style={lbl2}>Min Price (৳)</label>
+              <input type="text" inputMode="numeric" value={form.minPrice} onChange={e=>sf("minPrice",e.target.value.replace(/[^\d]/g,""))} placeholder="e.g. 15000" style={inp2()} />
+            </div>
+            <div>
+              <label style={lbl2}>Max Price (৳)</label>
+              <input type="text" inputMode="numeric" value={form.maxPrice} onChange={e=>sf("maxPrice",e.target.value.replace(/[^\d]/g,""))} placeholder="e.g. 22000" style={inp2()} />
+            </div>
+            <div>
+              <label style={lbl2}>Notes (optional)</label>
+              <input value={form.notes} onChange={e=>sf("notes",e.target.value)} placeholder="e.g. Peak season" style={inp2()} />
+            </div>
+          </div>
+          <div style={{ display:"flex", gap:8, justifyContent:"flex-end" }}>
+            {editId && <button onClick={()=>{ setForm(blankRule()); setEditId(null); }} style={{ padding:"8px 16px", borderRadius:8, border:`1.5px solid ${C2.border}`, background:"#fff", cursor:"pointer", fontFamily:"inherit", fontWeight:700, fontSize:12 }}>Cancel</button>}
+            <button onClick={saveRule} style={{ padding:"8px 20px", borderRadius:8, border:"none", background:C2.maroon, color:"#fff", cursor:"pointer", fontFamily:"inherit", fontWeight:800, fontSize:12 }}>{editId ? "💾 Update Rule" : "➕ Add Rule"}</button>
+          </div>
+        </div>
+
+        <div style={{ marginTop:14, padding:"10px 14px", background:"#fff8e1", border:"1px solid #e0c878", borderRadius:8, fontSize:12, color:"#7a5800", lineHeight:1.7 }}>
+          <strong>How it works:</strong> When staff opens the CRM and selects an event type with a guest count, the matching rule appears as a price hint. Multiple rules can exist for the same event type with different guest ranges — the closest match is shown.
+        </div>
+      </div>
     </div>
   );
 }

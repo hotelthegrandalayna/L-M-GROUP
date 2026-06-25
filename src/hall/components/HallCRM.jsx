@@ -2,6 +2,7 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { useHall, EV_TYPES } from "../HallContext";
 import useIsMobile from "../useIsMobile";
+import { loadPricingRules, getMatchingRule, getHistoricalPricing } from "../lib/pricingRules";
 
 const C = { maroon:"#7B1212", gold:"#c9a84c", dim:"#666", border:"#e0d0b0", green:"#1a7040", red:"#c0392b", blue:"#1a56cb" };
 
@@ -95,6 +96,15 @@ export default function HallCRM() {
       })
       .sort((a,b) => a.daysLeft - b.daysLeft);
   }, [invoices]);
+
+  // ── Pricing hint ─────────────────────────────────────────────────────────────
+  const pricingHint = useMemo(() => {
+    if (!form.evType || !form.guests) return null;
+    const rules = loadPricingRules();
+    const rule = getMatchingRule(rules, form.evType, form.guests);
+    const hist = getHistoricalPricing(invoices, form.evType, form.guests);
+    return { rule, hist };
+  }, [form.evType, form.guests, invoices]);
 
   // ── Actions ──────────────────────────────────────────────────────────────────
   function saveLead() {
@@ -407,6 +417,33 @@ export default function HallCRM() {
             </select>
           </div>
         </div>
+        {/* Pricing hint box */}
+        {pricingHint && (pricingHint.rule || pricingHint.hist) && (
+          <div style={{ marginTop:4, gridColumn:"1/-1", background:"#f0f8ec", border:"1.5px solid #5a9a30", borderRadius:9, padding:"12px 16px" }}>
+            <div style={{ fontSize:10, fontWeight:800, letterSpacing:1.5, textTransform:"uppercase", color:"#2e6010", marginBottom:8 }}>💰 Pricing Guide — {form.evType} · {form.guests} guests</div>
+            <div style={{ display:"flex", gap:24, flexWrap:"wrap" }}>
+              {pricingHint.rule && (
+                <div>
+                  <div style={{ fontSize:11, color:"#2e6010", fontWeight:700, marginBottom:3 }}>📋 Your set rule</div>
+                  <div style={{ fontSize:15, fontWeight:800, color:"#1a5000" }}>
+                    {pricingHint.rule.minPrice ? "৳"+Number(pricingHint.rule.minPrice).toLocaleString() : ""}
+                    {pricingHint.rule.minPrice && pricingHint.rule.maxPrice ? " – " : ""}
+                    {pricingHint.rule.maxPrice ? "৳"+Number(pricingHint.rule.maxPrice).toLocaleString() : ""}
+                  </div>
+                  {pricingHint.rule.notes && <div style={{ fontSize:11, color:"#555", marginTop:2 }}>{pricingHint.rule.notes}</div>}
+                </div>
+              )}
+              {pricingHint.hist && (
+                <div>
+                  <div style={{ fontSize:11, color:"#2e6010", fontWeight:700, marginBottom:3 }}>📊 Past invoices ({pricingHint.hist.count} similar)</div>
+                  <div style={{ fontSize:15, fontWeight:800, color:"#1a5000" }}>avg ৳{Number(pricingHint.hist.avg).toLocaleString()}</div>
+                  <div style={{ fontSize:11, color:"#555", marginTop:2 }}>range ৳{Number(pricingHint.hist.min).toLocaleString()} – ৳{Number(pricingHint.hist.max).toLocaleString()}</div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         <div style={{ marginTop:12 }}>
           <label style={lbl}>Notes / Comments</label>
           <textarea value={form.notes} onChange={e=>setF("notes",e.target.value)}
