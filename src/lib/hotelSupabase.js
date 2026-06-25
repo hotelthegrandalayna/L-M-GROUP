@@ -96,6 +96,7 @@ function buildGuestRow(booking) {
     id_number: toText(booking.idNum),
     image_front: toText(firstImage(booking.idFront)),
     image_back: toText(firstImage(booking.idBack)),
+    id_docs: booking.idDocs?.length ? JSON.stringify(booking.idDocs) : null,
   };
 }
 
@@ -156,6 +157,7 @@ function fromDbBooking(row, guest) {
     idNum: guest?.id_number || "",
     idFront: guest?.image_front || "",
     idBack: guest?.image_back || "",
+    idDocs: (() => { try { return guest?.id_docs ? JSON.parse(guest.id_docs) : []; } catch { return []; } })(),
     room: row.room_id != null ? String(row.room_id) : "",
     roomId: row.room_id,
     type: "",
