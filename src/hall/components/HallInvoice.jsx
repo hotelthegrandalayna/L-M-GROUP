@@ -291,6 +291,15 @@ export default function HallInvoice() {
   }
 
   function computeAndSave(inv, isLead, andView) {
+    // Apply smart AM/PM to any time fields that the user typed as plain numbers
+    const nightMode = (inv.wTod || "") === "night";
+    inv = {
+      ...inv,
+      hStart: smartTime(inv.hStart, "holud-start") || inv.hStart,
+      hEnd:   smartTime(inv.hEnd,   "holud-end")   || inv.hEnd,
+      wStart: smartTime(inv.wStart, nightMode ? "night-start" : "day") || inv.wStart,
+      wEnd:   smartTime(inv.wEnd,   nightMode ? "night-end"   : "day") || inv.wEnd,
+    };
     const { disc, grand, waiterTotal } = calcGrand(inv);
     const bal = Math.max(0, grand - (parseFloat(inv.adv) || 0));
     const payStatus =
@@ -1259,9 +1268,10 @@ function InvForm({
             </Field>
             <Field label="Price / Waiter (৳)">
               <input
-                type="number"
+                type="text"
+                inputMode="numeric"
                 value={d.wWaiterPrice || ""}
-                onChange={(e) => set("wWaiterPrice", e.target.value)}
+                onChange={(e) => set("wWaiterPrice", e.target.value.replace(/[^\d.]/g, ""))}
                 placeholder="0"
                 style={inputStyle()}
               />
@@ -1393,24 +1403,6 @@ function InvForm({
                 style={inputStyle()}
               />
             </Field>
-            <Field label="Guests *">
-              <input
-                type="number"
-                value={d.hGuests || ""}
-                onChange={(e) => set("hGuests", e.target.value)}
-                placeholder="e.g. 150"
-                style={inputStyle()}
-              />
-            </Field>
-            <Field label="Tables">
-              <input
-                type="number"
-                value={d.hTables || ""}
-                onChange={(e) => set("hTables", e.target.value)}
-                placeholder="0"
-                style={inputStyle()}
-              />
-            </Field>
           </div>
         </SubSection>
 
@@ -1433,9 +1425,10 @@ function InvForm({
             </Field>
             <Field label="Price / Waiter (৳)">
               <input
-                type="number"
+                type="text"
+                inputMode="numeric"
                 value={d.hWaiterPrice || ""}
-                onChange={(e) => set("hWaiterPrice", e.target.value)}
+                onChange={(e) => set("hWaiterPrice", e.target.value.replace(/[^\d.]/g, ""))}
                 placeholder="0"
                 style={inputStyle()}
               />

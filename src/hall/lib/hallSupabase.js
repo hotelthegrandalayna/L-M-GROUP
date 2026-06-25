@@ -190,8 +190,8 @@ function buildEventDetailRows(invoice, invoiceId) {
       booking_slot: toText(invoice.hSlot),
       time_of_day: toText(invoice.hTime),
       duration: toText(invoice.hTime),
-      start_time: null,
-      end_time: null,
+      start_time: toText(invoice.hStart),
+      end_time: toText(invoice.hEnd),
       ceremony_time: toText(invoice.hTime),
       guests: toInt(invoice.hGuests),
       tables_count: toInt(invoice.hTables),
@@ -275,6 +275,8 @@ function applyDetailToInvoice(target, detail) {
       detail.duration ||
       target.hTime ||
       "";
+    target.hStart = detail.start_time || target.hStart || "";
+    target.hEnd   = detail.end_time   || target.hEnd   || "";
     target.hGuests = detail.guests ?? target.hGuests ?? "";
     target.hTables = detail.tables_count ?? target.hTables ?? "";
     target.hSide = detail.client_side || target.hSide || "";
