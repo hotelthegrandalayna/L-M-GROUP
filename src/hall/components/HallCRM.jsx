@@ -98,12 +98,17 @@ export default function HallCRM() {
   }, [invoices]);
 
   // ── Pricing hint ─────────────────────────────────────────────────────────────
+  const [showPriceGuide, setShowPriceGuide] = useState(false);
+  const allRules = useMemo(() => loadPricingRules(), []);
+
   const pricingHint = useMemo(() => {
-    if (!form.evType || !form.guests) return null;
+    if (!form.evType) return null;
     const rules = loadPricingRules();
     const rule = getMatchingRule(rules, form.evType, form.guests);
-    const hist = getHistoricalPricing(invoices, form.evType, form.guests);
-    return { rule, hist };
+    // Show all rules for this event type if no specific match
+    const allForType = rules.filter(r => r.evType === form.evType);
+    const hist = form.guests ? getHistoricalPricing(invoices, form.evType, form.guests) : null;
+    return { rule, allForType, hist };
   }, [form.evType, form.guests, invoices]);
 
   // ── Actions ──────────────────────────────────────────────────────────────────
@@ -362,11 +367,53 @@ export default function HallCRM() {
         })}
       </div>
 
+      {/* ── Price Guide quick-reference panel ── */}
+      {showPriceGuide && (
+        <div style={{ background:"#fff", border:"1.5px solid #5a9a30", borderRadius:12, padding:"16px 20px", marginBottom:12 }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+            <div style={{ fontSize:13, fontWeight:800, color:"#1a5000" }}>💰 Full Price Guide (all rules)</div>
+            <button onClick={()=>setShowPriceGuide(false)} style={{ background:"none", border:"none", fontSize:18, cursor:"pointer", color:"#999", lineHeight:1 }}>×</button>
+          </div>
+          {allRules.length === 0
+            ? <div style={{ fontSize:13, color:"#888", fontStyle:"italic" }}>No pricing rules set yet. Go to Admin → 💰 Pricing Rules to add your rates.</div>
+            : (
+              <table style={{ width:"100%", borderCollapse:"collapse" }}>
+                <thead>
+                  <tr style={{ background:"#f0f8ec" }}>
+                    {["Event Type","Guests","Price Range","Notes"].map(h=>(
+                      <th key={h} style={{ padding:"7px 10px", fontSize:10, color:"#2e6010", fontWeight:800, textTransform:"uppercase", letterSpacing:.5, borderBottom:"1.5px solid #c8e8b0", textAlign:"left" }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {allRules.map((r,i)=>(
+                    <tr key={i} style={{ borderBottom:"1px solid #edf7e8" }}>
+                      <td style={{ padding:"8px 10px", fontWeight:700, fontSize:13 }}>{r.evType}</td>
+                      <td style={{ padding:"8px 10px", fontSize:12, color:"#555" }}>{r.minGuests||"0"} – {r.maxGuests||"any"}</td>
+                      <td style={{ padding:"8px 10px", fontWeight:800, fontSize:13, color:"#1a5000" }}>
+                        {r.minPrice?"৳"+Number(r.minPrice).toLocaleString():""}{r.minPrice&&r.maxPrice?" – ":""}{r.maxPrice?"৳"+Number(r.maxPrice).toLocaleString():""}
+                      </td>
+                      <td style={{ padding:"8px 10px", fontSize:12, color:"#888" }}>{r.notes||"—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )
+          }
+        </div>
+      )}
+
       {/* ── Add / Edit Lead Form ── */}
       <div ref={formRef} style={{ background:"#fff", border:`1.5px solid ${C.border}`, borderTop:`3px solid ${C.maroon}`, borderRadius:12, padding:"20px 22px" }}>
-        <h3 style={{ margin:"0 0 18px", fontSize:15, fontWeight:800, color:C.maroon }}>
-          {editId ? "✏️ Edit Lead" : "➕ Add New Enquiry / Lead"}
-        </h3>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:18 }}>
+          <h3 style={{ margin:0, fontSize:15, fontWeight:800, color:C.maroon }}>
+            {editId ? "✏️ Edit Lead" : "➕ Add New Enquiry / Lead"}
+          </h3>
+          <button onClick={()=>setShowPriceGuide(p=>!p)}
+            style={{ padding:"6px 14px", borderRadius:8, border:"1.5px solid #5a9a30", background: showPriceGuide?"#f0f8ec":"#fff", cursor:"pointer", fontSize:12, fontWeight:700, color:"#1a5000" }}>
+            💰 {showPriceGuide ? "Hide" : "Price Guide"}
+          </button>
+        </div>
         <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:14 }}>
           <div>
             <label style={lbl}>Client Name *</label>
@@ -417,30 +464,64 @@ export default function HallCRM() {
             </select>
           </div>
         </div>
-        {/* Pricing hint box */}
-        {pricingHint && (pricingHint.rule || pricingHint.hist) && (
-          <div style={{ marginTop:4, gridColumn:"1/-1", background:"#f0f8ec", border:"1.5px solid #5a9a30", borderRadius:9, padding:"12px 16px" }}>
-            <div style={{ fontSize:10, fontWeight:800, letterSpacing:1.5, textTransform:"uppercase", color:"#2e6010", marginBottom:8 }}>💰 Pricing Guide — {form.evType} · {form.guests} guests</div>
-            <div style={{ display:"flex", gap:24, flexWrap:"wrap" }}>
-              {pricingHint.rule && (
-                <div>
-                  <div style={{ fontSize:11, color:"#2e6010", fontWeight:700, marginBottom:3 }}>📋 Your set rule</div>
-                  <div style={{ fontSize:15, fontWeight:800, color:"#1a5000" }}>
-                    {pricingHint.rule.minPrice ? "৳"+Number(pricingHint.rule.minPrice).toLocaleString() : ""}
-                    {pricingHint.rule.minPrice && pricingHint.rule.maxPrice ? " – " : ""}
-                    {pricingHint.rule.maxPrice ? "৳"+Number(pricingHint.rule.maxPrice).toLocaleString() : ""}
-                  </div>
-                  {pricingHint.rule.notes && <div style={{ fontSize:11, color:"#555", marginTop:2 }}>{pricingHint.rule.notes}</div>}
-                </div>
-              )}
-              {pricingHint.hist && (
-                <div>
-                  <div style={{ fontSize:11, color:"#2e6010", fontWeight:700, marginBottom:3 }}>📊 Past invoices ({pricingHint.hist.count} similar)</div>
-                  <div style={{ fontSize:15, fontWeight:800, color:"#1a5000" }}>avg ৳{Number(pricingHint.hist.avg).toLocaleString()}</div>
-                  <div style={{ fontSize:11, color:"#555", marginTop:2 }}>range ৳{Number(pricingHint.hist.min).toLocaleString()} – ৳{Number(pricingHint.hist.max).toLocaleString()}</div>
-                </div>
-              )}
+        {/* Pricing hint — shows as soon as event type is selected */}
+        {pricingHint && (
+          <div style={{ gridColumn:"1/-1", background:"#f0f8ec", border:"1.5px solid #5a9a30", borderRadius:9, padding:"12px 16px", marginTop:2 }}>
+            <div style={{ fontSize:10, fontWeight:800, letterSpacing:1.5, textTransform:"uppercase", color:"#2e6010", marginBottom:10 }}>
+              💰 Price Guide — {form.evType}{form.guests ? ` · ${form.guests} guests` : ""}
             </div>
+
+            {/* Specific matched rule */}
+            {pricingHint.rule && (
+              <div style={{ background:"#fff", border:"1px solid #a8d88a", borderRadius:7, padding:"10px 14px", marginBottom:8 }}>
+                <div style={{ fontSize:11, color:"#2e6010", fontWeight:700, marginBottom:4 }}>📋 Matching rule ({pricingHint.rule.minGuests||"0"}–{pricingHint.rule.maxGuests||"any"} guests)</div>
+                <div style={{ fontSize:18, fontWeight:800, color:"#1a5000" }}>
+                  {pricingHint.rule.minPrice ? "৳"+Number(pricingHint.rule.minPrice).toLocaleString() : ""}
+                  {pricingHint.rule.minPrice && pricingHint.rule.maxPrice ? " – " : ""}
+                  {pricingHint.rule.maxPrice ? "৳"+Number(pricingHint.rule.maxPrice).toLocaleString() : ""}
+                </div>
+                {pricingHint.rule.notes && <div style={{ fontSize:11, color:"#555", marginTop:3 }}>Note: {pricingHint.rule.notes}</div>}
+              </div>
+            )}
+
+            {/* All rules for this event type (when no specific guest match yet) */}
+            {!pricingHint.rule && pricingHint.allForType.length > 0 && (
+              <div style={{ marginBottom:8 }}>
+                <div style={{ fontSize:11, color:"#2e6010", fontWeight:700, marginBottom:6 }}>📋 All rules for {form.evType}</div>
+                <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
+                  {pricingHint.allForType.map((r,i) => (
+                    <div key={i} style={{ background:"#fff", border:"1px solid #c8e8b0", borderRadius:6, padding:"7px 12px", display:"flex", justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:8 }}>
+                      <span style={{ fontSize:12, color:"#555" }}>{r.minGuests||"0"}–{r.maxGuests||"any"} guests</span>
+                      <span style={{ fontSize:14, fontWeight:800, color:"#1a5000" }}>
+                        {r.minPrice?"৳"+Number(r.minPrice).toLocaleString():""}{r.minPrice&&r.maxPrice?" – ":""}{r.maxPrice?"৳"+Number(r.maxPrice).toLocaleString():""}
+                      </span>
+                      {r.notes && <span style={{ fontSize:11, color:"#888" }}>{r.notes}</span>}
+                    </div>
+                  ))}
+                </div>
+                {form.guests && <div style={{ fontSize:11, color:"#777", marginTop:6 }}>Enter guest count above to see your exact matching rule.</div>}
+              </div>
+            )}
+
+            {/* Historical data from past invoices */}
+            {pricingHint.hist && (
+              <div style={{ background:"#fff", border:"1px solid #c8e8b0", borderRadius:7, padding:"10px 14px", marginBottom:8 }}>
+                <div style={{ fontSize:11, color:"#2e6010", fontWeight:700, marginBottom:4 }}>📊 Based on {pricingHint.hist.count} past invoices (similar guest count)</div>
+                <div style={{ display:"flex", gap:20, flexWrap:"wrap" }}>
+                  <div><div style={{ fontSize:10, color:"#888" }}>Average</div><div style={{ fontSize:16, fontWeight:800, color:"#1a5000" }}>৳{Number(pricingHint.hist.avg).toLocaleString()}</div></div>
+                  <div><div style={{ fontSize:10, color:"#888" }}>Lowest charged</div><div style={{ fontSize:14, fontWeight:700, color:"#555" }}>৳{Number(pricingHint.hist.min).toLocaleString()}</div></div>
+                  <div><div style={{ fontSize:10, color:"#888" }}>Highest charged</div><div style={{ fontSize:14, fontWeight:700, color:"#555" }}>৳{Number(pricingHint.hist.max).toLocaleString()}</div></div>
+                </div>
+              </div>
+            )}
+
+            {/* No data at all */}
+            {!pricingHint.rule && pricingHint.allForType.length === 0 && !pricingHint.hist && (
+              <div style={{ fontSize:12, color:"#666", fontStyle:"italic" }}>
+                No pricing rules set for <strong>{form.evType}</strong> yet.
+                Go to <strong>Admin → 💰 Pricing Rules</strong> to add your rates.
+              </div>
+            )}
           </div>
         )}
 
