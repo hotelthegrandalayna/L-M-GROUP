@@ -100,8 +100,9 @@ function BookingModal({ booking, onClose }) {
     if (bookingConflicts(b.room, b.checkout, newCo, b.id, bookings)) { notify("Room already booked for those dates", "error"); return; }
     const newNights = nightsBetween(b.checkin, newCo);
     const newAmt    = room ? newNights * room.rate : b.amount + extCost;
-    const updated   = bookings.map(x => x.id === b.id ? { ...x, checkout: newCo, nights: newNights, amount: newAmt } : x);
-    updateBookings(updated);
+    const updatedB  = { ...b, checkout: newCo, nights: newNights, amount: newAmt };
+    updateBookings(bookings.map(x => x.id === b.id ? updatedB : x));
+    void persistHotelBookingBundle(updatedB).catch(err => console.error("Supabase extend sync failed:", err));
     if (extCost > 0) updateRevenues([...revenues, { id: maxId(revenues), source: "Room Rent", amount: extCost, date: today,
       note: b.guest + " Rm " + b.room + " - stay extended " + extDays + "d", bookingId: b.id }]);
     notify("Stay extended to " + newCo, "success");
@@ -110,7 +111,9 @@ function BookingModal({ booking, onClose }) {
 
   function cancelBooking() {
     if (!window.confirm("Cancel this booking? This cannot be undone.")) return;
-    updateBookings(bookings.map(x => x.id === b.id ? { ...x, status: "cancelled" } : x));
+    const updated = { ...b, status: "cancelled" };
+    updateBookings(bookings.map(x => x.id === b.id ? updated : x));
+    void persistHotelBookingBundle(updated).catch(err => console.error("Supabase cancel sync failed:", err));
     notify("Booking cancelled", "success");
     logEvent("hotel", "booking_cancelled", { num:String(b.id), guest:b.guest, amount:invoiceTotal, note:`Rm ${b.room}` }, curUser);
     onClose();
@@ -118,7 +121,9 @@ function BookingModal({ booking, onClose }) {
 
   function saveEdit() {
     if (!eGuest.trim()) { notify("Guest name required", "error"); return; }
-    updateBookings(bookings.map(x => x.id === b.id ? { ...x, guest: eGuest.trim(), phone: ePhone.trim(), notes: eNotes.trim() } : x));
+    const updated = { ...b, guest: eGuest.trim(), phone: ePhone.trim(), notes: eNotes.trim() };
+    updateBookings(bookings.map(x => x.id === b.id ? updated : x));
+    void persistHotelBookingBundle(updated).catch(err => console.error("Supabase edit sync failed:", err));
     notify("Booking updated", "success");
     logEvent("hotel", "invoice_updated", { num:String(b.id), guest:eGuest.trim(), amount:invoiceTotal, note:`Rm ${b.room} · details edited` }, curUser);
     setEditMode(false);

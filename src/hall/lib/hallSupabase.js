@@ -370,6 +370,12 @@ function fromDbInvoice(row) {
     : [];
   invoice.services = services.map(parseServiceRow);
 
+  // Recalculate waiterTotal from raw fields so the "Collect Waiter Cost" button shows correctly
+  const wWaiters = toNum(invoice.wWaiters, 0) * toNum(invoice.wWaiterPrice, 0);
+  const hWaiters = toNum(invoice.hWaiters, 0) * toNum(invoice.hWaiterPrice, 0);
+  invoice.waiterTotal = wWaiters + hWaiters;
+  invoice.waiterBalance = Math.max(0, invoice.waiterTotal - toNum(invoice.waiterCostPaid, 0));
+
   return invoice;
 }
 

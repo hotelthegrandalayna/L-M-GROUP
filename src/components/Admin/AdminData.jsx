@@ -1,4 +1,5 @@
 import { useApp } from "../../context/AppContext";
+import { hasHotelSupabaseConfig, persistHotelBookingBundle, deleteHotelBookings, loadHotelBookingsFromSupabase } from "../../lib/hotelSupabase";
 
 export default function AdminData() {
   const { bookings, updateBookings, revenues, updateRevenues, expenses, updateExpenses, rooms, setRooms, notify } = useApp();
@@ -16,7 +17,7 @@ export default function AdminData() {
   function importAll(e) {
     const file = e.target.files[0]; if (!file) return;
     const reader = new FileReader();
-    reader.onload = ev => {
+    reader.onload = async ev => {
       try {
         const data = JSON.parse(ev.target.result);
         if (!window.confirm("This will REPLACE all current data with the imported file. Continue?")) return;
@@ -25,6 +26,24 @@ export default function AdminData() {
         if (data.expenses) updateExpenses(data.expenses);
         if (data.rooms)    setRooms(data.rooms);
         notify("Data imported successfully","success");
+        // Sync imported bookings to Supabase
+        if (hasHotelSupabaseConfig() && data.bookings?.length) {
+          notify("Syncing to Supabase...", "info");
+          try {
+            // Delete all existing Supabase bookings first
+            const existing = await loadHotelBookingsFromSupabase();
+            const existingIds = existing.map(b => b.supabaseBookingId).filter(Boolean);
+            if (existingIds.length) await deleteHotelBookings(existingIds);
+            // Re-upload imported bookings
+            for (const b of data.bookings) {
+              await persistHotelBookingBundle(b).catch(() => {});
+            }
+            notify("Supabase sync complete ✓", "success");
+          } catch (err) {
+            console.error("Supabase sync after import failed:", err);
+            notify("Local import done, but Supabase sync failed", "error");
+          }
+        }
       } catch { notify("Invalid backup file","error"); }
     };
     reader.readAsText(file);
