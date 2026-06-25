@@ -124,6 +124,8 @@ function newInvObj(num) {
     addrArea: "",
     addrCity: "",
     addrDistrict: "",
+    voterIdData: "",
+    voterIdName: "",
     evType: "Wedding",
     evDate: today,
     // Wedding fields
@@ -962,6 +964,21 @@ function InvForm({
     if (imgRef.current) imgRef.current.value = "";
   }
 
+  const voterIdRef = useRef(null);
+  function handleVoterId(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => set("voterIdData", ev.target.result);
+    reader.readAsDataURL(file);
+    set("voterIdName", file.name);
+  }
+  function clearVoterId() {
+    set("voterIdData", "");
+    set("voterIdName", "");
+    if (voterIdRef.current) voterIdRef.current.value = "";
+  }
+
   const RELIGIONS = [
     "—",
     "Islam",
@@ -1615,6 +1632,28 @@ function InvForm({
               style={inputStyle()}
             />
           </Field>
+        </div>
+
+        {/* Voter ID Upload */}
+        <div style={{ marginTop: 14 }}>
+          <label style={{ fontSize: 12, fontWeight: 700, color: C.text, textTransform: "uppercase", letterSpacing: 0.5, display: "block", marginBottom: 8 }}>
+            🪪 Voter ID Card (optional)
+          </label>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <label style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 14px", background: C.gold, color: "#fff", borderRadius: 7, cursor: "pointer", fontSize: 12, fontWeight: 700 }}>
+              📷 Upload Image
+              <input ref={voterIdRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleVoterId} />
+            </label>
+            <span style={{ fontSize: 12, color: "#666" }}>{d.voterIdName || "No image chosen"}</span>
+            {d.voterIdData && (
+              <button onClick={clearVoterId} style={{ fontSize: 11, color: "#c0392b", background: "none", border: "1px solid #c0392b", borderRadius: 5, padding: "4px 10px", cursor: "pointer" }}>✕ Remove</button>
+            )}
+          </div>
+          {d.voterIdData && (
+            <div style={{ marginTop: 10 }}>
+              <img src={d.voterIdData} alt="Voter ID" style={{ maxWidth: "100%", maxHeight: 220, borderRadius: 8, border: "2px solid " + C.border, objectFit: "contain" }} />
+            </div>
+          )}
         </div>
       </Section>
 
@@ -3996,6 +4035,19 @@ function InvDetail({
           />
         )}
       </div>
+
+      {/* Voter ID Card */}
+      {inv.voterIdData && (
+        <div style={card({ marginBottom: 14, padding: 0, overflow: "hidden" })}>
+          <div style={{ padding: "10px 16px", borderBottom: "1px solid " + C.border, fontWeight: 800, fontSize: 12, color: C.maroon, background: "#faf8f3" }}>
+            🪪 Voter ID Card
+          </div>
+          <div style={{ padding: 16 }}>
+            <img src={inv.voterIdData} alt="Voter ID" style={{ maxWidth: "100%", maxHeight: 320, borderRadius: 8, border: "2px solid " + C.border, objectFit: "contain", display: "block" }} />
+            {inv.voterIdName && <div style={{ marginTop: 8, fontSize: 11, color: C.dim }}>{inv.voterIdName}</div>}
+          </div>
+        </div>
+      )}
 
       {payModal && (
         <div
