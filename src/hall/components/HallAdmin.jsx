@@ -139,6 +139,26 @@ export default function HallAdmin() {
 
   const allYears = useMemo(()=>[...new Set(invoices.map(i=>(i.invDate||i.evDate||"").slice(0,4)).filter(Boolean))].sort().reverse(),[invoices]);
 
+  // ── Invoice detail modal & multi-select ──────────────────────────────────────
+  const [viewInv, setViewInv] = useState(null);
+  const [selectedIds, setSelectedIds] = useState([]);
+
+  function toggleSelect(id, e) {
+    e.stopPropagation();
+    setSelectedIds(prev => prev.includes(id) ? prev.filter(x=>x!==id) : [...prev,id]);
+  }
+  function toggleSelectAll() {
+    setSelectedIds(prev => prev.length === filteredInv.length ? [] : filteredInv.map(i=>i.id));
+  }
+  function bulkDelete() {
+    if (!selectedIds.length) return;
+    if (!window.confirm(`Delete ${selectedIds.length} invoice(s)? This cannot be undone.`)) return;
+    void deleteHallInvoicesFromSupabase(selectedIds).catch(err => console.error(err));
+    setInvoices(prev => prev.filter(i => !selectedIds.includes(i.id)));
+    setSelectedIds([]);
+    notify(`${selectedIds.length} invoice(s) deleted`, "success");
+  }
+
   // ── Invoice table filter ──────────────────────────────────────────────────────
   const filteredInv = useMemo(() => {
     const s = invSearch.toLowerCase();
@@ -514,11 +534,28 @@ export default function HallAdmin() {
             <button onClick={exportInvCSV} style={{ padding:"9px 14px", borderRadius:8, border:`1.5px solid ${C.border}`, background:"#fff", cursor:"pointer", fontFamily:"inherit", fontWeight:700, fontSize:11, whiteSpace:"nowrap" }}>⬇ Excel</button>
           </div>
 
+          {/* Bulk action bar */}
+          {selectedIds.length > 0 && (
+            <div style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 14px", background:"#fff8e1", border:`1.5px solid ${C.gold}`, borderRadius:10, marginBottom:10 }}>
+              <span style={{ fontSize:13, fontWeight:700, color:"#7a5000" }}>{selectedIds.length} selected</span>
+              <button onClick={()=>setSelectedIds([])} style={{ fontSize:11, padding:"4px 10px", borderRadius:6, border:`1px solid ${C.gold}`, background:"#fff", cursor:"pointer", fontWeight:600 }}>Deselect All</button>
+              {isAdmin && (
+                <button onClick={bulkDelete} style={{ fontSize:12, padding:"6px 14px", borderRadius:7, border:"none", background:C.red, color:"#fff", cursor:"pointer", fontWeight:700, marginLeft:"auto" }}>🗑 Delete {selectedIds.length} Invoice{selectedIds.length>1?"s":""}</button>
+              )}
+            </div>
+          )}
+
           {/* Invoice table */}
           <div style={{ background:"#fff", border:`1.5px solid ${C.border}`, borderRadius:12, overflowX:"auto" }}>
-            <table style={{ width:"100%", borderCollapse:"collapse", minWidth:700 }}>
+            <table style={{ width:"100%", borderCollapse:"collapse", minWidth:720 }}>
               <thead>
                 <tr style={{ background:"#fafaf8" }}>
+                  <th style={{ padding:"10px 12px", borderBottom:`1.5px solid ${C.border}`, width:36 }}>
+                    <input type="checkbox"
+                      checked={filteredInv.length > 0 && selectedIds.length === filteredInv.length}
+                      onChange={toggleSelectAll}
+                      style={{ cursor:"pointer", accentColor:C.maroon, width:15, height:15 }} />
+                  </th>
                   {["Invoice #","Client","Event","Date","Guests","Total","Balance","Status","Actions"].map(h=>(
                     <th key={h} style={{ padding:"10px 12px", fontSize:10, color:C.dim, fontWeight:800, textTransform:"uppercase", letterSpacing:.5, borderBottom:`1.5px solid ${C.border}`, textAlign:"left", whiteSpace:"nowrap" }}>{h}</th>
                   ))}
@@ -526,33 +563,45 @@ export default function HallAdmin() {
               </thead>
               <tbody>
                 {filteredInv.length===0 ? (
-                  <tr><td colSpan={9} style={{ textAlign:"center", padding:24, color:C.dim, fontSize:13 }}>No invoices found.</td></tr>
-                ) : filteredInv.map(inv => (
-                  <tr key={inv.id} style={{ borderBottom:"1px solid #f0ede8" }}>
-                    <td style={{ padding:"10px 12px", fontWeight:700, color:C.maroon, fontSize:12 }}>{inv.num}</td>
-                    <td style={{ padding:"10px 12px" }}>
-                      <div style={{ fontWeight:700, fontSize:13 }}>{inv.client}</div>
-                      <div style={{ fontSize:10, color:C.dim }}>{inv.phone}</div>
-                    </td>
-                    <td style={{ padding:"10px 12px", fontSize:12 }}>{inv.evType}</td>
-                    <td style={{ padding:"10px 12px", fontSize:12 }}>{fmtDate(inv.evDate)}</td>
-                    <td style={{ padding:"10px 12px", fontSize:12 }}>{inv.wGuests||inv.hGuests||"—"}</td>
-                    <td style={{ padding:"10px 12px", fontWeight:700, color:C.gold }}>৳{fmt(inv.grand)}</td>
-                    <td style={{ padding:"10px 12px", fontWeight:700, color:C.red }}>৳{fmt(inv.balance)}</td>
-                    <td style={{ padding:"10px 12px" }}>
-                      <span style={{ fontSize:10, fontWeight:700, padding:"3px 9px", borderRadius:20, background:`${psColor(inv.payStatus)}18`, color:psColor(inv.payStatus), border:`1px solid ${psColor(inv.payStatus)}40` }}>{inv.payStatus}</span>
-                    </td>
-                    <td style={{ padding:"10px 12px" }}>
-                      {isAdmin && (
-                        <button onClick={()=>{ if(window.confirm("Delete invoice "+inv.num+"?")){ setInvoices(prev=>prev.filter(i=>i.id!==inv.id)); void deleteHallInvoiceFromSupabase(inv.id).catch(err => { console.error("Failed to delete hall invoice from Supabase:", err); }); notify("Invoice deleted","success"); } }}
-                          style={{ padding:"4px 8px", borderRadius:7, border:`1.5px solid ${C.red}40`, background:"#fff0f0", cursor:"pointer", fontSize:12 }}>🗑</button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                  <tr><td colSpan={10} style={{ textAlign:"center", padding:24, color:C.dim, fontSize:13 }}>No invoices found.</td></tr>
+                ) : filteredInv.map(inv => {
+                  const isSel = selectedIds.includes(inv.id);
+                  return (
+                    <tr key={inv.id} onClick={()=>setViewInv(inv)}
+                      style={{ borderBottom:"1px solid #f0ede8", cursor:"pointer", background: isSel?"#fff8e1":"transparent", transition:"background .12s" }}
+                      onMouseEnter={e=>{ if(!isSel) e.currentTarget.style.background="#fdf8f0"; }}
+                      onMouseLeave={e=>{ e.currentTarget.style.background=isSel?"#fff8e1":"transparent"; }}>
+                      <td style={{ padding:"10px 12px" }} onClick={e=>toggleSelect(inv.id,e)}>
+                        <input type="checkbox" checked={isSel} onChange={()=>{}} style={{ cursor:"pointer", accentColor:C.maroon, width:15, height:15 }} />
+                      </td>
+                      <td style={{ padding:"10px 12px", fontWeight:700, color:C.maroon, fontSize:12 }}>{inv.num}</td>
+                      <td style={{ padding:"10px 12px" }}>
+                        <div style={{ fontWeight:700, fontSize:13 }}>{inv.client}</div>
+                        <div style={{ fontSize:10, color:C.dim }}>{inv.phone}</div>
+                      </td>
+                      <td style={{ padding:"10px 12px", fontSize:12 }}>{inv.evType}</td>
+                      <td style={{ padding:"10px 12px", fontSize:12 }}>{fmtDate(inv.evDate)}</td>
+                      <td style={{ padding:"10px 12px", fontSize:12 }}>{inv.wGuests||inv.hGuests||"—"}</td>
+                      <td style={{ padding:"10px 12px", fontWeight:700, color:C.gold }}>৳{fmt(inv.grand)}</td>
+                      <td style={{ padding:"10px 12px", fontWeight:700, color:C.red }}>৳{fmt(inv.balance)}</td>
+                      <td style={{ padding:"10px 12px" }}>
+                        <span style={{ fontSize:10, fontWeight:700, padding:"3px 9px", borderRadius:20, background:`${psColor(inv.payStatus)}18`, color:psColor(inv.payStatus), border:`1px solid ${psColor(inv.payStatus)}40` }}>{inv.payStatus}</span>
+                      </td>
+                      <td style={{ padding:"10px 12px" }} onClick={e=>e.stopPropagation()}>
+                        {isAdmin && (
+                          <button onClick={()=>{ if(window.confirm("Delete invoice "+inv.num+"?")){ setInvoices(prev=>prev.filter(i=>i.id!==inv.id)); void deleteHallInvoiceFromSupabase(inv.id).catch(err => { console.error("Failed to delete hall invoice from Supabase:", err); }); notify("Invoice deleted","success"); } }}
+                            style={{ padding:"4px 8px", borderRadius:7, border:`1.5px solid ${C.red}40`, background:"#fff0f0", cursor:"pointer", fontSize:12 }}>🗑</button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
+
+          {/* Invoice detail modal */}
+          {viewInv && <InvoiceDetailModal inv={viewInv} onClose={()=>setViewInv(null)} isAdmin={isAdmin} onDelete={id=>{ setInvoices(prev=>prev.filter(i=>i.id!==id)); void deleteHallInvoiceFromSupabase(id).catch(()=>{}); notify("Invoice deleted","success"); setViewInv(null); }} />}
         </div>
       )}
 
@@ -785,6 +834,275 @@ export default function HallAdmin() {
       {tab==="sms" && isAdmin && <SmsPanel notify={notify} isMobile={isMobile} invoices={invoices} />}
       {tab==="audit" && isAdmin && <AuditLogViewer scope="hall" title="Hall — Activity Audit Log" checkPassword={checkHallAdminPass} notify={notify} />}
 
+    </div>
+  );
+}
+
+// ── Invoice Detail Modal ───────────────────────────────────────────────────────
+function printAdminInvoice(inv) {
+  const MONTHS_S2 = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  function fd(iso) {
+    if (!iso) return "—";
+    const [y,m,d] = iso.split("-");
+    return `${parseInt(d)} ${MONTHS_S2[parseInt(m)-1]} ${y}`;
+  }
+  function fc(n) { return Number(n||0).toLocaleString(); }
+  const isHolud = (inv.evType||"").toLowerCase().includes("holud") || (inv.evType||"").toLowerCase().includes("wedding");
+  const hasHolud = (inv.evType||"").toLowerCase().includes("holud");
+
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Invoice ${inv.num||""}</title>
+  <style>
+    body{margin:0;padding:0;font-family:'Segoe UI',Arial,sans-serif;background:#f5f0ea;color:#111;}
+    .page{max-width:720px;margin:30px auto;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,.12);}
+    .header{background:linear-gradient(135deg,#4a0a0a,#7B1212);color:#fff;padding:28px 32px;display:flex;justify-content:space-between;align-items:center;}
+    .hall-name{font-size:22px;font-weight:800;letter-spacing:.5px;}
+    .tagline{font-size:11px;opacity:.75;margin-top:3px;}
+    .inv-num{text-align:right;}
+    .inv-num .num{font-size:18px;font-weight:800;color:#f0c860;}
+    .inv-num .dt{font-size:11px;opacity:.75;margin-top:4px;}
+    .body{padding:28px 32px;}
+    .section{margin-bottom:20px;padding-bottom:20px;border-bottom:1px solid #f0ede8;}
+    .section:last-child{border-bottom:none;margin-bottom:0;padding-bottom:0;}
+    .sec-title{font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#7B1212;font-weight:800;margin-bottom:12px;}
+    .row2{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+    .field label{font-size:9px;text-transform:uppercase;letter-spacing:1px;color:#999;display:block;margin-bottom:3px;}
+    .field .val{font-size:13px;font-weight:600;color:#111;}
+    .event-box{border-radius:8px;padding:12px 14px;margin-bottom:10px;}
+    .event-box.holud{background:#fff8e1;border:1.5px solid #d4a800;}
+    .event-box.wedding{background:#fff0f0;border:1.5px solid #e07070;}
+    .event-box.generic{background:#f0f4ff;border:1.5px solid #7090cc;}
+    .event-box .ev-title{font-size:9px;letter-spacing:2px;text-transform:uppercase;font-weight:800;margin-bottom:8px;}
+    .ev-row{display:flex;gap:6px;margin-bottom:4px;align-items:baseline;}
+    .ev-row .ev-lbl{font-size:10px;text-transform:uppercase;letter-spacing:1px;font-weight:700;color:#7B1212;min-width:70px;}
+    .ev-row .ev-val{font-size:12px;font-weight:600;color:#111;}
+    table.fin{width:100%;border-collapse:collapse;}
+    table.fin td,table.fin th{padding:9px 12px;font-size:12px;border-bottom:1px solid #f0ede8;text-align:left;}
+    table.fin th{font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:#999;font-weight:700;background:#fafaf8;}
+    table.fin .total-row td{font-weight:800;font-size:13px;border-top:2px solid #e0d0b0;border-bottom:none;}
+    .badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;}
+    .badge.paid{background:#eafaf1;color:#1a7040;border:1px solid #1a704040;}
+    .badge.partial{background:#fff8e1;color:#a07000;border:1px solid #c9a84c60;}
+    .badge.unpaid{background:#fff0f0;color:#c0392b;border:1px solid #c0392b40;}
+    .notes-box{background:#fafaf8;border:1px solid #e5e0d8;border-radius:8px;padding:12px 14px;font-size:12px;color:#555;line-height:1.6;}
+    .voter-img{max-width:100%;border-radius:8px;margin-top:8px;border:1.5px solid #e0d0b0;}
+    @media print{body{background:#fff;}.page{box-shadow:none;border-radius:0;}}
+  </style></head><body>
+  <div class="page">
+    <div class="header">
+      <div>
+        <div class="hall-name">Amelia Convention Hall</div>
+        <div class="tagline">Convention &amp; Banquet Management</div>
+      </div>
+      <div class="inv-num">
+        <div class="num">${inv.num||"DRAFT"}</div>
+        <div class="dt">Date: ${fd(inv.invDate||inv.evDate)}</div>
+        <div style="margin-top:6px"><span class="badge ${(inv.payStatus||"").toLowerCase()}">${inv.payStatus||"—"}</span></div>
+      </div>
+    </div>
+    <div class="body">
+
+      <!-- Client Info -->
+      <div class="section">
+        <div class="sec-title">Client Information</div>
+        <div class="row2">
+          <div class="field"><label>Full Name</label><div class="val">${inv.client||"—"}</div></div>
+          <div class="field"><label>Phone</label><div class="val">${inv.phone||"—"}</div></div>
+          ${inv.address ? `<div class="field" style="grid-column:1/-1"><label>Address</label><div class="val">${inv.address}</div></div>` : ""}
+        </div>
+        ${inv.voterIdData ? `<div style="margin-top:10px"><div style="font-size:9px;text-transform:uppercase;letter-spacing:1px;color:#999;margin-bottom:4px">Voter ID Card</div><img src="${inv.voterIdData}" class="voter-img" style="max-height:140px;object-fit:contain;" /></div>` : ""}
+      </div>
+
+      <!-- Event Details -->
+      <div class="section">
+        <div class="sec-title">Event Details</div>
+        <div class="field" style="margin-bottom:12px"><label>Event Type</label><div class="val">${inv.evType||"—"}</div></div>
+        ${hasHolud ? `
+          <div class="event-box holud">
+            <div class="ev-title" style="color:#8a6200">🌼 Holud Ceremony</div>
+            ${inv.hDate ? `<div class="ev-row"><span class="ev-lbl">Date</span><span class="ev-val">${fd(inv.hDate)}</span></div>` : ""}
+            ${(inv.hStart||inv.hEnd) ? `<div class="ev-row"><span class="ev-lbl">Time</span><span class="ev-val">${inv.hStart||"?"}${(inv.hStart||inv.hEnd)?" – ":""}${inv.hEnd||"?"}</span></div>` : ""}
+            ${(inv.hGuests||inv.hTables) ? `<div class="ev-row"><span class="ev-lbl">Guests</span><span class="ev-val">${inv.hGuests?inv.hGuests+" guests":""}${(inv.hGuests&&inv.hTables)?" · ":""}${inv.hTables?inv.hTables+" tables":""}</span></div>` : ""}
+          </div>
+          <div class="event-box wedding">
+            <div class="ev-title" style="color:#7B1212">💒 Wedding Ceremony</div>
+            ${inv.evDate ? `<div class="ev-row"><span class="ev-lbl">Date</span><span class="ev-val">${fd(inv.evDate)}</span></div>` : ""}
+            ${(inv.wStart||inv.wEnd) ? `<div class="ev-row"><span class="ev-lbl">Time</span><span class="ev-val">${inv.wStart||"?"}${(inv.wStart||inv.wEnd)?" – ":""}${inv.wEnd||"?"}</span></div>` : ""}
+            ${(inv.wGuests||inv.wTables) ? `<div class="ev-row"><span class="ev-lbl">Guests</span><span class="ev-val">${inv.wGuests?inv.wGuests+" guests":""}${(inv.wGuests&&inv.wTables)?" · ":""}${inv.wTables?inv.wTables+" tables":""}</span></div>` : ""}
+            ${(inv.wBride||inv.wGroom) ? `${inv.wBride?`<div class="ev-row"><span class="ev-lbl">Bride</span><span class="ev-val">${inv.wBride}</span></div>`:""}${inv.wGroom?`<div class="ev-row"><span class="ev-lbl">Groom</span><span class="ev-val">${inv.wGroom}</span></div>`:""}` : ""}
+          </div>
+        ` : `
+          <div class="event-box generic">
+            <div class="ev-title" style="color:#305090">📅 Event Schedule</div>
+            ${inv.evDate ? `<div class="ev-row"><span class="ev-lbl">Date</span><span class="ev-val">${fd(inv.evDate)}</span></div>` : ""}
+            ${(inv.wStart||inv.wEnd) ? `<div class="ev-row"><span class="ev-lbl">Time</span><span class="ev-val">${inv.wStart||"?"}${(inv.wStart||inv.wEnd)?" – ":""}${inv.wEnd||"?"}</span></div>` : ""}
+            ${(inv.wGuests||inv.wTables||inv.guests) ? `<div class="ev-row"><span class="ev-lbl">Guests</span><span class="ev-val">${inv.wGuests||inv.guests||""}${((inv.wGuests||inv.guests)&&inv.wTables)?" · ":""}${inv.wTables?inv.wTables+" tables":""}</span></div>` : ""}
+          </div>
+        `}
+      </div>
+
+      <!-- Financial Summary -->
+      <div class="section">
+        <div class="sec-title">Financial Summary</div>
+        <table class="fin">
+          <thead><tr><th>Description</th><th style="text-align:right">Amount</th></tr></thead>
+          <tbody>
+            <tr><td>Hall Booking Total</td><td style="text-align:right;font-weight:600">৳ ${fc(inv.grand)}</td></tr>
+            ${inv.waiterTotal ? `<tr><td>Waiter Cost</td><td style="text-align:right;font-weight:600">৳ ${fc(inv.waiterTotal)}</td></tr>` : ""}
+            ${(inv.discount||inv.discAmt) ? `<tr><td>Discount</td><td style="text-align:right;color:#c0392b">− ৳ ${fc(inv.discount||inv.discAmt)}</td></tr>` : ""}
+            <tr><td>Advance Paid</td><td style="text-align:right;color:#1a7040">৳ ${fc(inv.adv)}</td></tr>
+            ${inv.waiterCostPaid ? `<tr><td>Waiter Cost Paid</td><td style="text-align:right;color:#1a7040">৳ ${fc(inv.waiterCostPaid)}</td></tr>` : ""}
+          </tbody>
+          <tfoot>
+            <tr class="total-row">
+              <td>Balance Due</td>
+              <td style="text-align:right;color:#c0392b">৳ ${fc(inv.balance ?? Math.max(0,(inv.grand||0)-(parseFloat(inv.adv)||0)))}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+
+      ${inv.notes ? `<div class="section"><div class="sec-title">Notes</div><div class="notes-box">${inv.notes}</div></div>` : ""}
+    </div>
+  </div>
+  <script>window.print();</script>
+  </body></html>`;
+
+  const w = window.open("","_blank","width=780,height=900");
+  if (w) { w.document.write(html); w.document.close(); }
+}
+
+function InvoiceDetailModal({ inv, onClose, isAdmin, onDelete }) {
+  function fd(iso) {
+    if (!iso) return "—";
+    const M = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    const [y,m,d] = iso.split("-");
+    return `${parseInt(d)} ${M[parseInt(m)-1]} ${y}`;
+  }
+  function fc(n) { return Number(n||0).toLocaleString(); }
+  const isHolud = (inv.evType||"").toLowerCase().includes("holud");
+  const psColor2 = (ps) => ps==="Paid"?"#1a7040":ps==="Partial"?"#a07000":"#c0392b";
+  const psBg = (ps) => ps==="Paid"?"#eafaf1":ps==="Partial"?"#fff8e1":"#fff0f0";
+
+  const row = (label, value) => value ? (
+    <div style={{ marginBottom:10 }}>
+      <div style={{ fontSize:10, textTransform:"uppercase", letterSpacing:1, color:"#999", marginBottom:2 }}>{label}</div>
+      <div style={{ fontSize:13, fontWeight:600, color:"#111" }}>{value}</div>
+    </div>
+  ) : null;
+
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.55)", zIndex:9999, display:"flex", alignItems:"flex-start", justifyContent:"center", padding:"20px 10px", overflowY:"auto" }}
+      onClick={onClose}>
+      <div style={{ background:"#fff", borderRadius:16, width:"100%", maxWidth:720, boxShadow:"0 8px 40px rgba(0,0,0,.25)", overflow:"hidden" }}
+        onClick={e=>e.stopPropagation()}>
+
+        {/* Header */}
+        <div style={{ background:"linear-gradient(135deg,#4a0a0a,#7B1212)", color:"#fff", padding:"22px 28px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+          <div>
+            <div style={{ fontSize:11, opacity:.7, letterSpacing:1.5, textTransform:"uppercase", marginBottom:4 }}>Convention Hall Invoice</div>
+            <div style={{ fontSize:22, fontWeight:800, color:"#f0c860" }}>{inv.num||"DRAFT"}</div>
+            <div style={{ fontSize:12, opacity:.75, marginTop:4 }}>Created: {fd(inv.invDate||inv.evDate)}</div>
+          </div>
+          <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:10 }}>
+            <div style={{ padding:"4px 14px", borderRadius:20, background:psBg(inv.payStatus), color:psColor2(inv.payStatus), fontWeight:700, fontSize:12 }}>{inv.payStatus||"—"}</div>
+            <div style={{ display:"flex", gap:8 }}>
+              <button onClick={()=>printAdminInvoice(inv)} style={{ padding:"7px 14px", borderRadius:8, border:"none", background:"#f0c860", color:"#4a0a0a", cursor:"pointer", fontWeight:700, fontSize:12 }}>🖨 Print</button>
+              {isAdmin && <button onClick={()=>{ if(window.confirm("Delete "+inv.num+"?")) onDelete(inv.id); }} style={{ padding:"7px 12px", borderRadius:8, border:"none", background:"rgba(255,255,255,.2)", color:"#fff", cursor:"pointer", fontWeight:700, fontSize:12 }}>🗑</button>}
+              <button onClick={onClose} style={{ padding:"7px 12px", borderRadius:8, border:"none", background:"rgba(255,255,255,.15)", color:"#fff", cursor:"pointer", fontSize:18, lineHeight:1 }}>×</button>
+            </div>
+          </div>
+        </div>
+
+        <div style={{ padding:"24px 28px" }}>
+
+          {/* Client Info */}
+          <div style={{ marginBottom:20, paddingBottom:20, borderBottom:"1.5px solid #f0ede8" }}>
+            <div style={{ fontSize:10, letterSpacing:2, textTransform:"uppercase", color:"#7B1212", fontWeight:800, marginBottom:14 }}>Client Information</div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+              {row("Full Name", inv.client)}
+              {row("Phone", inv.phone)}
+              {row("Address", inv.address)}
+            </div>
+            {inv.voterIdData && (
+              <div style={{ marginTop:10 }}>
+                <div style={{ fontSize:10, textTransform:"uppercase", letterSpacing:1, color:"#999", marginBottom:6 }}>Voter ID Card</div>
+                <img src={inv.voterIdData} alt="Voter ID" style={{ maxHeight:140, maxWidth:"100%", borderRadius:8, border:"1.5px solid #e0d0b0", objectFit:"contain" }} />
+              </div>
+            )}
+          </div>
+
+          {/* Event Details */}
+          <div style={{ marginBottom:20, paddingBottom:20, borderBottom:"1.5px solid #f0ede8" }}>
+            <div style={{ fontSize:10, letterSpacing:2, textTransform:"uppercase", color:"#7B1212", fontWeight:800, marginBottom:14 }}>Event Details</div>
+            <div style={{ marginBottom:12 }}>{row("Event Type", inv.evType)}</div>
+            {isHolud ? (
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+                <div style={{ background:"#fff8e1", border:"1.5px solid #d4a800", borderRadius:10, padding:"14px 16px" }}>
+                  <div style={{ fontSize:10, letterSpacing:1.5, textTransform:"uppercase", color:"#8a6200", fontWeight:800, marginBottom:10 }}>🌼 Holud</div>
+                  {row("Date", fd(inv.hDate))}
+                  {(inv.hStart||inv.hEnd) && row("Time", `${inv.hStart||"?"}  –  ${inv.hEnd||"?"}`)}
+                  {(inv.hGuests||inv.hTables) && row("Guests/Tables", `${inv.hGuests?inv.hGuests+" guests":""}${inv.hGuests&&inv.hTables?" · ":""}${inv.hTables?inv.hTables+" tables":""}`)}
+                </div>
+                <div style={{ background:"#fff0f0", border:"1.5px solid #e07070", borderRadius:10, padding:"14px 16px" }}>
+                  <div style={{ fontSize:10, letterSpacing:1.5, textTransform:"uppercase", color:"#7B1212", fontWeight:800, marginBottom:10 }}>💒 Wedding</div>
+                  {row("Date", fd(inv.evDate))}
+                  {(inv.wStart||inv.wEnd) && row("Time", `${inv.wStart||"?"}  –  ${inv.wEnd||"?"}`)}
+                  {(inv.wGuests||inv.wTables) && row("Guests/Tables", `${inv.wGuests?inv.wGuests+" guests":""}${inv.wGuests&&inv.wTables?" · ":""}${inv.wTables?inv.wTables+" tables":""}`)}
+                  {inv.wBride && row("Bride", inv.wBride)}
+                  {inv.wGroom && row("Groom", inv.wGroom)}
+                </div>
+              </div>
+            ) : (
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+                {row("Event Date", fd(inv.evDate))}
+                {(inv.wStart||inv.wEnd) && row("Time", `${inv.wStart||"?"}  –  ${inv.wEnd||"?"}`)}
+                {(inv.wGuests||inv.guests) && row("Guests", inv.wGuests||inv.guests)}
+                {inv.wTables && row("Tables", inv.wTables)}
+              </div>
+            )}
+          </div>
+
+          {/* Financials */}
+          <div style={{ marginBottom: inv.notes ? 20 : 0, paddingBottom: inv.notes ? 20 : 0, borderBottom: inv.notes ? "1.5px solid #f0ede8" : "none" }}>
+            <div style={{ fontSize:10, letterSpacing:2, textTransform:"uppercase", color:"#7B1212", fontWeight:800, marginBottom:14 }}>Financial Summary</div>
+            <table style={{ width:"100%", borderCollapse:"collapse" }}>
+              <thead>
+                <tr style={{ background:"#fafaf8" }}>
+                  {["Description","Amount"].map(h=><th key={h} style={{ padding:"8px 12px", fontSize:10, color:"#999", fontWeight:700, textTransform:"uppercase", letterSpacing:.5, borderBottom:"1.5px solid #f0ede8", textAlign:h==="Amount"?"right":"left" }}>{h}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {[
+                  ["Hall Booking Total", `৳ ${fc(inv.grand)}`, "#111"],
+                  inv.waiterTotal ? ["Waiter Cost", `৳ ${fc(inv.waiterTotal)}`, "#111"] : null,
+                  (inv.discount||inv.discAmt) ? ["Discount", `− ৳ ${fc(inv.discount||inv.discAmt)}`, "#c0392b"] : null,
+                  ["Advance Paid", `৳ ${fc(inv.adv)}`, "#1a7040"],
+                  inv.waiterCostPaid ? ["Waiter Cost Paid", `৳ ${fc(inv.waiterCostPaid)}`, "#1a7040"] : null,
+                ].filter(Boolean).map(([label,val,color])=>(
+                  <tr key={label} style={{ borderBottom:"1px solid #f0ede8" }}>
+                    <td style={{ padding:"9px 12px", fontSize:13, color:"#333" }}>{label}</td>
+                    <td style={{ padding:"9px 12px", fontSize:13, fontWeight:600, color, textAlign:"right" }}>{val}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr style={{ borderTop:"2.5px solid #e0d0b0" }}>
+                  <td style={{ padding:"10px 12px", fontWeight:800, fontSize:14 }}>Balance Due</td>
+                  <td style={{ padding:"10px 12px", fontWeight:800, fontSize:14, color:"#c0392b", textAlign:"right" }}>৳ {fc(inv.balance ?? Math.max(0,(inv.grand||0)-(parseFloat(inv.adv)||0)))}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+          {/* Notes */}
+          {inv.notes && (
+            <div>
+              <div style={{ fontSize:10, letterSpacing:2, textTransform:"uppercase", color:"#7B1212", fontWeight:800, marginBottom:10 }}>Notes</div>
+              <div style={{ background:"#fafaf8", border:"1px solid #e5e0d8", borderRadius:8, padding:"12px 14px", fontSize:13, color:"#555", lineHeight:1.6 }}>{inv.notes}</div>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

@@ -989,6 +989,57 @@ function InvForm({
       : fixedSvcsAll;
 
   const todayStr = new Date().toISOString().slice(0, 10);
+
+  // Smart AM/PM helper
+  // mode: "day" → 6–11=AM, 12=PM(noon), 1–5=PM(afternoon)
+  // mode: "night" → start: 6–11=PM, 12=AM(midnight); end: 1–11=AM, 12=PM
+  // mode: "holud-start" → always PM (Holud starts at night)
+  // mode: "holud-end"   → 1–11=AM (after midnight), 12=PM
+  function smartTime(rawVal, mode) {
+    if (!rawVal) return rawVal;
+    // Accept formats: "10", "10:30", "1030"
+    const cleaned = String(rawVal).replace(/[^\d:]/g, "");
+    let hour, min = "00";
+    if (cleaned.includes(":")) {
+      const parts = cleaned.split(":");
+      hour = parseInt(parts[0]);
+      min = parts[1]?.padEnd(2, "0").slice(0, 2) || "00";
+    } else if (cleaned.length <= 2) {
+      hour = parseInt(cleaned);
+    } else {
+      hour = parseInt(cleaned.slice(0, -2));
+      min = cleaned.slice(-2);
+    }
+    if (isNaN(hour) || hour < 1 || hour > 12) return rawVal;
+    let ampm = "AM";
+    if (mode === "day") {
+      // 6–11 → AM, 12 → PM, 1–5 → PM
+      ampm = (hour >= 6 && hour <= 11) ? "AM" : "PM";
+    } else if (mode === "night-start" || mode === "holud-start") {
+      // Night/Holud start: 6–11 → PM, 12 → AM (midnight)
+      ampm = hour === 12 ? "AM" : "PM";
+    } else if (mode === "night-end" || mode === "holud-end") {
+      // Night/Holud end: 1–11 → AM (after midnight), 12 → PM
+      ampm = hour === 12 ? "PM" : "AM";
+    }
+    return `${hour}:${min} ${ampm}`;
+  }
+
+  function TimeInput({ fieldKey, mode, placeholder }) {
+    return (
+      <input
+        value={d[fieldKey] || ""}
+        onChange={(e) => set(fieldKey, e.target.value)}
+        onBlur={(e) => {
+          const v = smartTime(e.target.value, mode);
+          if (v !== e.target.value) set(fieldKey, v);
+        }}
+        placeholder={placeholder}
+        style={inputStyle()}
+      />
+    );
+  }
+
   function findBookingConflict(dateStr) {
     if (!dateStr) return null;
     return (
@@ -1159,20 +1210,14 @@ function InvForm({
               </select>
             </Field>
             <Field label="Start Time">
-              <input
-                value={d.wStart || ""}
-                onChange={(e) => set("wStart", e.target.value)}
-                placeholder="e.g. 10:00 AM"
-                style={inputStyle()}
-              />
+              <TimeInput fieldKey="wStart"
+                mode={d.wTod === "night" ? "night-start" : "day"}
+                placeholder={d.wTod === "night" ? "e.g. 7 → 7:00 PM" : "e.g. 10 → 10:00 AM"} />
             </Field>
             <Field label="End Time">
-              <input
-                value={d.wEnd || ""}
-                onChange={(e) => set("wEnd", e.target.value)}
-                placeholder="e.g. 10:00 PM"
-                style={inputStyle()}
-              />
+              <TimeInput fieldKey="wEnd"
+                mode={d.wTod === "night" ? "night-end" : "day"}
+                placeholder={d.wTod === "night" ? "e.g. 3 → 3:00 AM" : "e.g. 4 → 4:00 PM"} />
             </Field>
             <Field label="Guests *">
               <input
@@ -1324,13 +1369,11 @@ function InvForm({
                 )}
               />
             </Field>
-            <Field label="Ceremony Time">
-              <input
-                value={d.hTime || ""}
-                onChange={(e) => set("hTime", e.target.value)}
-                placeholder="e.g. 4:00 PM – 9:00 PM"
-                style={inputStyle()}
-              />
+            <Field label="Start Time 🌙">
+              <TimeInput fieldKey="hStart" mode="holud-start" placeholder="e.g. 7 → 7:00 PM" />
+            </Field>
+            <Field label="End Time">
+              <TimeInput fieldKey="hEnd" mode="holud-end" placeholder="e.g. 3 → 3:00 AM" />
             </Field>
             <Field label="Guests *">
               <input
@@ -1347,22 +1390,6 @@ function InvForm({
                 value={d.hTables || ""}
                 onChange={(e) => set("hTables", e.target.value)}
                 placeholder="0"
-                style={inputStyle()}
-              />
-            </Field>
-            <Field label="Start Time">
-              <input
-                value={d.hStart || ""}
-                onChange={(e) => set("hStart", e.target.value)}
-                placeholder="e.g. 4:00 PM"
-                style={inputStyle()}
-              />
-            </Field>
-            <Field label="End Time">
-              <input
-                value={d.hEnd || ""}
-                onChange={(e) => set("hEnd", e.target.value)}
-                placeholder="e.g. 9:00 PM"
                 style={inputStyle()}
               />
             </Field>
@@ -1933,20 +1960,14 @@ function InvForm({
               />
             </Field>
             <Field label="Start Time">
-              <input
-                value={d.wStart || ""}
-                onChange={(e) => set("wStart", e.target.value)}
-                placeholder="e.g. 10:00 AM"
-                style={inputStyle()}
-              />
+              <TimeInput fieldKey="wStart"
+                mode={d.wTod === "night" ? "night-start" : "day"}
+                placeholder={d.wTod === "night" ? "e.g. 7 → 7:00 PM" : "e.g. 10 → 10:00 AM"} />
             </Field>
             <Field label="End Time">
-              <input
-                value={d.wEnd || ""}
-                onChange={(e) => set("wEnd", e.target.value)}
-                placeholder="e.g. 8:00 PM"
-                style={inputStyle()}
-              />
+              <TimeInput fieldKey="wEnd"
+                mode={d.wTod === "night" ? "night-end" : "day"}
+                placeholder={d.wTod === "night" ? "e.g. 3 → 3:00 AM" : "e.g. 4 → 4:00 PM"} />
             </Field>
           </div>
           <Field label="Event Title">
@@ -3675,13 +3696,26 @@ function InvDetail({
         </div>
         <div style="border:1.5px solid #ddd;border-top:3px solid #c9a84c;border-radius:6px;padding:12px 14px">
           <div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#9a7000;font-weight:800;margin-bottom:10px">🎉 ${inv.evType || "Event"}</div>
-          ${isHolud && inv.hDate ? `<div style="display:flex;gap:6px;margin-bottom:4px"><span style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#7B1212;font-weight:700;min-width:90px">HOLUD DATE</span><span style="font-size:13px;color:#111;font-weight:600">${fmtDate(inv.hDate)}</span></div>` : ""}
-          ${isHolud && (inv.hGuests || inv.hTables) ? `<div style="display:flex;gap:6px;margin-bottom:4px"><span style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#7B1212;font-weight:700;min-width:90px">HOLUD G/T</span><span style="font-size:13px;color:#111;font-weight:600">${inv.hGuests ? inv.hGuests + " guests" : ""}${inv.hGuests && inv.hTables ? " · " : ""}${inv.hTables ? inv.hTables + " tables" : ""}</span></div>` : ""}
-          ${inv.evDate ? `<div style="display:flex;gap:6px;margin-bottom:4px"><span style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#7B1212;font-weight:700;min-width:90px">${isHolud ? "WEDDING DATE" : "DATE"}</span><span style="font-size:13px;color:#111;font-weight:600">${fmtDate(inv.evDate)}</span></div>` : ""}
-          ${inv.wGuests || inv.wTables ? `<div style="display:flex;gap:6px;margin-bottom:4px"><span style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#7B1212;font-weight:700;min-width:90px">${isHolud ? "WEDDING G/T" : "GUESTS/TABLES"}</span><span style="font-size:13px;color:#111;font-weight:600">${inv.wGuests ? inv.wGuests + " guests" : ""}${inv.wGuests && inv.wTables ? " · " : ""}${inv.wTables ? inv.wTables + " tables" : ""}</span></div>` : ""}
-          ${inv.wBride || inv.wGroom ? `<div style="margin-top:8px;padding-top:8px;border-top:1px solid #eee;font-size:11px;color:#555">${inv.wBride ? `<div><strong style="color:#7B1212">Bride:</strong> ${inv.wBride}</div>` : ""}${inv.wGroom ? `<div><strong style="color:#7B1212">Groom:</strong> ${inv.wGroom}</div>` : ""}</div>` : ""}
-          ${inv.wDur ? `<div style="display:flex;gap:6px;margin-bottom:4px"><span style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#7B1212;font-weight:700;min-width:90px">SLOT</span><span style="font-size:13px;color:#111;font-weight:600">${inv.wDur}</span></div>` : ""}
-          ${inv.wStart || inv.wEnd ? `<div style="display:flex;gap:6px;margin-bottom:4px"><span style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#7B1212;font-weight:700;min-width:90px">TIME</span><span style="font-size:13px;color:#111;font-weight:600">${inv.wStart || "?"}${inv.wStart || inv.wEnd ? " – " : ""}${inv.wEnd || "?"}</span></div>` : ""}
+          ${isHolud ? `
+            <div style="background:#fff8e1;border:1.5px solid #d4a800;border-radius:7px;padding:10px 12px;margin-bottom:10px">
+              <div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#8a6200;font-weight:800;margin-bottom:7px">🌼 HOLUD CEREMONY</div>
+              ${inv.hDate ? `<div style="display:flex;gap:6px;margin-bottom:4px"><span style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#7B1212;font-weight:700;min-width:80px">DATE</span><span style="font-size:12px;color:#111;font-weight:600">${fmtDate(inv.hDate)}</span></div>` : ""}
+              ${inv.hStart || inv.hEnd ? `<div style="display:flex;gap:6px;margin-bottom:4px"><span style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#7B1212;font-weight:700;min-width:80px">TIME</span><span style="font-size:12px;color:#111;font-weight:600">${inv.hStart || "?"}${inv.hStart || inv.hEnd ? " – " : ""}${inv.hEnd || "?"}</span></div>` : ""}
+              ${inv.hGuests || inv.hTables ? `<div style="display:flex;gap:6px;margin-bottom:4px"><span style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#7B1212;font-weight:700;min-width:80px">GUESTS</span><span style="font-size:12px;color:#111;font-weight:600">${inv.hGuests ? inv.hGuests + " guests" : ""}${inv.hGuests && inv.hTables ? " · " : ""}${inv.hTables ? inv.hTables + " tables" : ""}</span></div>` : ""}
+            </div>
+            <div style="background:#fff0f0;border:1.5px solid #e07070;border-radius:7px;padding:10px 12px;margin-bottom:10px">
+              <div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#7B1212;font-weight:800;margin-bottom:7px">💒 WEDDING CEREMONY</div>
+              ${inv.evDate ? `<div style="display:flex;gap:6px;margin-bottom:4px"><span style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#7B1212;font-weight:700;min-width:80px">DATE</span><span style="font-size:12px;color:#111;font-weight:600">${fmtDate(inv.evDate)}</span></div>` : ""}
+              ${inv.wStart || inv.wEnd ? `<div style="display:flex;gap:6px;margin-bottom:4px"><span style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#7B1212;font-weight:700;min-width:80px">TIME</span><span style="font-size:12px;color:#111;font-weight:600">${inv.wStart || "?"}${inv.wStart || inv.wEnd ? " – " : ""}${inv.wEnd || "?"}</span></div>` : ""}
+              ${inv.wGuests || inv.wTables ? `<div style="display:flex;gap:6px;margin-bottom:4px"><span style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#7B1212;font-weight:700;min-width:80px">GUESTS</span><span style="font-size:12px;color:#111;font-weight:600">${inv.wGuests ? inv.wGuests + " guests" : ""}${inv.wGuests && inv.wTables ? " · " : ""}${inv.wTables ? inv.wTables + " tables" : ""}</span></div>` : ""}
+              ${inv.wBride || inv.wGroom ? `<div style="margin-top:6px;padding-top:6px;border-top:1px solid #eee;font-size:11px;color:#555">${inv.wBride ? `<div><strong style="color:#7B1212">Bride:</strong> ${inv.wBride}</div>` : ""}${inv.wGroom ? `<div><strong style="color:#7B1212">Groom:</strong> ${inv.wGroom}</div>` : ""}</div>` : ""}
+            </div>
+          ` : `
+            ${inv.evDate ? `<div style="display:flex;gap:6px;margin-bottom:4px"><span style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#7B1212;font-weight:700;min-width:90px">DATE</span><span style="font-size:13px;color:#111;font-weight:600">${fmtDate(inv.evDate)}</span></div>` : ""}
+            ${inv.wGuests || inv.wTables ? `<div style="display:flex;gap:6px;margin-bottom:4px"><span style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#7B1212;font-weight:700;min-width:90px">GUESTS</span><span style="font-size:13px;color:#111;font-weight:600">${inv.wGuests ? inv.wGuests + " guests" : ""}${inv.wGuests && inv.wTables ? " · " : ""}${inv.wTables ? inv.wTables + " tables" : ""}</span></div>` : ""}
+            ${inv.wBride || inv.wGroom ? `<div style="margin-top:8px;padding-top:8px;border-top:1px solid #eee;font-size:11px;color:#555">${inv.wBride ? `<div><strong style="color:#7B1212">Bride:</strong> ${inv.wBride}</div>` : ""}${inv.wGroom ? `<div><strong style="color:#7B1212">Groom:</strong> ${inv.wGroom}</div>` : ""}</div>` : ""}
+            ${inv.wStart || inv.wEnd ? `<div style="display:flex;gap:6px;margin-bottom:4px"><span style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#7B1212;font-weight:700;min-width:90px">TIME</span><span style="font-size:13px;color:#111;font-weight:600">${inv.wStart || "?"}${inv.wStart || inv.wEnd ? " – " : ""}${inv.wEnd || "?"}</span></div>` : ""}
+          `}
         </div>
       </div>
 
