@@ -1536,9 +1536,13 @@ function SmsPanel({ notify, isMobile, invoices }) {
   async function testNtfy() {
     if (!ntfyCfg.topic) { notify("Enter your ntfy topic name first","error"); return; }
     setNtfyTesting(true);
-    await sendNtfyAlert("✅ Test Alert — L-M Group", "This is a test notification from your booking system. It is working!").catch(()=>{});
+    try {
+      await sendNtfyAlert("✅ Test Alert — L-M Group", "This is a test notification from your booking system. It is working!", ntfyCfg.topic);
+      notify("Test notification sent! Check your ntfy app 📱","success");
+    } catch(e) {
+      notify("Failed to send: " + (e?.message || "unknown error"), "error");
+    }
     setNtfyTesting(false);
-    notify("Test notification sent! Check your ntfy app 📱","success");
   }
   async function testWa() {
     if (!waCfg.num1 || !waCfg.key1) { notify("Enter at least Number 1 and API Key 1","error"); return; }

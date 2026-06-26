@@ -8,14 +8,14 @@ export function loadNtfyConfig() {
 
 export function saveNtfyConfig(cfg) { localStorage.setItem(NTFY_KEY, JSON.stringify(cfg)); }
 
-export async function sendNtfyAlert(title, message) {
+export async function sendNtfyAlert(title, message, topicOverride) {
   const cfg = loadNtfyConfig();
-  if (!cfg.enabled || !cfg.topic) return;
-  try {
-    await fetch(`https://ntfy.sh/${encodeURIComponent(cfg.topic)}`, {
-      method: "POST",
-      headers: { "Title": title, "Priority": "high", "Tags": "bell" },
-      body: message,
-    });
-  } catch { /* silent fail — never block the main flow */ }
+  const topic = topicOverride || cfg.topic;
+  if (!topic) return;
+  if (!topicOverride && !cfg.enabled) return;
+  await fetch(`https://ntfy.sh/${encodeURIComponent(topic)}`, {
+    method: "POST",
+    headers: { "Title": title, "Priority": "high", "Tags": "bell" },
+    body: message,
+  });
 }
