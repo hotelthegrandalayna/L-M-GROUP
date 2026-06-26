@@ -15,6 +15,7 @@ export async function sendNtfyAlert(title, message, topicOverride) {
   if (!topicOverride && !cfg.enabled) return;
   await fetch(`https://ntfy.sh/${encodeURIComponent(topic)}`, {
     method: "POST",
+    mode: "no-cors",
     headers: { "Title": title, "Priority": "high", "Tags": "bell" },
     body: message,
   });
