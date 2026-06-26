@@ -16,7 +16,11 @@ export async function sendNtfyAlert(title, message, topicOverride) {
   await fetch(`https://ntfy.sh/${encodeURIComponent(topic)}`, {
     method: "POST",
     mode: "no-cors",
-    headers: { "Title": title, "Priority": "high", "Tags": "bell" },
+    headers: {
+      "Title": encodeURIComponent(title),
+      "Priority": "high",
+      "Tags": "bell",
+    },
     body: message,
   });
 }
