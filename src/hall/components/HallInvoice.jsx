@@ -23,6 +23,39 @@ const C = {
   purple: "#6030b0",
 };
 
+// ── Smart AM/PM converter ─────────────────────────────────────────────────────
+// Accepts plain number ("7"), colon format ("7:30"), or compact ("730").
+// mode: "day"          → 6–11=AM, 12/1–5=PM
+// mode: "night-start"  → all PM except 12=AM (midnight)
+// mode: "night-end"    → all AM except 12=PM
+// mode: "holud-start"  → same as night-start
+// mode: "holud-end"    → same as night-end
+function smartTime(rawVal, mode) {
+  if (!rawVal) return rawVal;
+  const cleaned = String(rawVal).replace(/[^\d:]/g, "");
+  let hour, min = "00";
+  if (cleaned.includes(":")) {
+    const parts = cleaned.split(":");
+    hour = parseInt(parts[0]);
+    min = parts[1]?.padEnd(2, "0").slice(0, 2) || "00";
+  } else if (cleaned.length <= 2) {
+    hour = parseInt(cleaned);
+  } else {
+    hour = parseInt(cleaned.slice(0, -2));
+    min = cleaned.slice(-2);
+  }
+  if (isNaN(hour) || hour < 1 || hour > 12) return rawVal;
+  let ampm = "AM";
+  if (mode === "day") {
+    ampm = (hour >= 6 && hour <= 11) ? "AM" : "PM";
+  } else if (mode === "night-start" || mode === "holud-start") {
+    ampm = hour === 12 ? "AM" : "PM";
+  } else if (mode === "night-end" || mode === "holud-end") {
+    ampm = hour === 12 ? "PM" : "AM";
+  }
+  return `${hour}:${min} ${ampm}`;
+}
+
 const SOURCES = [
   "Facebook",
   "Facebook Ad",
@@ -205,7 +238,7 @@ function newInvObj(num) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 export default function HallInvoice() {
-  const { invoices, setInvoices, notify, invoiceJumpSignal, curUser } =
+  const { invoices, setInvoices, leads = [], setLeads, notify, invoiceJumpSignal, curUser } =
     useHall();
   const isMobile = useIsMobile();
   const [view, setView] = useState("form"); // default: create form
@@ -263,7 +296,13 @@ export default function HallInvoice() {
       ...newInvObj(inv.num),
       ...inv,
       services: inv.services?.length
-        ? inv.services.map((s) => ({ ...s }))
+        ? inv.services.map((s) => ({
+            ...s,
+            // Default unresolved togglable services to "not included" so Save buttons aren't blocked
+            ...(["Stage Decoration", "Lighting Decoration"].includes(s.desc) && s.included === null
+              ? { included: false }
+              : {}),
+          }))
         : newInvObj(inv.num).services,
     });
     setView("form");
@@ -353,6 +392,13 @@ export default function HallInvoice() {
         },
         curUser,
       );
+      // If this was a lead and is now being saved as a full invoice, mark CRM lead as Confirmed
+      const wasLead = invoices.find(i => i.id === inv.id)?.isLead;
+      if (wasLead && !isLead) {
+        setLeads(prev => prev.map(l =>
+          l.invoiceId === id ? { ...l, stage: "Confirmed", updatedAt: new Date().toISOString() } : l
+        ));
+      }
     } else {
       savedRecord = { ...final, id };
       setInvoices((prev) => [...prev, savedRecord]);
@@ -371,6 +417,34 @@ export default function HallInvoice() {
       // Guest SMS and owner WhatsApp alert are sent only once the invoice is
       // confirmed (see confirmAndPrint below) — never on an unreviewed draft,
       // so the guest is never texted a preliminary number that might change.
+
+      // Auto-create a CRM lead when saving as lead (if one doesn't exist yet)
+      if (isLead) {
+        const alreadyInCRM = leads.some(l => l.invoiceId === id);
+        if (!alreadyInCRM) {
+          const followDate = new Date(Date.now() + 3 * 86400000).toISOString().split("T")[0];
+          const crmNums = leads.map(l => parseInt(l.num?.replace(/\D/g,"")) || 0);
+          const nextNum = "CRM-" + String((crmNums.length ? Math.max(...crmNums) : 0) + 1).padStart(3,"0");
+          const crmLead = {
+            id: String(Date.now()),
+            num: nextNum,
+            invoiceId: id,
+            invoiceNum: savedRecord.num,
+            name: savedRecord.client || "",
+            phone: savedRecord.phone || "",
+            evType: savedRecord.evType || "",
+            evDate: savedRecord.evDate || "",
+            guests: savedRecord.wGuests || savedRecord.hGuests || "",
+            source: "Invoice Draft",
+            stage: "New Enquiry",
+            followDate,
+            assigned: curUser || "admin",
+            notes: `Saved as draft from invoice ${savedRecord.num}. Follow up to confirm booking.`,
+            createdAt: new Date().toISOString(),
+          };
+          setLeads(prev => [...prev, crmLead]);
+        }
+      }
     }
 
     void persistHallInvoiceBundle(savedRecord)
@@ -521,6 +595,8 @@ export default function HallInvoice() {
         notify={notify}
         setInvoices={setInvoices}
         invoices={invoices}
+        leads={leads}
+        setLeads={setLeads}
         getNextNum={nextAchNum}
         curUser={curUser}
         isMobile={isMobile}
@@ -795,6 +871,21 @@ export default function HallInvoice() {
 // ─── Invoice Form ─────────────────────────────────────────────────────────────
 const TOGGLABLE_SVCS = ["Stage Decoration", "Lighting Decoration"];
 
+function TimeInput({ fieldKey, mode, placeholder, d, set }) {
+  return (
+    <input
+      value={d[fieldKey] || ""}
+      onChange={(e) => set(fieldKey, e.target.value)}
+      onBlur={(e) => {
+        const v = smartTime(e.target.value, mode);
+        if (v !== e.target.value) set(fieldKey, v);
+      }}
+      placeholder={placeholder}
+      style={inputStyle()}
+    />
+  );
+}
+
 function InvForm({
   inv,
   onSave,
@@ -999,56 +1090,6 @@ function InvForm({
 
   const todayStr = new Date().toISOString().slice(0, 10);
 
-  // Smart AM/PM helper
-  // mode: "day" → 6–11=AM, 12=PM(noon), 1–5=PM(afternoon)
-  // mode: "night" → start: 6–11=PM, 12=AM(midnight); end: 1–11=AM, 12=PM
-  // mode: "holud-start" → always PM (Holud starts at night)
-  // mode: "holud-end"   → 1–11=AM (after midnight), 12=PM
-  function smartTime(rawVal, mode) {
-    if (!rawVal) return rawVal;
-    // Accept formats: "10", "10:30", "1030"
-    const cleaned = String(rawVal).replace(/[^\d:]/g, "");
-    let hour, min = "00";
-    if (cleaned.includes(":")) {
-      const parts = cleaned.split(":");
-      hour = parseInt(parts[0]);
-      min = parts[1]?.padEnd(2, "0").slice(0, 2) || "00";
-    } else if (cleaned.length <= 2) {
-      hour = parseInt(cleaned);
-    } else {
-      hour = parseInt(cleaned.slice(0, -2));
-      min = cleaned.slice(-2);
-    }
-    if (isNaN(hour) || hour < 1 || hour > 12) return rawVal;
-    let ampm = "AM";
-    if (mode === "day") {
-      // 6–11 → AM, 12 → PM, 1–5 → PM
-      ampm = (hour >= 6 && hour <= 11) ? "AM" : "PM";
-    } else if (mode === "night-start" || mode === "holud-start") {
-      // Night/Holud start: 6–11 → PM, 12 → AM (midnight)
-      ampm = hour === 12 ? "AM" : "PM";
-    } else if (mode === "night-end" || mode === "holud-end") {
-      // Night/Holud end: 1–11 → AM (after midnight), 12 → PM
-      ampm = hour === 12 ? "PM" : "AM";
-    }
-    return `${hour}:${min} ${ampm}`;
-  }
-
-  function TimeInput({ fieldKey, mode, placeholder }) {
-    return (
-      <input
-        value={d[fieldKey] || ""}
-        onChange={(e) => set(fieldKey, e.target.value)}
-        onBlur={(e) => {
-          const v = smartTime(e.target.value, mode);
-          if (v !== e.target.value) set(fieldKey, v);
-        }}
-        placeholder={placeholder}
-        style={inputStyle()}
-      />
-    );
-  }
-
   function findBookingConflict(dateStr) {
     if (!dateStr) return null;
     return (
@@ -1219,12 +1260,12 @@ function InvForm({
               </select>
             </Field>
             <Field label="Start Time">
-              <TimeInput fieldKey="wStart"
+              <TimeInput fieldKey="wStart" d={d} set={set}
                 mode={d.wTod === "night" ? "night-start" : "day"}
                 placeholder={d.wTod === "night" ? "e.g. 7 → 7:00 PM" : "e.g. 10 → 10:00 AM"} />
             </Field>
             <Field label="End Time">
-              <TimeInput fieldKey="wEnd"
+              <TimeInput fieldKey="wEnd" d={d} set={set}
                 mode={d.wTod === "night" ? "night-end" : "day"}
                 placeholder={d.wTod === "night" ? "e.g. 3 → 3:00 AM" : "e.g. 4 → 4:00 PM"} />
             </Field>
@@ -1380,10 +1421,10 @@ function InvForm({
               />
             </Field>
             <Field label="Start Time 🌙">
-              <TimeInput fieldKey="hStart" mode="holud-start" placeholder="e.g. 7 → 7:00 PM" />
+              <TimeInput fieldKey="hStart" mode="holud-start" placeholder="e.g. 7 → 7:00 PM" d={d} set={set} />
             </Field>
             <Field label="End Time">
-              <TimeInput fieldKey="hEnd" mode="holud-end" placeholder="e.g. 3 → 3:00 AM" />
+              <TimeInput fieldKey="hEnd" mode="holud-end" placeholder="e.g. 3 → 3:00 AM" d={d} set={set} />
             </Field>
             <Field label="Guests *">
               <input
@@ -1953,12 +1994,12 @@ function InvForm({
               />
             </Field>
             <Field label="Start Time">
-              <TimeInput fieldKey="wStart"
+              <TimeInput fieldKey="wStart" d={d} set={set}
                 mode={d.wTod === "night" ? "night-start" : "day"}
                 placeholder={d.wTod === "night" ? "e.g. 7 → 7:00 PM" : "e.g. 10 → 10:00 AM"} />
             </Field>
             <Field label="End Time">
-              <TimeInput fieldKey="wEnd"
+              <TimeInput fieldKey="wEnd" d={d} set={set}
                 mode={d.wTod === "night" ? "night-end" : "day"}
                 placeholder={d.wTod === "night" ? "e.g. 3 → 3:00 AM" : "e.g. 4 → 4:00 PM"} />
             </Field>
@@ -2291,9 +2332,20 @@ function InvForm({
                               Write the guest's reason so the owner has a
                               record. This is required before saving.
                             </div>
+                            <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginBottom:10 }}>
+                              {(s.desc === "Stage Decoration"
+                                ? ["Guest has own decorator","Not needed for this event","Budget constraint","Outdoor venue","Simple ceremony"]
+                                : ["Guest has own lighting","Venue has built-in lights","Not needed","Budget constraint","Daytime event"]
+                              ).map(preset => (
+                                <button key={preset} onClick={() => setReasonDraft(r => ({ ...r, [s.desc]: preset }))}
+                                  style={{ padding:"4px 10px", fontSize:11, fontWeight:600, borderRadius:20, border:`1.5px solid ${(reasonDraft[s.desc]||"")===preset?"#c0392b":"#e0b0b0"}`, background:(reasonDraft[s.desc]||"")===preset?"#fdf0f0":"#fff", color:(reasonDraft[s.desc]||"")===preset?"#c0392b":"#666", cursor:"pointer" }}>
+                                  {preset}
+                                </button>
+                              ))}
+                            </div>
                             <textarea
-                              rows={3}
-                              placeholder={`e.g. Guest already has their own decorator / budget constraint / not needed for this event…`}
+                              rows={2}
+                              placeholder="Or type a custom reason…"
                               value={reasonDraft[s.desc] || ""}
                               onChange={(e) =>
                                 setReasonDraft((r) => ({
@@ -3318,6 +3370,8 @@ function InvDetail({
   notify,
   setInvoices,
   invoices,
+  leads = [],
+  setLeads,
   getNextNum,
   curUser,
   isMobile,
@@ -3430,6 +3484,13 @@ function InvDetail({
       { num: newNum, client: updated.client, amount: updated.grand },
       curUser,
     );
+
+    // Auto-update the matching CRM lead to Confirmed
+    if (setLeads) {
+      setLeads(prev => prev.map(l =>
+        l.invoiceId === inv.id ? { ...l, stage: "Confirmed", updatedAt: new Date().toISOString() } : l
+      ));
+    }
 
     // Guest SMS and the owner's WhatsApp copy are sent only now — at the final,
     // locked, reviewed total — never at the draft stage, so a guest is never

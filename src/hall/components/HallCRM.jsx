@@ -71,6 +71,13 @@ export default function HallCRM() {
   const dueToday  = leads.filter(l => l.followDate === today && l.stage !== "Confirmed" && l.stage !== "Lost");
   const overdue   = leads.filter(l => l.followDate && l.followDate < today && l.stage !== "Confirmed" && l.stage !== "Lost");
 
+  // ── Invoice draft leads needing confirmation ──────────────────────────────────
+  const draftLeads = leads.filter(l =>
+    l.invoiceId &&
+    l.stage !== "Confirmed" &&
+    l.stage !== "Lost"
+  );
+
   // ── Filtered table ───────────────────────────────────────────────────────────
   const filtered = useMemo(() => {
     const s = search.toLowerCase();
@@ -236,6 +243,23 @@ export default function HallCRM() {
         })}
       </div>
 
+      {/* ── Invoice Draft Leads Banner ── */}
+      {draftLeads.length > 0 && (
+        <div style={{ background:"#fdf0f0", border:"1.5px solid #c0392b", borderRadius:10, padding:"12px 16px", marginBottom:10, fontSize:13, color:"#7B1212", fontWeight:600 }}>
+          <div style={{ marginBottom:6 }}>📋 <strong>{draftLeads.length} invoice draft{draftLeads.length>1?"s":""} need{draftLeads.length===1?"s":""} confirmation:</strong></div>
+          {draftLeads.map(l => (
+            <div key={l.id} style={{ display:"flex", alignItems:"center", gap:10, marginTop:4, fontWeight:400, fontSize:12, background:"#fff", borderRadius:6, padding:"6px 10px", border:"1px solid #e0b0b0" }}>
+              <span style={{ fontWeight:700, color:"#7B1212" }}>{l.invoiceNum}</span>
+              <span>{l.name}</span>
+              {l.evType && <span style={{ color:"#999" }}>· {l.evType}</span>}
+              {l.evDate && <span style={{ color:"#999" }}>· {fmtDate(l.evDate)}</span>}
+              <span style={{ marginLeft:"auto", background:"#fdf0f0", border:"1px solid #c0392b", borderRadius:4, padding:"2px 8px", fontSize:11, fontWeight:600, color:"#c0392b" }}>{l.stage}</span>
+            </div>
+          ))}
+          <div style={{ marginTop:8, fontSize:11, color:"#999", fontWeight:400 }}>These guests have draft invoices but haven't confirmed their booking yet. Call them to follow up.</div>
+        </div>
+      )}
+
       {/* ── Today's Alert Banner ── */}
       {(dueToday.length > 0 || overdue.length > 0) && (
         <div style={{ background:"#fff8e1", border:"1.5px solid #f0c040", borderRadius:10, padding:"12px 16px", marginBottom:14, fontSize:13, color:"#7a5c00", fontWeight:600 }}>
@@ -277,7 +301,10 @@ export default function HallCRM() {
               const locked = (l.stage === "Confirmed" || l.invoiced);
               return (
                 <tr key={l.id} style={{ borderBottom:"1px solid #f0ede8", background: locked ? "#f8fff8" : "transparent", opacity: locked ? .82 : 1 }}>
-                  <td style={{ padding:"10px 12px", fontWeight:700, color:C.maroon, fontSize:12 }}>{l.num}</td>
+                  <td style={{ padding:"10px 12px", fontWeight:700, color:C.maroon, fontSize:12 }}>
+                    {l.num}
+                    {l.invoiceId && <div style={{ fontSize:9, fontWeight:700, color:"#c0392b", background:"#fdf0f0", border:"1px solid #e0b0b0", borderRadius:4, padding:"1px 5px", marginTop:2, width:"fit-content" }}>📋 {l.invoiceNum}</div>}
+                  </td>
                   <td style={{ padding:"10px 12px" }}>
                     <div style={{ fontWeight:700, fontSize:13 }}>{l.name}</div>
                     <div style={{ fontSize:10, color:C.dim }}>{l.phone}</div>
