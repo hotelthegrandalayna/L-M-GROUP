@@ -333,8 +333,11 @@ export default function HallInvoice() {
   function computeAndSave(inv, isLead, andView) {
     // Apply smart AM/PM to any time fields that the user typed as plain numbers
     const nightMode = (inv.wTod || "") === "night";
+    const today = new Date().toISOString().split("T")[0];
     inv = {
       ...inv,
+      // Refresh invoice date to today when converting a lead to a full invoice
+      invDate: isLead ? (inv.invDate || today) : today,
       hStart: smartTime(inv.hStart, "holud-start") || inv.hStart,
       hEnd:   smartTime(inv.hEnd,   "holud-end")   || inv.hEnd,
       wStart: smartTime(inv.wStart, nightMode ? "night-start" : "day") || inv.wStart,
@@ -1966,6 +1969,7 @@ function InvForm({
             }}
           >
             <Field label="Event Date *">
+              <ConflictWarning conflict={evDateConflict} field="ev" />
               <input
                 type="date"
                 min={todayStr}
@@ -3751,7 +3755,17 @@ function InvDetail({
           <div style="font-size:15px;font-weight:800;color:#111;margin-bottom:5px">${inv.client || "—"}</div>
           <div style="font-size:11px;color:#555;margin-bottom:3px">${phones}</div>
           ${inv.email ? `<div style="font-size:11px;color:#555;margin-bottom:3px">✉ ${inv.email}</div>` : ""}
-          ${(inv.addrArea || inv.addrCity || inv.addrDistrict) ? `<div style="font-size:11px;color:#555">📍 ${[inv.addrArea, inv.addrCity, inv.addrDistrict].filter(Boolean).join(", ")}</div>` : ""}
+          ${(inv.addrArea || inv.addrCity || inv.addrDistrict) ? `<div style="font-size:11px;color:#555;margin-bottom:3px">📍 ${[inv.addrArea, inv.addrCity, inv.addrDistrict].filter(Boolean).join(", ")}</div>` : ""}
+          ${(inv.wRelation || inv.wBride || inv.wGroom) ? `<div style="margin-top:8px;padding-top:8px;border-top:1px solid #eee">
+            ${inv.wBride ? `<div style="font-size:11px;color:#555;margin-bottom:2px"><span style="font-weight:700;color:#7B1212">Bride:</span> ${inv.wBride}${inv.wBrideRel ? ` <span style="color:#999;font-size:10px">(${inv.wBrideRel} of client)</span>` : ""}</div>` : ""}
+            ${inv.wGroom ? `<div style="font-size:11px;color:#555;margin-bottom:2px"><span style="font-weight:700;color:#7B1212">Groom:</span> ${inv.wGroom}${inv.wGroomRel ? ` <span style="color:#999;font-size:10px">(${inv.wGroomRel} of client)</span>` : ""}</div>` : ""}
+            ${inv.wCouplePhone ? `<div style="font-size:11px;color:#555;margin-bottom:2px">📞 <span style="font-weight:700;color:#7B1212">Couple:</span> ${inv.wCouplePhone}</div>` : ""}
+            ${inv.wRelation ? `<div style="font-size:10px;color:#888">Client is ${inv.wRelation} of the couple</div>` : ""}
+          </div>` : ""}
+          ${(!inv.wBride && !inv.wGroom && inv.hBride) ? `<div style="margin-top:8px;padding-top:8px;border-top:1px solid #eee">
+            ${inv.hBride ? `<div style="font-size:11px;color:#555;margin-bottom:2px"><span style="font-weight:700;color:#8a6200">Bride:</span> ${inv.hBride}${inv.hBrideRel ? ` <span style="color:#999;font-size:10px">(${inv.hBrideRel} of client)</span>` : ""}</div>` : ""}
+            ${inv.hGroom ? `<div style="font-size:11px;color:#555;margin-bottom:2px"><span style="font-weight:700;color:#8a6200">Groom:</span> ${inv.hGroom}${inv.hGroomRel ? ` <span style="color:#999;font-size:10px">(${inv.hGroomRel} of client)</span>` : ""}</div>` : ""}
+          </div>` : ""}
         </div>
         <div style="border:1.5px solid #ddd;border-top:3px solid #c9a84c;border-radius:6px;padding:12px 14px">
           <div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#9a7000;font-weight:800;margin-bottom:10px">🎉 ${isHolud ? "Event Details" : (inv.evType || "Event")}</div>
@@ -3856,6 +3870,7 @@ function InvDetail({
           <div style="text-align:center">
             <div style="height:40px;border-bottom:1.5px solid #333;margin-bottom:6px"></div>
             <div style="font-size:11px;font-weight:700;color:#333">Client Signature</div>
+            <div style="font-size:10px;color:#555;margin-top:2px">${inv.client || ""}</div>
           </div>
           <div style="text-align:center">
             <div style="height:40px;border-bottom:1.5px solid #333;margin-bottom:6px"></div>

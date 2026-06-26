@@ -4,6 +4,7 @@ import { useApp } from "../context/AppContext";
 import { todayStr, money, maxId } from "../utils/helpers";
 import { logEvent } from "../utils/auditLog";
 import { loadWaConfig, sendWhatsAppAlert, buildHotelPrintAlertMessage } from "../utils/whatsapp";
+import { sendNtfyAlert } from "../utils/ntfy";
 import { persistHotelBookingBundle } from "../lib/hotelSupabase";
 
 const HOTEL_INFO = {
@@ -478,6 +479,12 @@ export default function Invoice() {
   function maybeSendPrintAlert(bk, label) {
     if (!loadWaConfig().hotelPrintAlert || bk.printAlertSent) return;
     sendWhatsAppAlert(buildHotelPrintAlertMessage(bk, label)).catch(() => {});
+    const total = bk.invoiceTotal != null ? bk.invoiceTotal : (bk.amount||0);
+    const paid  = (bk.paymentHistory||[]).reduce((s,p)=>s+p.amount,0);
+    sendNtfyAlert(
+      `Hotel Invoice Printed - ${bk.guest}`,
+      `Room: ${bk.room}\nCheck-in: ${bk.checkin}\nCheck-out: ${bk.checkout}\nTotal: BDT ${total.toLocaleString()}\nPaid: BDT ${paid.toLocaleString()}\nBalance: BDT ${Math.max(0,total-paid).toLocaleString()}`
+    ).catch(() => {});
     updateBookings(prev => prev.map(b => b.id===bk.id ? {...b, printAlertSent:true} : b));
   }
 
