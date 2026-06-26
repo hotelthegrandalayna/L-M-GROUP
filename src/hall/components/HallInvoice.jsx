@@ -1219,7 +1219,7 @@ function InvForm({
       >
         <div style={{ marginBottom: 14 }}>
           <span style={sectionBadge()}>
-            {et?.i || "💒"} {(et?.v || "WEDDING").toUpperCase()} EVENT DETAILS
+            {et?.i || "💒"} WEDDING EVENT DETAILS
           </span>
         </div>
 
@@ -3746,10 +3746,10 @@ function InvDetail({
           <div style="font-size:15px;font-weight:800;color:#111;margin-bottom:5px">${inv.client || "—"}</div>
           <div style="font-size:11px;color:#555;margin-bottom:3px">${phones}</div>
           ${inv.email ? `<div style="font-size:11px;color:#555;margin-bottom:3px">✉ ${inv.email}</div>` : ""}
-          ${inv.address ? `<div style="font-size:11px;color:#555">📍 ${inv.address}</div>` : ""}
+          ${(inv.addrArea || inv.addrCity || inv.addrDistrict) ? `<div style="font-size:11px;color:#555">📍 ${[inv.addrArea, inv.addrCity, inv.addrDistrict].filter(Boolean).join(", ")}</div>` : ""}
         </div>
         <div style="border:1.5px solid #ddd;border-top:3px solid #c9a84c;border-radius:6px;padding:12px 14px">
-          <div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#9a7000;font-weight:800;margin-bottom:10px">🎉 ${inv.evType || "Event"}</div>
+          <div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#9a7000;font-weight:800;margin-bottom:10px">🎉 ${isHolud ? "Event Details" : (inv.evType || "Event")}</div>
           ${isHolud ? `
             <div style="background:#fff8e1;border:1.5px solid #d4a800;border-radius:7px;padding:10px 12px;margin-bottom:10px">
               <div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#8a6200;font-weight:800;margin-bottom:7px">🌼 HOLUD CEREMONY</div>
