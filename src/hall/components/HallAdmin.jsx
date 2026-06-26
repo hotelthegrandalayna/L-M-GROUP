@@ -1,10 +1,11 @@
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useHall, EV_TYPES, checkHallAdminPass } from "../HallContext";
 import useIsMobile from "../useIsMobile";
 import { loadWaConfig, saveWaConfig, sendWhatsAppAlert } from "../../utils/whatsapp";
 import { loadNtfyConfig, saveNtfyConfig, sendNtfyAlert } from "../../utils/ntfy";
 import AuditLogViewer from "../../components/AuditLogViewer";
+import { getUnusualLogins } from "../../utils/loginLog";
 import { deleteHallInvoiceFromSupabase, deleteHallInvoicesFromSupabase } from "../lib/hallSupabase";
 import { loadPricingRules, savePricingRules } from "../lib/pricingRules";
 
@@ -344,6 +345,7 @@ export default function HallAdmin() {
       { id:"pricing",  label:"💰 Pricing Rules" },
       { id:"sms",      label:"📱 SMS"      },
       { id:"audit",    label:"🕵 Audit Log" },
+      { id:"loginlog", label:"🔍 Login Activity" },
       { id:"password", label:"🔐 Password" },
       { id:"danger",   label:"⚠️ Danger Zone", danger:true },
     ] : []),
@@ -839,7 +841,105 @@ export default function HallAdmin() {
       {tab==="pricing" && isAdmin && <PricingRulesPanel notify={notify} />}
       {tab==="sms" && isAdmin && <SmsPanel notify={notify} isMobile={isMobile} invoices={invoices} />}
       {tab==="audit" && isAdmin && <AuditLogViewer scope="hall" title="Hall — Activity Audit Log" checkPassword={checkHallAdminPass} notify={notify} />}
+      {tab==="loginlog" && isAdmin && <LoginActivityPanel notify={notify} />}
 
+    </div>
+  );
+}
+
+// ─── Login Activity Panel ─────────────────────────────────────────────────────
+function LoginActivityPanel({ notify }) {
+  const [log, setLog]         = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [enabled, setEnabled] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("ga_login_monitor") ?? "true"); }
+    catch { return true; }
+  });
+
+  function toggleMonitor(val) {
+    setEnabled(val);
+    localStorage.setItem("ga_login_monitor", JSON.stringify(val));
+    notify(val ? "Login monitoring enabled ✅" : "Login monitoring disabled", val ? "success" : "info");
+  }
+
+  useEffect(() => {
+    getUnusualLogins()
+      .then(data => { setLog(data); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, []);
+
+  function fmtTs(ts) {
+    const d = new Date(ts);
+    return d.toLocaleDateString("en-GB", { day:"numeric", month:"short", year:"numeric" })
+      + " · " + d.toLocaleTimeString("en-GB", { hour:"2-digit", minute:"2-digit" });
+  }
+
+  const card = { background:"#fff", border:"1.5px solid #e0d0b0", borderRadius:12, padding:"20px 22px", marginBottom:16 };
+
+  return (
+    <div>
+      <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", marginBottom:16, flexWrap:"wrap", gap:12 }}>
+        <div>
+          <div style={{ fontSize:16, fontWeight:800, color:"#1a1a2e" }}>🔍 Unusual Login Activity</div>
+          <div style={{ fontSize:12, color:"#666", marginTop:3 }}>
+            Only shows logins from a new city, new network, or failed attempts. Normal logins are hidden.
+          </div>
+        </div>
+        <div style={{ display:"flex", alignItems:"center", gap:10, background:"#fff", border:"1.5px solid #e0d0b0", borderRadius:10, padding:"10px 16px" }}>
+          <div>
+            <div style={{ fontSize:12, fontWeight:700, color:"#333" }}>Login Monitoring</div>
+            <div style={{ fontSize:11, color: enabled ? "#1a7040" : "#999" }}>{enabled ? "Active — unusual logins are tracked" : "Disabled — no logins being recorded"}</div>
+          </div>
+          <div onClick={() => toggleMonitor(!enabled)}
+            style={{ width:52, height:28, borderRadius:14, cursor:"pointer", flexShrink:0, background: enabled ? "#1a7a40" : "#ccc", position:"relative", transition:"background .25s" }}>
+            <div style={{ position:"absolute", top:3, left: enabled ? 26 : 3, width:22, height:22, borderRadius:"50%", background:"#fff", transition:"left .25s", boxShadow:"0 1px 4px rgba(0,0,0,.2)" }} />
+          </div>
+        </div>
+      </div>
+
+      {loading ? (
+        <div style={{ ...card, textAlign:"center", color:"#999", fontSize:13, padding:40 }}>Loading…</div>
+      ) : log.length === 0 ? (
+        <div style={{ ...card, textAlign:"center", padding:40 }}>
+          <div style={{ fontSize:28, marginBottom:10 }}>✅</div>
+          <div style={{ fontSize:14, fontWeight:700, color:"#1a7040" }}>No unusual logins detected</div>
+          <div style={{ fontSize:12, color:"#999", marginTop:6 }}>All logins are from known locations and devices.</div>
+        </div>
+      ) : (
+        <>
+          <div style={{ background:"#fff8e1", border:"1.5px solid #f0c040", borderRadius:10, padding:"12px 16px", marginBottom:14, fontSize:13, color:"#7a5c00", fontWeight:600 }}>
+            ⚠️ {log.length} unusual login{log.length>1?"s":""} detected — review below
+          </div>
+          <div style={card}>
+            <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
+              <thead>
+                <tr style={{ background:"#fafaf8" }}>
+                  {["Date & Time","User","Status","Device","Browser · OS","City","ISP / Network"].map(h => (
+                    <th key={h} style={{ padding:"9px 12px", textAlign:"left", fontSize:10, fontWeight:800, color:"#666", textTransform:"uppercase", letterSpacing:.5, borderBottom:"1.5px solid #e0d0b0", whiteSpace:"nowrap" }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {log.map(e => (
+                  <tr key={e.id} style={{ borderBottom:"1px solid #f0ede8", background: e.success ? "#fffdf0" : "#fff5f5" }}>
+                    <td style={{ padding:"9px 12px", whiteSpace:"nowrap", color:"#444" }}>{fmtTs(e.created_at)}</td>
+                    <td style={{ padding:"9px 12px", fontWeight:700, color:"#7B1212" }}>{e.username}</td>
+                    <td style={{ padding:"9px 12px" }}>
+                      <span style={{ padding:"2px 9px", borderRadius:20, fontSize:11, fontWeight:700, background: e.success?"#fff8e1":"#fdf0f0", color: e.success?"#b45309":"#c0392b", border:`1px solid ${e.success?"#f0c04060":"#c0392b40"}` }}>
+                        {e.success ? "⚠️ New Location" : "❌ Failed Attempt"}
+                      </span>
+                    </td>
+                    <td style={{ padding:"9px 12px", color:"#444" }}>{e.device}</td>
+                    <td style={{ padding:"9px 12px", color:"#444" }}>{e.browser} · {e.os}</td>
+                    <td style={{ padding:"9px 12px", color:"#444", fontWeight:600 }}>{e.city}, {e.country}</td>
+                    <td style={{ padding:"9px 12px", color:"#666", fontSize:11 }}>{e.isp}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
     </div>
   );
 }

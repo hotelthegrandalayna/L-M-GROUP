@@ -1,6 +1,7 @@
 
 import { useState } from "react";
 import { useHall, hallLogin } from "../HallContext";
+import { recordLogin } from "../../utils/loginLog";
 
 export default function HallLogin({ onSwitchApp }) {
   const { login } = useHall();
@@ -13,8 +14,13 @@ export default function HallLogin({ onSwitchApp }) {
     e?.preventDefault();
     if (!user.trim()) { setErr("Please enter your username."); return; }
     const result = hallLogin(user, pass);
-    if (result) { login(result.user, result.role); }
-    else { setErr("Invalid username or password."); }
+    if (result) {
+      recordLogin(result.user, true);
+      login(result.user, result.role);
+    } else {
+      recordLogin(user.trim() || "unknown", false);
+      setErr("Invalid username or password.");
+    }
   }
 
   return (
