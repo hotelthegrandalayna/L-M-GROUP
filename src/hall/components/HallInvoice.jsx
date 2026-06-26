@@ -3757,14 +3757,14 @@ function InvDetail({
           ${inv.email ? `<div style="font-size:11px;color:#555;margin-bottom:3px">✉ ${inv.email}</div>` : ""}
           ${(inv.addrArea || inv.addrCity || inv.addrDistrict) ? `<div style="font-size:11px;color:#555;margin-bottom:3px">📍 ${[inv.addrArea, inv.addrCity, inv.addrDistrict].filter(Boolean).join(", ")}</div>` : ""}
           ${(inv.wRelation || inv.wBride || inv.wGroom) ? `<div style="margin-top:8px;padding-top:8px;border-top:1px solid #eee">
-            ${inv.wBride ? `<div style="font-size:11px;color:#555;margin-bottom:2px"><span style="font-weight:700;color:#7B1212">Bride:</span> ${inv.wBride}${inv.wBrideRel ? ` <span style="color:#999;font-size:10px">(${inv.wBrideRel} of client)</span>` : ""}</div>` : ""}
-            ${inv.wGroom ? `<div style="font-size:11px;color:#555;margin-bottom:2px"><span style="font-weight:700;color:#7B1212">Groom:</span> ${inv.wGroom}${inv.wGroomRel ? ` <span style="color:#999;font-size:10px">(${inv.wGroomRel} of client)</span>` : ""}</div>` : ""}
-            ${inv.wCouplePhone ? `<div style="font-size:11px;color:#555;margin-bottom:2px">📞 <span style="font-weight:700;color:#7B1212">Couple:</span> ${inv.wCouplePhone}</div>` : ""}
-            ${inv.wRelation ? `<div style="font-size:10px;color:#888">Client is ${inv.wRelation} of the couple</div>` : ""}
+            ${inv.wBride ? `<div style="font-size:11px;color:#222;margin-bottom:3px"><span style="font-weight:700;color:#7B1212">Bride:</span> ${inv.wBride}${inv.wBrideRel ? ` <span style="color:#555;font-size:10px">· ${inv.wBrideRel}</span>` : ""}</div>` : ""}
+            ${inv.wGroom ? `<div style="font-size:11px;color:#222;margin-bottom:3px"><span style="font-weight:700;color:#7B1212">Groom:</span> ${inv.wGroom}${inv.wGroomRel ? ` <span style="color:#555;font-size:10px">· ${inv.wGroomRel}</span>` : ""}</div>` : ""}
+            ${inv.wCouplePhone ? `<div style="font-size:11px;color:#222;margin-bottom:3px">📞 <span style="font-weight:700;color:#7B1212">Couple's Phone:</span> ${inv.wCouplePhone}</div>` : ""}
+            ${inv.wRelation ? `<div style="font-size:11px;color:#222;margin-bottom:2px"><span style="font-weight:700;color:#7B1212">Client's Relation:</span> ${inv.wRelation}</div>` : ""}
           </div>` : ""}
           ${(!inv.wBride && !inv.wGroom && inv.hBride) ? `<div style="margin-top:8px;padding-top:8px;border-top:1px solid #eee">
-            ${inv.hBride ? `<div style="font-size:11px;color:#555;margin-bottom:2px"><span style="font-weight:700;color:#8a6200">Bride:</span> ${inv.hBride}${inv.hBrideRel ? ` <span style="color:#999;font-size:10px">(${inv.hBrideRel} of client)</span>` : ""}</div>` : ""}
-            ${inv.hGroom ? `<div style="font-size:11px;color:#555;margin-bottom:2px"><span style="font-weight:700;color:#8a6200">Groom:</span> ${inv.hGroom}${inv.hGroomRel ? ` <span style="color:#999;font-size:10px">(${inv.hGroomRel} of client)</span>` : ""}</div>` : ""}
+            ${inv.hBride ? `<div style="font-size:11px;color:#222;margin-bottom:3px"><span style="font-weight:700;color:#8a6200">Bride:</span> ${inv.hBride}${inv.hBrideRel ? ` <span style="color:#555;font-size:10px">· ${inv.hBrideRel}</span>` : ""}</div>` : ""}
+            ${inv.hGroom ? `<div style="font-size:11px;color:#222;margin-bottom:3px"><span style="font-weight:700;color:#8a6200">Groom:</span> ${inv.hGroom}${inv.hGroomRel ? ` <span style="color:#555;font-size:10px">· ${inv.hGroomRel}</span>` : ""}</div>` : ""}
           </div>` : ""}
         </div>
         <div style="border:1.5px solid #ddd;border-top:3px solid #c9a84c;border-radius:6px;padding:12px 14px">
@@ -3781,12 +3781,10 @@ function InvDetail({
               ${inv.evDate ? `<div style="display:flex;gap:6px;margin-bottom:4px"><span style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#7B1212;font-weight:700;min-width:80px">DATE</span><span style="font-size:12px;color:#111;font-weight:600">${fmtDate(inv.evDate)}</span></div>` : ""}
               ${inv.wStart || inv.wEnd ? `<div style="display:flex;gap:6px;margin-bottom:4px"><span style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#7B1212;font-weight:700;min-width:80px">TIME</span><span style="font-size:12px;color:#111;font-weight:600">${inv.wStart || "?"}${inv.wStart || inv.wEnd ? " – " : ""}${inv.wEnd || "?"}</span></div>` : ""}
               ${inv.wGuests || inv.wTables ? `<div style="display:flex;gap:6px;margin-bottom:4px"><span style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#7B1212;font-weight:700;min-width:80px">GUESTS</span><span style="font-size:12px;color:#111;font-weight:600">${inv.wGuests ? inv.wGuests + " guests" : ""}${inv.wGuests && inv.wTables ? " · " : ""}${inv.wTables ? inv.wTables + " tables" : ""}</span></div>` : ""}
-              ${inv.wBride || inv.wGroom ? `<div style="margin-top:6px;padding-top:6px;border-top:1px solid #eee;font-size:11px;color:#555">${inv.wBride ? `<div><strong style="color:#7B1212">Bride:</strong> ${inv.wBride}</div>` : ""}${inv.wGroom ? `<div><strong style="color:#7B1212">Groom:</strong> ${inv.wGroom}</div>` : ""}</div>` : ""}
             </div>
           ` : `
             ${inv.evDate ? `<div style="display:flex;gap:6px;margin-bottom:4px"><span style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#7B1212;font-weight:700;min-width:90px">DATE</span><span style="font-size:13px;color:#111;font-weight:600">${fmtDate(inv.evDate)}</span></div>` : ""}
             ${inv.wGuests || inv.wTables ? `<div style="display:flex;gap:6px;margin-bottom:4px"><span style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#7B1212;font-weight:700;min-width:90px">GUESTS</span><span style="font-size:13px;color:#111;font-weight:600">${inv.wGuests ? inv.wGuests + " guests" : ""}${inv.wGuests && inv.wTables ? " · " : ""}${inv.wTables ? inv.wTables + " tables" : ""}</span></div>` : ""}
-            ${inv.wBride || inv.wGroom ? `<div style="margin-top:8px;padding-top:8px;border-top:1px solid #eee;font-size:11px;color:#555">${inv.wBride ? `<div><strong style="color:#7B1212">Bride:</strong> ${inv.wBride}</div>` : ""}${inv.wGroom ? `<div><strong style="color:#7B1212">Groom:</strong> ${inv.wGroom}</div>` : ""}</div>` : ""}
             ${inv.wStart || inv.wEnd ? `<div style="display:flex;gap:6px;margin-bottom:4px"><span style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#7B1212;font-weight:700;min-width:90px">TIME</span><span style="font-size:13px;color:#111;font-weight:600">${inv.wStart || "?"}${inv.wStart || inv.wEnd ? " – " : ""}${inv.wEnd || "?"}</span></div>` : ""}
           `}
         </div>
