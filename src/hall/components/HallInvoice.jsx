@@ -3,6 +3,7 @@ import { useHall, EV_TYPES, checkHallAdminPass } from "../HallContext";
 import useIsMobile from "../useIsMobile";
 import { sendSmsForInvoice } from "./HallAdmin";
 import { sendWhatsAppAlert, buildHallWaMessage } from "../../utils/whatsapp";
+import { sendNtfyAlert } from "../../utils/ntfy";
 import { logEvent } from "../../utils/auditLog";
 import {
   persistHallInvoiceBundle,
@@ -3502,6 +3503,10 @@ function InvDetail({
       })
       .catch(() => {});
     sendWhatsAppAlert(buildHallWaMessage(updated)).catch(() => {});
+    sendNtfyAlert(
+      `🏛 New Hall Booking — ${updated.client}`,
+      `Event: ${updated.evType}\nDate: ${updated.evDate || "—"}\nTotal: ৳${(updated.grand||0).toLocaleString()}\nAdvance: ৳${(parseFloat(updated.adv)||0).toLocaleString()}\nBalance: ৳${Math.max(0,(updated.grand||0)-(parseFloat(updated.adv)||0)).toLocaleString()}\nInvoice: ${updated.num}\nPhone: ${updated.phone||"—"}`
+    ).catch(() => {});
 
     setTimeout(() => {
       const html = buildInvoiceHtml(true, true).split(oldNum).join(newNum);

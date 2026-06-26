@@ -3,6 +3,7 @@ import { useState, useMemo } from "react";
 import { useHall, EV_TYPES, checkHallAdminPass } from "../HallContext";
 import useIsMobile from "../useIsMobile";
 import { loadWaConfig, saveWaConfig, sendWhatsAppAlert } from "../../utils/whatsapp";
+import { loadNtfyConfig, saveNtfyConfig, sendNtfyAlert } from "../../utils/ntfy";
 import AuditLogViewer from "../../components/AuditLogViewer";
 import { deleteHallInvoiceFromSupabase, deleteHallInvoicesFromSupabase } from "../lib/hallSupabase";
 import { loadPricingRules, savePricingRules } from "../lib/pricingRules";
@@ -1516,6 +1517,9 @@ function SmsPanel({ notify, isMobile, invoices }) {
   const [saved, setSaved] = useState(false);
   const [waCfg, setWaCfg] = useState(loadWaConfig);
   const [waSaved, setWaSaved] = useState(false);
+  const [ntfyCfg, setNtfyCfg] = useState(loadNtfyConfig);
+  const [ntfySaved, setNtfySaved] = useState(false);
+  const [ntfyTesting, setNtfyTesting] = useState(false);
   const [waTesting, setWaTesting] = useState(false);
   const [testPhone, setTestPhone] = useState("");
   const [testSending, setTestSending] = useState(false);
@@ -1527,6 +1531,15 @@ function SmsPanel({ notify, isMobile, invoices }) {
   function set(k, v) { setCfg(p => ({ ...p, [k]:v })); setSaved(false); }
   function setWa(k, v) { setWaCfg(p => ({ ...p, [k]:v })); setWaSaved(false); }
   function saveWa() { saveWaConfig(waCfg); setWaSaved(true); notify("WhatsApp settings saved ✅","success"); setTimeout(()=>setWaSaved(false),2500); }
+  function setNtfy(k, v) { setNtfyCfg(p => ({ ...p, [k]:v })); setNtfySaved(false); }
+  function saveNtfy() { saveNtfyConfig(ntfyCfg); setNtfySaved(true); notify("Notification settings saved ✅","success"); setTimeout(()=>setNtfySaved(false),2500); }
+  async function testNtfy() {
+    if (!ntfyCfg.topic) { notify("Enter your ntfy topic name first","error"); return; }
+    setNtfyTesting(true);
+    await sendNtfyAlert("✅ Test Alert — L-M Group", "This is a test notification from your booking system. It is working!").catch(()=>{});
+    setNtfyTesting(false);
+    notify("Test notification sent! Check your ntfy app 📱","success");
+  }
   async function testWa() {
     if (!waCfg.num1 || !waCfg.key1) { notify("Enter at least Number 1 and API Key 1","error"); return; }
     setWaTesting(true);
@@ -1852,6 +1865,42 @@ function SmsPanel({ notify, isMobile, invoices }) {
         </div>
         <div style={{ marginTop:10, fontSize:11, color:"#888", fontStyle:"italic" }}>
           Both you and your wife will receive the test message if both numbers are configured.
+        </div>
+      </div>
+
+      {/* ── ntfy Push Notifications ── */}
+      <div style={card({ borderTop:"3px solid #7B1212" })}>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:12, marginBottom:16 }}>
+          <div>
+            <div style={{ fontSize:15, fontWeight:800, color:"#1a1a2e", marginBottom:4 }}>🔔 Push Notifications (ntfy)</div>
+            <div style={{ fontSize:12, color:"#666", lineHeight:1.6 }}>
+              Free instant alerts on your phone via the <strong>ntfy</strong> app — no WhatsApp needed.<br/>
+              Install <strong>ntfy</strong> from Play Store / App Store, then subscribe to your topic below.
+            </div>
+          </div>
+          <div onClick={() => setNtfy("enabled", !ntfyCfg.enabled)}
+            style={{ width:52, height:28, borderRadius:14, cursor:"pointer", flexShrink:0, background: ntfyCfg.enabled?"#1a7a40":"#ccc", position:"relative", transition:"background .25s" }}>
+            <div style={{ position:"absolute", top:3, left: ntfyCfg.enabled?26:3, width:22, height:22, borderRadius:"50%", background:"#fff", transition:"left .25s", boxShadow:"0 1px 4px rgba(0,0,0,.2)" }} />
+          </div>
+        </div>
+
+        <div style={{ marginBottom:14 }}>
+          <label style={lbl}>Your ntfy Topic Name</label>
+          <input value={ntfyCfg.topic || ""} onChange={e => setNtfy("topic", e.target.value)}
+            placeholder="e.g. L-m-group-hall-hotel-alart"
+            style={inp()} />
+          <div style={{ fontSize:11, color:"#888", marginTop:5 }}>
+            This is the topic you subscribed to in the ntfy app. It must match exactly.
+          </div>
+        </div>
+
+        <div style={{ display:"flex", gap:10, flexWrap:"wrap" }}>
+          <button onClick={saveNtfy} style={{ flex:1, minWidth:140, padding:"12px", background: ntfySaved?"#1a7a40":"#7B1212", color:"#fff", border:"none", borderRadius:10, fontSize:14, fontWeight:800, cursor:"pointer", fontFamily:"inherit" }}>
+            {ntfySaved ? "✅ Saved!" : "💾 Save Notification Settings"}
+          </button>
+          <button onClick={testNtfy} disabled={ntfyTesting} style={{ flex:1, minWidth:140, padding:"12px", background:"linear-gradient(135deg,#c9a84c,#e8c96c)", color:"#1a0a00", border:"none", borderRadius:10, fontSize:14, fontWeight:800, cursor:"pointer", fontFamily:"inherit", opacity:ntfyTesting?0.6:1 }}>
+            {ntfyTesting ? "Sending…" : "📲 Send Test Notification"}
+          </button>
         </div>
       </div>
     </div>

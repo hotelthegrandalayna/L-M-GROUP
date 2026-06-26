@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import { useApp } from "../context/AppContext";
 import { todayStr, money, nightsBetween, bookingConflicts, maxId } from "../utils/helpers";
 import { sendWhatsAppAlert, buildHotelWaMessage } from "../utils/whatsapp";
+import { sendNtfyAlert } from "../utils/ntfy";
 import { logEvent } from "../utils/auditLog";
 import { persistHotelBookingBundle } from "../lib/hotelSupabase";
 
@@ -574,6 +575,10 @@ function NewBookingModal({ onClose }) {
         notify("Booking saved locally, but Supabase sync failed", "error");
       });
     sendWhatsAppAlert(buildHotelWaMessage(bkObj)).catch(() => {});
+    sendNtfyAlert(
+      `🏨 New Hotel Booking — ${bkObj.guest}`,
+      `Room: ${bkObj.room}\nCheck-in: ${bkObj.checkin}\nCheck-out: ${bkObj.checkout}\nNights: ${bkObj.nights}\nTotal: ৳${(bkObj.amount||0).toLocaleString()}\nAdvance: ৳${(bkObj.advance||0).toLocaleString()}`
+    ).catch(() => {});
     if (a > 0) updateRevenues([...revenues, {
       id: maxId(revenues), source: "Room Rent", amount: a, date: today,
       note: name.trim() + " Rm " + selRoom.number + (status === "confirmed" ? " — reservation deposit" : " — advance payment") + " (" + method + ")",
