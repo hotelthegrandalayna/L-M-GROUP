@@ -368,6 +368,12 @@ export default function AdminInvoices() {
     setDeleteTarget(null); setDelPw("");
     if (detail?.id === target.id) setDetail(null);
     const sbId = target.supabaseBookingId ?? target.bookingDbId ?? target.id;
+    // Record deleted ID locally so it's never restored from Supabase on reload
+    try {
+      const ids = JSON.parse(localStorage.getItem('ga_deleted_booking_ids') || '[]');
+      ids.push(String(sbId), String(target.id));
+      localStorage.setItem('ga_deleted_booking_ids', JSON.stringify([...new Set(ids)]));
+    } catch {}
     void deleteHotelBooking(sbId).catch(err => console.error("Supabase delete failed:", err));
   }
 
@@ -381,6 +387,13 @@ export default function AdminInvoices() {
     notify(`Deleted ${ids.size} invoice${ids.size > 1 ? "s" : ""}`, "success");
     setBulkDeleteOpen(false); setDelPw("");
     const sbIds = toDelete.map(b => b.supabaseBookingId ?? b.bookingDbId ?? b.id).filter(Boolean);
+    const localIds = toDelete.map(b => b.id).filter(Boolean);
+    // Record all deleted IDs so they're never restored from Supabase on reload
+    try {
+      const existing = JSON.parse(localStorage.getItem('ga_deleted_booking_ids') || '[]');
+      const merged = [...new Set([...existing, ...sbIds.map(String), ...localIds.map(String)])];
+      localStorage.setItem('ga_deleted_booking_ids', JSON.stringify(merged));
+    } catch {}
     void deleteHotelBookings(sbIds).catch(err => console.error("Supabase bulk delete failed:", err));
   }
 

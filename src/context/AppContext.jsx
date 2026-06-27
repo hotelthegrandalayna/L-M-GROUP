@@ -94,8 +94,18 @@ export function AppProvider({ children }) {
       .then((remoteBookings) => {
         if (cancelled) return;
         if (Array.isArray(remoteBookings) && remoteBookings.length > 0) {
-          setBookings(remoteBookings);
-          localStorage.setItem('ga_bookings', JSON.stringify(remoteBookings));
+          // Filter out any bookings the user has already deleted locally
+          const deletedIds = (() => {
+            try { return new Set(JSON.parse(localStorage.getItem('ga_deleted_booking_ids') || '[]')); }
+            catch { return new Set(); }
+          })();
+          const filtered = remoteBookings.filter(b => {
+            const sbId = String(b.supabaseBookingId ?? b.id ?? '');
+            const localId = String(b.id ?? '');
+            return !deletedIds.has(sbId) && !deletedIds.has(localId);
+          });
+          setBookings(filtered);
+          localStorage.setItem('ga_bookings', JSON.stringify(filtered));
         }
       })
       .catch((err) => {
