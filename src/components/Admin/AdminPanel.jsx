@@ -8,6 +8,7 @@ import AdminSMS       from "./AdminSMS";
 import AdminInvoices  from "./AdminInvoices";
 import AuditLogViewer from "../AuditLogViewer";
 import { checkAdminPassword } from "../../utils/auth";
+import { hasSupabase, upsertRows, saveConfig } from "../../utils/supabaseSync";
 
 const TABS = [
   { key:"finance",  label:"Finance",  icon:"ti-currency-taka"  },
@@ -17,6 +18,7 @@ const TABS = [
   { key:"audit",    label:"Audit Log",icon:"ti-eye"            },
   { key:"staff",    label:"Staff",    icon:"ti-users"          },
   { key:"data",     label:"Data",     icon:"ti-database"       },
+  { key:"sync",     label:"Sync Cloud",icon:"ti-cloud-upload"  },
 ];
 
 export default function AdminPanel() {
@@ -62,6 +64,81 @@ export default function AdminPanel() {
       {tab==="audit"    && <AuditLogViewer scope="hotel" title="Hotel — Activity Audit Log" checkPassword={checkAdminPassword} notify={notify} />}
       {tab==="staff"   && curRole==="admin" && <AdminStaff />}
       {tab==="data"    && <AdminData />}
+      {tab==="sync"    && curRole==="admin" && <HotelSyncPanel notify={notify} />}
+    </div>
+  );
+}
+
+function HotelSyncPanel({ notify }) {
+  const { revenues, expenses, bookings } = useApp();
+  const [status, setStatus] = useState({});
+  const [syncing, setSyncing] = useState(false);
+
+  const steps = [
+    { key:"revenues", label:"Hotel Revenues",  count: revenues.length },
+    { key:"expenses", label:"Hotel Expenses",  count: expenses.length },
+    { key:"config",   label:"App Config (ntfy/WhatsApp)", count: 2 },
+  ];
+
+  async function syncAll() {
+    if (!hasSupabase()) { notify("Supabase not configured", "error"); return; }
+    setSyncing(true);
+    setStatus({});
+
+    try {
+      const rows = revenues.map(r => ({ id: String(r.id), date: r.date, source: r.source, amount: r.amount || 0, note: r.note || "", by: r.by || "", booking_id: r.bookingId || null }));
+      if (rows.length) await upsertRows("revenues", rows);
+      setStatus(s => ({ ...s, revenues:"✅" }));
+    } catch { setStatus(s => ({ ...s, revenues:"❌" })); }
+
+    try {
+      const rows = expenses.map(e => ({ id: String(e.id), date: e.date, category: e.category, amount: e.amount || 0, note: e.note || "", by: e.by || "" }));
+      if (rows.length) await upsertRows("expenses", rows);
+      setStatus(s => ({ ...s, expenses:"✅" }));
+    } catch { setStatus(s => ({ ...s, expenses:"❌" })); }
+
+    try {
+      const ntfy = JSON.parse(localStorage.getItem("ga_ntfy_config") || "{}");
+      const wa   = JSON.parse(localStorage.getItem("ga_wa_config")   || "{}");
+      await saveConfig("ntfy_config", ntfy);
+      await saveConfig("wa_config",   wa);
+      setStatus(s => ({ ...s, config:"✅" }));
+    } catch { setStatus(s => ({ ...s, config:"❌" })); }
+
+    setSyncing(false);
+    notify("Hotel data pushed to Supabase ☁️", "success");
+  }
+
+  return (
+    <div style={{ maxWidth:600 }}>
+      <div style={{ marginBottom:20 }}>
+        <div style={{ fontSize:18, fontWeight:800, color:"var(--navy)", marginBottom:6 }}>☁️ Push All Hotel Data to Supabase</div>
+        <div style={{ fontSize:13, color:"var(--text3)", lineHeight:1.6 }}>
+          Uploads all local data to Supabase in one click.<br/>
+          Run once to ensure everything is visible from Denmark. Safe to run multiple times — no duplicates created.
+        </div>
+      </div>
+
+      <div style={{ background:"#fff", border:"1.5px solid var(--border)", borderRadius:12, padding:"16px 20px", marginBottom:16 }}>
+        {steps.map(s => (
+          <div key={s.key} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"10px 0", borderBottom:"1px solid var(--border)" }}>
+            <div>
+              <div style={{ fontWeight:700, fontSize:13, color:"var(--navy)" }}>{s.label}</div>
+              <div style={{ fontSize:11, color:"var(--text3)" }}>{s.count} record{s.count!==1?"s":""} locally</div>
+            </div>
+            <div style={{ fontSize:20 }}>{status[s.key] || (syncing ? "⏳" : "⬜")}</div>
+          </div>
+        ))}
+      </div>
+
+      <button onClick={syncAll} disabled={syncing} style={{
+        width:"100%", padding:"14px", fontSize:15, fontWeight:800,
+        background: syncing ? "#ccc" : "linear-gradient(135deg,#2D1B69,#4a2ea8)",
+        color:"#fff", border:"none", borderRadius:10,
+        cursor: syncing ? "not-allowed" : "pointer", fontFamily:"inherit",
+      }}>
+        {syncing ? "⏳ Uploading..." : "☁️ Push All Data to Supabase Now"}
+      </button>
     </div>
   );
 }

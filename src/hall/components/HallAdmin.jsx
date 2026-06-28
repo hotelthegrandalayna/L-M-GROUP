@@ -8,6 +8,7 @@ import AuditLogViewer from "../../components/AuditLogViewer";
 import { getUnusualLogins } from "../../utils/loginLog";
 import { deleteHallInvoiceFromSupabase, deleteHallInvoicesFromSupabase } from "../lib/hallSupabase";
 import { loadPricingRules, savePricingRules, syncPricingRulesFromSupabase } from "../lib/pricingRules";
+import { hasSupabase, upsertRows, saveConfig } from "../../utils/supabaseSync";
 
 const DEFAULT_RECOVERY_EMAILS = ["mainulhasan86@gmail.com","mainulhasan86@yahoo.com"];
 function loadRecoveryEmails() {
@@ -346,6 +347,7 @@ export default function HallAdmin() {
       { id:"sms",      label:"📱 SMS"      },
       { id:"audit",    label:"🕵 Audit Log" },
       { id:"loginlog", label:"🔍 Login Activity" },
+      { id:"sync",     label:"☁️ Sync to Cloud" },
       { id:"password", label:"🔐 Password" },
       { id:"danger",   label:"⚠️ Danger Zone", danger:true },
     ] : []),
@@ -842,7 +844,117 @@ export default function HallAdmin() {
       {tab==="sms" && isAdmin && <SmsPanel notify={notify} isMobile={isMobile} invoices={invoices} />}
       {tab==="audit" && isAdmin && <AuditLogViewer scope="hall" title="Hall — Activity Audit Log" checkPassword={checkHallAdminPass} notify={notify} />}
       {tab==="loginlog" && isAdmin && <LoginActivityPanel notify={notify} />}
+      {tab==="sync" && isAdmin && <SyncPanel notify={notify} invoices={invoices} expenses={expenses} revenues={revenues} leads={leads} />}
 
+    </div>
+  );
+}
+
+// ─── Sync to Cloud Panel ─────────────────────────────────────────────────────
+function SyncPanel({ notify, invoices, expenses, revenues, leads }) {
+  const [status, setStatus] = useState({});
+  const [syncing, setSyncing] = useState(false);
+
+  const steps = [
+    { key: "leads",    label: "CRM Leads",       count: leads.length },
+    { key: "expenses", label: "Hall Expenses",    count: expenses.length },
+    { key: "revenues", label: "Hall Revenues",    count: revenues.length },
+    { key: "pricing",  label: "Pricing Rules",    count: loadPricingRules().length },
+    { key: "config",   label: "App Config (ntfy/WhatsApp)", count: 2 },
+  ];
+
+  async function syncAll() {
+    if (!hasSupabase()) { notify("Supabase is not configured", "error"); return; }
+    setSyncing(true);
+    setStatus({});
+
+    // CRM Leads
+    try {
+      const rows = leads.map(l => ({
+        id: String(l.id), num: l.num || "", name: l.name || "", phone: l.phone || "",
+        ev_type: l.evType || "", ev_date: l.evDate || "", guests: l.guests || "",
+        source: l.source || "", stage: l.stage || "New Enquiry",
+        follow_date: l.followDate || null, assigned: l.assigned || "admin",
+        notes: l.notes || "", invoice_id: l.invoiceId || null, invoice_num: l.invoiceNum || null,
+        updated_at: new Date().toISOString(),
+      }));
+      if (rows.length) await upsertRows("crm_leads", rows);
+      setStatus(s => ({ ...s, leads: "✅" }));
+    } catch { setStatus(s => ({ ...s, leads: "❌" })); }
+
+    // Hall Expenses
+    try {
+      const rows = expenses.map(e => ({ id: String(e.id), date: e.date, category: e.category, amount: e.amount || 0, note: e.note || "", by: e.by || "" }));
+      if (rows.length) await upsertRows("hall_expenses", rows);
+      setStatus(s => ({ ...s, expenses: "✅" }));
+    } catch { setStatus(s => ({ ...s, expenses: "❌" })); }
+
+    // Hall Revenues
+    try {
+      const rows = revenues.map(r => ({ id: String(r.id), date: r.date, source: r.source, amount: r.amount || 0, note: r.note || "", by: r.by || "" }));
+      if (rows.length) await upsertRows("hall_revenues", rows);
+      setStatus(s => ({ ...s, revenues: "✅" }));
+    } catch { setStatus(s => ({ ...s, revenues: "❌" })); }
+
+    // Pricing Rules
+    try {
+      const rules = loadPricingRules();
+      const rows = rules.map((r, i) => ({ id: String(r.id || `${r.evType}_${i}`), ev_type: r.evType || "", min_guests: parseInt(r.minGuests) || 0, max_guests: parseInt(r.maxGuests) || 999999, min_price: parseFloat(r.minPrice) || 0, max_price: parseFloat(r.maxPrice) || 0, notes: r.notes || "" }));
+      if (rows.length) await upsertRows("pricing_rules", rows);
+      setStatus(s => ({ ...s, pricing: "✅" }));
+    } catch { setStatus(s => ({ ...s, pricing: "❌" })); }
+
+    // App Config
+    try {
+      const ntfy = JSON.parse(localStorage.getItem("ga_ntfy_config") || "{}");
+      const wa   = JSON.parse(localStorage.getItem("ga_wa_config")   || "{}");
+      await saveConfig("ntfy_config", ntfy);
+      await saveConfig("wa_config",   wa);
+      setStatus(s => ({ ...s, config: "✅" }));
+    } catch { setStatus(s => ({ ...s, config: "❌" })); }
+
+    setSyncing(false);
+    notify("All data pushed to Supabase ☁️", "success");
+  }
+
+  const card = { background:"#fff", border:"1.5px solid #e0d0b0", borderRadius:12, padding:"20px 22px", marginBottom:16 };
+
+  return (
+    <div>
+      <div style={{ marginBottom:20 }}>
+        <div style={{ fontSize:16, fontWeight:800, color:"#1a1a2e", marginBottom:6 }}>☁️ Push All Data to Supabase</div>
+        <div style={{ fontSize:13, color:"#666", lineHeight:1.6 }}>
+          This uploads all your existing local data to Supabase in one click.<br/>
+          Run this once to make sure everything is online and visible from Denmark.
+        </div>
+      </div>
+
+      <div style={card}>
+        {steps.map(s => (
+          <div key={s.key} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"10px 0", borderBottom:"1px solid #f0ede8" }}>
+            <div>
+              <div style={{ fontWeight:700, fontSize:13, color:"#1a1a2e" }}>{s.label}</div>
+              <div style={{ fontSize:11, color:"#999" }}>{s.count} record{s.count !== 1 ? "s" : ""} in local storage</div>
+            </div>
+            <div style={{ fontSize:18 }}>
+              {status[s.key] || (syncing ? "⏳" : "⬜")}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <button onClick={syncAll} disabled={syncing} style={{
+        width:"100%", padding:"14px", fontSize:15, fontWeight:800,
+        background: syncing ? "#ccc" : "linear-gradient(135deg,#7B1212,#c0392b)",
+        color:"#fff", border:"none", borderRadius:10, cursor: syncing ? "not-allowed" : "pointer",
+        fontFamily:"inherit",
+      }}>
+        {syncing ? "⏳ Uploading to Supabase..." : "☁️ Push All Data to Supabase Now"}
+      </button>
+
+      <div style={{ marginTop:12, fontSize:11, color:"#999", textAlign:"center" }}>
+        This is safe to run multiple times — it will not create duplicates.
+      </div>
     </div>
   );
 }
