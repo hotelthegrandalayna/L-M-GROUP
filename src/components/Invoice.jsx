@@ -34,11 +34,12 @@ function buildInvoiceHTML(b, rooms, invExtras, mode) {
   const disc    = b.discAmt || b.invoiceDiscount || 0;
   const base    = b.baseAmount || b.amount || 0;
   const roomTotal = Math.max(0, base - disc);
+  const extraRoomsInvoiceTotal = (b.extraRooms || []).reduce((s,r) => s + (r.amount||0), 0);
   const validExtras = (invExtras || []).filter(x => x.desc && x.rate > 0);
   const extrasTotal = validExtras.reduce((s,x) => s + x.qty * x.rate, 0);
   const epCharge    = (b.extraPersonCharge && b.extraPersonCharge.total) || 0;
   const combinedExtras = extrasTotal + epCharge;
-  const grandTotal  = roomTotal + combinedExtras;
+  const grandTotal  = roomTotal + extraRoomsInvoiceTotal + combinedExtras;
   const advance     = b.advance || 0;
   const restPayment = b.restPayment || 0;
   const extAdv      = b.extrasAdvance || 0;
@@ -151,11 +152,26 @@ function buildInvoiceHTML(b, rooms, invExtras, mode) {
     return '<tr style="background:#faf8f4;"><td colspan="4" style="padding:6px 10px;font-size:11px;font-weight:700;color:#333;text-align:right;border-top:1px solid #ddd;">'+label+'</td><td style="padding:6px 10px;font-size:12px;font-weight:800;color:#1a1a2e;text-align:right;border-top:1px solid #ddd;">'+moneyH(amt)+'</td></tr>';
   }
 
+  // Extra rooms rows
+  const extraRoomsList = b.extraRooms || [];
+  const extraRoomRows = extraRoomsList.map(er => {
+    const erName = er.name ? ` — ${er.name}` : "";
+    return '<tr>'
+      + '<td style="padding:9px 10px;border-bottom:1px solid #eee;color:#555;font-size:11px;">'+fmtDate(b.checkin)+'</td>'
+      + '<td style="padding:9px 10px;border-bottom:1px solid #eee;color:#111;font-size:11px;font-weight:500;">Room '+er.number+erName+' — Accommodation ('+b.nights+' Night'+(b.nights>1?'s':'')+')'+(er.acChoice?' ['+er.acChoice+']':'')+'</td>'
+      + '<td style="padding:9px 10px;border-bottom:1px solid #eee;text-align:center;color:#333;font-size:11px;">'+b.nights+'</td>'
+      + '<td style="padding:9px 10px;border-bottom:1px solid #ddd;text-align:right;color:#333;font-size:11px;">'+moneyH(er.rate)+'</td>'
+      + '<td style="padding:9px 10px;border-bottom:1px solid #ddd;text-align:right;color:#000;font-weight:700;font-size:12px;">'+moneyH(er.amount)+'</td>'
+      + '</tr>';
+  }).join("");
+  const extraRoomsTotal = extraRoomsList.reduce((s,r) => s+(r.amount||0), 0);
+
   const hasExtras = validExtras.length > 0 || epCharge > 0;
-  let tableBody = hasExtras
-    ? secHdr("Accommodation Charges") + roomRow + dRow + subTot("Accommodation Sub-total", roomTotal)
-      + secHdr("Additional Charges") + epRow + eRows + subTot("Additional Charges Sub-total", combinedExtras)
-    : roomRow + dRow;
+  const hasMultiRooms = extraRoomsList.length > 0;
+  let tableBody = (hasExtras || hasMultiRooms)
+    ? secHdr("Accommodation Charges") + roomRow + extraRoomRows + dRow + subTot("Accommodation Sub-total", roomTotal + extraRoomsInvoiceTotal)
+      + (hasExtras ? secHdr("Additional Charges") + epRow + eRows + subTot("Additional Charges Sub-total", combinedExtras) : "")
+    : roomRow + extraRoomRows + dRow;
 
   const payHist = b.paymentHistory || [];
   if (payHist.length) {

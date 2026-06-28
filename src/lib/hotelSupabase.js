@@ -137,6 +137,7 @@ function buildBookingRow(booking, guestId) {
     is_reservation: (booking.status || "") === "confirmed",
     created_by: null,
     created_at: booking.createdAt || new Date().toISOString(),
+    extra_rooms: booking.extraRooms?.length ? JSON.stringify(booking.extraRooms) : JSON.stringify([]),
   };
 }
 
@@ -198,6 +199,7 @@ function fromDbBooking(row, guest) {
     by: row.created_by || "",
     paymentHistory: [],
     extraPersonCharge: null,
+    extraRooms: (() => { try { return row.extra_rooms ? JSON.parse(row.extra_rooms) : []; } catch { return []; } })(),
   };
 
   return booking;
@@ -274,6 +276,49 @@ export async function deleteHotelBookings(bookingIds = []) {
     method: "DELETE",
     query: { id: `in.(${bookingIds.join(",")})` },
   });
+}
+
+// ── Room sync ─────────────────────────────────────────────────────────────────
+export async function loadRoomsFromSupabase() {
+  if (!hasHotelSupabaseConfig()) return null;
+  try {
+    const rows = await request("hotel_rooms", { query: { order: "id.asc" } });
+    if (!Array.isArray(rows) || rows.length === 0) return null;
+    return rows.map(r => ({
+      id:         r.id,
+      number:     r.number || "",
+      name:       r.name || "",
+      type:       r.type || "",
+      rate:       r.rate || 0,
+      acRate:     r.ac_rate || 0,
+      nonAcRate:  r.non_ac_rate || 0,
+      status:     r.status || "vacant",
+      notes:      r.notes || "",
+    }));
+  } catch { return null; }
+}
+
+export async function saveRoomsToSupabase(rooms) {
+  if (!hasHotelSupabaseConfig()) return;
+  // Run all upserts in parallel — isolated per-room so one failure doesn't block others
+  await Promise.allSettled(rooms.map(r => {
+    const row = {
+      id:           r.id,
+      number:       r.number,
+      name:         r.name || "",
+      type:         r.type || "",
+      rate:         r.rate || 0,
+      ac_rate:      r.acRate || 0,
+      non_ac_rate:  r.nonAcRate || 0,
+      status:       r.status || "vacant",
+      notes:        r.notes || "",
+    };
+    return request("hotel_rooms", {
+      method: "POST",
+      body: row,
+      extraHeaders: { Prefer: "resolution=merge-duplicates,return=minimal" },
+    });
+  }));
 }
 
 export async function loadHotelBookingsFromSupabase() {

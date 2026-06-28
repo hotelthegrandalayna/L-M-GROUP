@@ -409,25 +409,27 @@ function SMSSendModal({ booking, refName, refPhone, status, onClose }) {
   );
 }
 
-function NewBookingModal({ onClose }) {
+function NewBookingModal({ onClose, prefill }) {
   const { curUser, rooms, bookings, updateBookings, revenues, updateRevenues, notify, extraPersonRules } = useApp();
   const today = todayStr();
   const tmr   = addDaysIso(today, 1);
 
-  // Guest
-  const [name,     setName]     = useState("");
-  const [phone,    setPhone]    = useState("");
-  const [nat,      setNat]      = useState("");
-  const [src,      setSrc]      = useState("Walk-in");
-  const [refName,  setRefName]  = useState("");
-  const [refPhone, setRefPhone] = useState("");
+  // Guest — pre-fill from prefill prop if provided (Add Another Room)
+  const [name,     setName]     = useState(prefill?.name     || "");
+  const [phone,    setPhone]    = useState(prefill?.phone    || "");
+  const [nat,      setNat]      = useState(prefill?.nat      || "");
+  const [src,      setSrc]      = useState(prefill?.src      || "Walk-in");
+  const [refName,  setRefName]  = useState(prefill?.refName  || "");
+  const [refPhone, setRefPhone] = useState(prefill?.refPhone || "");
   // ID
   const [persons,  setPersons]  = useState([{ idType:"", idNum:"", front:[], back:[] }]);
   // Stay
   const [room,     setRoom]     = useState("");
-  const [acChoice, setAcChoice] = useState("AC"); // "AC" | "Non-AC" for dual-pricing rooms
-  const [ci,       setCi]       = useState(today);
-  const [co,       setCo]       = useState(tmr);
+  const [acChoice, setAcChoice] = useState("AC");
+  const [ci,       setCi]       = useState(prefill?.ci || today);
+  const [co,       setCo]       = useState(prefill?.co || tmr);
+  // Extra rooms (multi-room booking)
+  const [extraRooms, setExtraRooms] = useState([]); // [{ number, acChoice }]
   const [adults,   setAdults]   = useState(2);
   const [children, setChildren] = useState(0);
   // Extra person
@@ -456,6 +458,17 @@ function NewBookingModal({ onClose }) {
     ? Math.max(1, Math.round((new Date(co) - new Date(ci)) / 86400000)) : 0;
   const base     = selRoom && nights ? nights * roomRate : 0;
 
+  // Extra rooms computed
+  const extraRoomsData = extraRooms.map(er => {
+    const r = rooms.find(x => String(x.number) === String(er.number));
+    if (!r) return null;
+    const dual = !!(r.acRate && r.nonAcRate);
+    const rate = dual ? (er.acChoice === "AC" ? r.acRate : r.nonAcRate) : r.rate || 0;
+    const amt  = nights ? nights * rate : 0;
+    return { ...er, room: r, rate, amount: amt, isDual: dual };
+  }).filter(Boolean);
+  const extraRoomsTotal = extraRoomsData.reduce((s, r) => s + r.amount, 0);
+
   function calcDiscount(b) {
     const dv = parseFloat(discVal) || 0;
     if (discType === "percent")     return Math.round(b * dv / 100);
@@ -466,7 +479,7 @@ function NewBookingModal({ onClose }) {
   const discAmt  = calcDiscount(base);
   const roomTotal = Math.max(0, base - discAmt);
   const epAmt    = epAccepted ? epCharge : 0;
-  const grand    = roomTotal + epAmt;
+  const grand    = roomTotal + epAmt + extraRoomsTotal;
   const adv      = Math.min(parseFloat(advance) || 0, grand);
   const balance  = Math.max(0, grand - adv);
 
@@ -515,7 +528,12 @@ function NewBookingModal({ onClose }) {
     if (!selRoom)      { notify("Select a room", "error"); return; }
     if (!nights)       { notify("Check-out must be after check-in", "error"); return; }
     if (bookingConflicts(selRoom.number, ci, co, null, bookings)) {
-      notify("Room already booked for those dates", "error"); return;
+      notify(`Room ${selRoom.number} is already booked for those dates`, "error"); return;
+    }
+    for (const er of extraRoomsData) {
+      if (bookingConflicts(er.number, ci, co, null, bookings)) {
+        notify(`Room ${er.number} is already booked for those dates`, "error"); return;
+      }
     }
     const id  = maxId(bookings);
     const rn  = refName.trim();
@@ -525,8 +543,14 @@ function NewBookingModal({ onClose }) {
     const bkObj = {
       id, guest: name.trim(), phone: phone.trim(), email: "",
       room: selRoom.number, type: selRoom.type,
-      checkin: ci, checkout: co, nights, amount: roomTotal, baseAmount: base,
+      checkin: ci, checkout: co, nights,
+      amount: grand, baseAmount: base,
+      invoiceTotal: grand,
       acChoice: isDual ? acChoice : undefined, roomRate,
+      extraRooms: extraRoomsData.map(r => ({
+        number: r.number, type: r.room.type, name: r.room.name,
+        acChoice: r.acChoice, rate: r.rate, amount: r.amount, isDual: r.isDual,
+      })),
       discType: discType, discAmt: discAmt, discReason: discReason.trim(),
       status, notes: notes.trim(),
       source: src, referredByName: rn, referredByPhone: rph, referredBy: rn || rph,
@@ -704,6 +728,52 @@ function NewBookingModal({ onClose }) {
                   ))}
                 </select>
               </div>
+
+              {/* ── Extra Rooms ── */}
+              {extraRoomsData.length > 0 && (
+                <div style={{ background:"#f8f4ff", border:"1.5px solid #c4a8f0", borderRadius:9, padding:"10px 14px", marginBottom:8 }}>
+                  <div style={{ fontSize:11, fontWeight:800, color:"#5a2ea8", marginBottom:8, textTransform:"uppercase", letterSpacing:.5 }}>Additional Rooms</div>
+                  {extraRoomsData.map((er, i) => (
+                    <div key={i} style={{ display:"flex", alignItems:"center", gap:8, marginBottom:6, fontSize:13 }}>
+                      <span style={{ fontWeight:700 }}>Rm {er.number}</span>
+                      <span style={{ color:"#666" }}>— {er.room.name || er.room.type}</span>
+                      {er.isDual && (
+                        <select value={er.acChoice} onChange={e => setExtraRooms(prev => prev.map((x,j) => j===i ? {...x, acChoice: e.target.value} : x))}
+                          style={{ fontSize:11, padding:"2px 6px", borderRadius:6, border:"1px solid #ccc" }}>
+                          <option value="AC">AC ৳{er.room.acRate?.toLocaleString()}</option>
+                          <option value="Non-AC">Non-AC ৳{er.room.nonAcRate?.toLocaleString()}</option>
+                        </select>
+                      )}
+                      <span style={{ marginLeft:"auto", fontWeight:700, color:"#5a2ea8" }}>৳{er.amount.toLocaleString()}</span>
+                      <button type="button" onClick={() => setExtraRooms(prev => prev.filter((_,j) => j!==i))}
+                        style={{ background:"none", border:"none", cursor:"pointer", color:"#c0392b", fontSize:16, padding:"0 4px" }}>✕</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Add Room button */}
+              {room && nights > 0 && (
+                <div style={{ marginBottom:8 }}>
+                  <select
+                    value=""
+                    onChange={e => {
+                      const num = e.target.value;
+                      if (!num) return;
+                      if (String(num) === String(room)) { notify("This room is already the primary room", "error"); return; }
+                      if (extraRooms.find(x => String(x.number) === String(num))) { notify("Room already added", "error"); return; }
+                      setExtraRooms(prev => [...prev, { number: num, acChoice: "AC" }]);
+                    }}
+                    style={{ width:"100%", padding:"9px 12px", borderRadius:8, border:"1.5px dashed #c4a8f0", background:"#f8f4ff", color:"#5a2ea8", fontWeight:700, fontSize:13, cursor:"pointer" }}>
+                    <option value="">+ Add Another Room to this Booking</option>
+                    {availRooms.filter(r => String(r.number) !== String(room) && !extraRooms.find(x => String(x.number) === String(r.number))).map(r => (
+                      <option key={r.number} value={r.number}>
+                        Rm {r.number} — {r.name || r.type} {r.acRate&&r.nonAcRate ? `· AC ৳${r.acRate}/Non-AC ৳${r.nonAcRate}` : `· ৳${r.rate?.toLocaleString()}`}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
               {isDual && (
                 <div className="form-group">
                   <label><i className="ti ti-wind" style={{ color:"var(--navy)", marginRight:4 }} />AC or Non-AC? *</label>
@@ -780,8 +850,8 @@ function NewBookingModal({ onClose }) {
               </div>
               {/* Live price box */}
               <div style={{ background:"var(--navy)", color:"#fff", borderRadius:8, padding:"13px 16px", textAlign:"center", minHeight:52, display:"flex", alignItems:"center", justifyContent:"center", flexWrap:"wrap", gap:"10px 18px", marginTop:4 }}>
-                {!selRoom || !nights ? (
-                  <span style={{ opacity:.5, fontSize:12 }}>Select room and dates</span>
+                {!selRoom ? (
+                  <span style={{ opacity:.5, fontSize:12 }}>Select a room to see price</span>
                 ) : (
                   <>
                     {discAmt > 0 ? (
@@ -838,6 +908,14 @@ function NewBookingModal({ onClose }) {
         {/* Actions */}
         <div className="modal-actions">
           <button className="btn" onClick={onClose}>Cancel</button>
+          {name.trim() && phone.trim() && (
+            <button className="btn" style={{ background:"#fff8e1", borderColor:"#f0c040", color:"#7a5c00" }}
+              onClick={() => {
+                onClose({ addAnother: true, prefill: { name: name.trim(), phone: phone.trim(), nat, src, refName, refPhone, ci, co } });
+              }}>
+              <i className="ti ti-plus" /> Add Another Room
+            </button>
+          )}
           <button className="btn" onClick={()=>doSave("confirmed")}><i className="ti ti-calendar" /> Save Reservation</button>
           <button className="btn primary" onClick={()=>doSave("checked-in")}><i className="ti ti-login" /> Check In Now</button>
         </div>
@@ -866,6 +944,7 @@ export default function Bookings() {
   const [dateTo,   setDateTo]   = useState("");
   const [sel,     setSel]     = useState(null);
   const [showNew, setShowNew] = useState(false);
+  const [newPrefill, setNewPrefill] = useState(null);
   const [sortKey, setSortKey] = useState("id");
   const [sortDir, setSortDir] = useState("desc");
   const [showHistory, setShowHistory] = useState(false);
@@ -953,7 +1032,7 @@ export default function Bookings() {
           <i className={"ti " + (showHistory ? "ti-calendar-event" : "ti-history")} style={{ fontSize:14 }} />
           {showHistory ? "Today's View" : "Show History"}
         </button>
-        <button onClick={()=>setShowNew(true)} style={{
+        <button onClick={()=>{ setNewPrefill(null); setShowNew(true); }} style={{
           display:"flex", alignItems:"center", gap:8,
           padding:"11px 24px", borderRadius:10, border:"none", cursor:"pointer",
           background:"linear-gradient(135deg,#4a2ea8 0%,#C9983A 100%)",
@@ -1019,7 +1098,10 @@ export default function Bookings() {
                     <div style={{ fontWeight:700 }}>{b.guest}</div>
                     <div style={{ fontSize:11, color:"var(--text3)" }}>{b.phone}</div>
                   </td>
-                  <td style={{ padding:"10px 12px" }}><strong>Rm {b.room}</strong><div style={{ fontSize:10, color:"var(--text3)" }}>{b.type}</div></td>
+                  <td style={{ padding:"10px 12px" }}>
+                    <strong>Rm {b.room}{b.extraRooms?.length > 0 ? ", " + b.extraRooms.map(r=>r.number).join(", ") : ""}</strong>
+                    <div style={{ fontSize:10, color:"var(--text3)" }}>{b.type}{b.extraRooms?.length > 0 ? ` +${b.extraRooms.length} more` : ""}</div>
+                  </td>
                   <td style={{ padding:"10px 12px" }}>{b.checkin}</td>
                   <td style={{ padding:"10px 12px" }}>{b.checkout}</td>
                   <td style={{ padding:"10px 12px", textAlign:"center" }}>{b.nights}</td>
@@ -1049,7 +1131,20 @@ export default function Bookings() {
       </div>
 
       {sel     && <BookingModal  booking={sel} onClose={() => setSel(null)} />}
-      {showNew && <NewBookingModal onClose={() => setShowNew(false)} />}
+      {showNew && <NewBookingModal
+        prefill={newPrefill}
+        onClose={(result) => {
+          if (result?.addAnother) {
+            setNewPrefill(result.prefill);
+            // Keep showNew true — just remount with new prefill via key change
+            setShowNew(false);
+            requestAnimationFrame(() => setShowNew(true));
+          } else {
+            setShowNew(false);
+            setNewPrefill(null);
+          }
+        }}
+      />}
     </div>
   );
 }

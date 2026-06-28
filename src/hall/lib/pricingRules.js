@@ -1,3 +1,5 @@
+import { hasSupabase, upsertRows, loadRows } from "../../utils/supabaseSync";
+
 const KEY = "ga_pricing_rules";
 
 export function loadPricingRules() {
@@ -7,6 +9,32 @@ export function loadPricingRules() {
 
 export function savePricingRules(rules) {
   localStorage.setItem(KEY, JSON.stringify(rules));
+  if (hasSupabase() && rules.length) {
+    const rows = rules.map((r, i) => ({
+      id: String(r.id || `${r.evType}_${i}`),
+      ev_type: r.evType || "",
+      min_guests: parseInt(r.minGuests) || 0,
+      max_guests: parseInt(r.maxGuests) || 999999,
+      min_price: parseFloat(r.minPrice) || 0,
+      max_price: parseFloat(r.maxPrice) || 0,
+      notes: r.notes || "",
+    }));
+    upsertRows("pricing_rules", rows).catch(() => {});
+  }
+}
+
+export async function syncPricingRulesFromSupabase() {
+  if (!hasSupabase()) return;
+  try {
+    const rows = await loadRows("pricing_rules");
+    if (!rows || !rows.length) return;
+    const rules = rows.map(r => ({
+      id: r.id, evType: r.ev_type,
+      minGuests: r.min_guests, maxGuests: r.max_guests,
+      minPrice: r.min_price, maxPrice: r.max_price, notes: r.notes,
+    }));
+    localStorage.setItem(KEY, JSON.stringify(rules));
+  } catch {}
 }
 
 export function getMatchingRule(rules, evType, guests) {

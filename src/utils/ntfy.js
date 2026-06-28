@@ -1,3 +1,5 @@
+import { hasSupabase, saveConfig, loadConfig } from "./supabaseSync";
+
 const NTFY_KEY = "ga_ntfy_config";
 const NTFY_DEFAULTS = { enabled: false, topic: "" };
 
@@ -6,7 +8,18 @@ export function loadNtfyConfig() {
   catch { return { ...NTFY_DEFAULTS }; }
 }
 
-export function saveNtfyConfig(cfg) { localStorage.setItem(NTFY_KEY, JSON.stringify(cfg)); }
+export function saveNtfyConfig(cfg) {
+  localStorage.setItem(NTFY_KEY, JSON.stringify(cfg));
+  if (hasSupabase()) saveConfig("ntfy_config", cfg).catch(() => {});
+}
+
+export async function syncNtfyConfigFromSupabase() {
+  if (!hasSupabase()) return;
+  try {
+    const val = await loadConfig("ntfy_config");
+    if (val) localStorage.setItem(NTFY_KEY, JSON.stringify(val));
+  } catch {}
+}
 
 export async function sendNtfyAlert(title, message, topicOverride) {
   const cfg = loadNtfyConfig();

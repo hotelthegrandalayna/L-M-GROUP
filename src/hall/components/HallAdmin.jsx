@@ -7,7 +7,7 @@ import { loadNtfyConfig, saveNtfyConfig, sendNtfyAlert } from "../../utils/ntfy"
 import AuditLogViewer from "../../components/AuditLogViewer";
 import { getUnusualLogins } from "../../utils/loginLog";
 import { deleteHallInvoiceFromSupabase, deleteHallInvoicesFromSupabase } from "../lib/hallSupabase";
-import { loadPricingRules, savePricingRules } from "../lib/pricingRules";
+import { loadPricingRules, savePricingRules, syncPricingRulesFromSupabase } from "../lib/pricingRules";
 
 const DEFAULT_RECOVERY_EMAILS = ["mainulhasan86@gmail.com","mainulhasan86@yahoo.com"];
 function loadRecoveryEmails() {
@@ -1164,6 +1164,10 @@ function PricingRulesPanel({ notify }) {
   const [rules, setRules] = useState(loadPricingRules);
   const [form, setForm] = useState(blankRule());
   const [editId, setEditId] = useState(null);
+
+  useEffect(() => {
+    syncPricingRulesFromSupabase().then(() => setRules(loadPricingRules())).catch(() => {});
+  }, []);
 
   const sf = (k, v) => setForm(p => ({ ...p, [k]: v }));
 

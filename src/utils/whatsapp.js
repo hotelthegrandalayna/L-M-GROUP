@@ -12,7 +12,12 @@ export function loadWaConfig() {
   }
 }
 
-export function saveWaConfig(cfg) { localStorage.setItem(WA_KEY, JSON.stringify(cfg)); }
+export function saveWaConfig(cfg) {
+  localStorage.setItem(WA_KEY, JSON.stringify(cfg));
+  import("./supabaseSync.js").then(({ hasSupabase, saveConfig }) => {
+    if (hasSupabase()) saveConfig("wa_config", cfg).catch(() => {});
+  }).catch(() => {});
+}
 
 async function _sendWa(phone, apiKey, message) {
   const url = `https://api.callmebot.com/whatsapp.php?phone=${encodeURIComponent(phone)}&text=${encodeURIComponent(message)}&apikey=${encodeURIComponent(apiKey)}`;

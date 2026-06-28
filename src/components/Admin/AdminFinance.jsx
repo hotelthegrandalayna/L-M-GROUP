@@ -17,27 +17,49 @@ export default function AdminFinance() {
   const [rNote, setRNote] = useState("");
   const [reportMonth, setReportMonth] = useState(thisMonth);
 
-  // Build revenue from booking payment history (Supabase-synced) + manual entries
+  // Build revenue directly from bookings — covers ALL cases:
+  // 1. paymentHistory entries (new bookings)
+  // 2. advance field only (old bookings without paymentHistory)
   const bookingRevenues = useMemo(() => {
     const entries = [];
     bookings.forEach(b => {
-      (b.paymentHistory || []).forEach(p => {
-        const date = p.ts ? p.ts.split("T")[0] : today;
-        entries.push({
-          id: `bk-${b.id}-${p.ts}`,
-          source: "Room Rent",
-          amount: p.amount || 0,
-          date,
-          note: `${b.guest} Rm ${b.room} — ${p.note || p.type || "payment"} (${p.method || ""})`,
-          bookingId: b.id,
-          fromBooking: true,
+      const history = b.paymentHistory || [];
+      const checkinDate = b.checkin || today;
+
+      if (history.length > 0) {
+        // Use detailed payment history
+        history.forEach(p => {
+          const date = p.ts ? p.ts.split("T")[0] : checkinDate;
+          entries.push({
+            id: `bk-${b.id}-${p.ts || Math.random()}`,
+            source: "Room Rent",
+            amount: parseFloat(p.amount) || 0,
+            date,
+            note: `${b.guest} Rm ${b.room} — ${p.note || p.type || "payment"} (${p.method || ""})`,
+            bookingId: b.id,
+            fromBooking: true,
+          });
         });
-      });
+      } else {
+        // Fallback: use advance + restPayment fields for old bookings
+        const totalPaid = (parseFloat(b.advance) || 0) + (parseFloat(b.restPayment) || 0) + (parseFloat(b.extrasAdvance) || 0);
+        if (totalPaid > 0) {
+          entries.push({
+            id: `bk-${b.id}-adv`,
+            source: "Room Rent",
+            amount: totalPaid,
+            date: checkinDate,
+            note: `${b.guest} Rm ${b.room} — payment (${b.paymentMethod || "Cash"})`,
+            bookingId: b.id,
+            fromBooking: true,
+          });
+        }
+      }
     });
     return entries;
   }, [bookings]);
 
-  // Merge: booking-derived revenues + manual revenues (avoid duplicates from old localStorage entries)
+  // Merge booking revenues + manual-only entries (no bookingId)
   const allRevenues = useMemo(() => {
     const manualOnly = revenues.filter(r => !r.bookingId && !r.fromBooking);
     return [...bookingRevenues, ...manualOnly];

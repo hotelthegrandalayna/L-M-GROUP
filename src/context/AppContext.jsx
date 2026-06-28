@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useCallback, useEffect } from 'react';
-import { hasHotelSupabaseConfig, loadHotelBookingsFromSupabase } from "../lib/hotelSupabase";
+import { hasHotelSupabaseConfig, loadHotelBookingsFromSupabase, loadRoomsFromSupabase, saveRoomsToSupabase } from "../lib/hotelSupabase";
+import { hasSupabase, upsertRows, loadRows } from "../utils/supabaseSync";
 
 const GA_ROOMS_VER = 'alayna-r1';
 
@@ -112,6 +113,34 @@ export function AppProvider({ children }) {
         console.error("Failed to load hotel bookings from Supabase:", err);
       });
 
+    // Also load rooms from Supabase — overrides hardcoded defaults
+    loadRoomsFromSupabase()
+      .then((remoteRooms) => {
+        if (cancelled || !remoteRooms) return;
+        setRoomsRaw(remoteRooms);
+        localStorage.setItem('ga_rooms_ver', GA_ROOMS_VER);
+        localStorage.setItem('ga_rooms', JSON.stringify(remoteRooms));
+      })
+      .catch(() => {});
+
+    // Load hotel expenses from Supabase
+    loadRows("expenses")
+      .then(rows => {
+        if (cancelled || !rows || !rows.length) return;
+        const exps = rows.map(r => ({ id: r.id, date: r.date, category: r.category, amount: r.amount, note: r.note, by: r.by }));
+        setExpenses(exps);
+        localStorage.setItem('ga_expenses', JSON.stringify(exps));
+      }).catch(() => {});
+
+    // Load hotel revenues from Supabase
+    loadRows("revenues")
+      .then(rows => {
+        if (cancelled || !rows || !rows.length) return;
+        const revs = rows.map(r => ({ id: r.id, date: r.date, source: r.source, amount: r.amount, note: r.note, by: r.by, bookingId: r.booking_id }));
+        setRevenues(revs);
+        localStorage.setItem('ga_revenues', JSON.stringify(revs));
+      }).catch(() => {});
+
     return () => {
       cancelled = true;
     };
@@ -142,6 +171,8 @@ export function AppProvider({ children }) {
     setRoomsRaw(val);
     localStorage.setItem('ga_rooms_ver', GA_ROOMS_VER);
     localStorage.setItem('ga_rooms', JSON.stringify(val));
+    // Persist to Supabase so rates are never lost across devices or cache clears
+    saveRoomsToSupabase(val).catch(() => {});
   }, [rooms]);
 
   const updateBookings = useCallback((next) => {
@@ -154,12 +185,20 @@ export function AppProvider({ children }) {
     const val = typeof next === 'function' ? next(revenues) : next;
     setRevenues(val);
     localStorage.setItem('ga_revenues', JSON.stringify(val));
+    if (hasSupabase()) {
+      const rows = val.map(r => ({ id: String(r.id), date: r.date, source: r.source, amount: r.amount || 0, note: r.note || "", by: r.by || "", booking_id: r.bookingId || null }));
+      upsertRows("revenues", rows).catch(() => {});
+    }
   }, [revenues]);
 
   const updateExpenses = useCallback((next) => {
     const val = typeof next === 'function' ? next(expenses) : next;
     setExpenses(val);
     localStorage.setItem('ga_expenses', JSON.stringify(val));
+    if (hasSupabase()) {
+      const rows = val.map(e => ({ id: String(e.id), date: e.date, category: e.category, amount: e.amount || 0, note: e.note || "", by: e.by || "" }));
+      upsertRows("expenses", rows).catch(() => {});
+    }
   }, [expenses]);
 
   const notify = useCallback((msg, type = 'info') => {

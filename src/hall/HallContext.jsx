@@ -1,6 +1,7 @@
 
 import { createContext, useContext, useState, useCallback, useEffect } from "react";
 import { hasHallSupabaseConfig, loadHallInvoicesFromSupabase } from "./lib/hallSupabase";
+import { hasSupabase, upsertRow, upsertRows, deleteRow, loadRows } from "../utils/supabaseSync";
 
 const Ctx = createContext(null);
 
@@ -102,15 +103,93 @@ export function HallProvider({ children }) {
       } catch (err) {
         console.error("Failed to load hall invoices from Supabase:", err);
       }
+
+      // Load CRM leads from Supabase
+      try {
+        const rows = await loadRows("crm_leads");
+        if (!active || !rows) return;
+        if (rows.length) {
+          const leads = rows.map(r => ({
+            id: r.id, num: r.num, name: r.name, phone: r.phone,
+            evType: r.ev_type, evDate: r.ev_date, guests: r.guests,
+            source: r.source, stage: r.stage, followDate: r.follow_date,
+            assigned: r.assigned, notes: r.notes,
+            invoiceId: r.invoice_id, invoiceNum: r.invoice_num,
+            createdAt: r.created_at, updatedAt: r.updated_at,
+          }));
+          setLeadsRaw(leads);
+          localStorage.setItem("a_crm_leads", JSON.stringify(leads));
+        }
+      } catch {}
+
+      // Load hall expenses from Supabase
+      try {
+        const rows = await loadRows("hall_expenses");
+        if (!active || !rows) return;
+        if (rows.length) {
+          const exps = rows.map(r => ({
+            id: r.id, date: r.date, category: r.category,
+            amount: r.amount, note: r.note, by: r.by,
+          }));
+          setExpensesRaw(exps);
+          localStorage.setItem("a_exp", JSON.stringify(exps));
+        }
+      } catch {}
+
+      // Load hall revenues from Supabase
+      try {
+        const rows = await loadRows("hall_revenues");
+        if (!active || !rows) return;
+        if (rows.length) {
+          const revs = rows.map(r => ({
+            id: r.id, date: r.date, source: r.source,
+            amount: r.amount, note: r.note, by: r.by,
+          }));
+          setRevenuesRaw(revs);
+          localStorage.setItem("a_hall_rev", JSON.stringify(revs));
+        }
+      } catch {}
     })();
 
     return () => { active = false; };
   }, []);
 
   const setInvoices = useCallback(next => { const v = typeof next === "function" ? next(invoices) : next; setInvoicesRaw(v); localStorage.setItem("a_inv", JSON.stringify(v)); }, [invoices]);
-  const setExpenses = useCallback(next => { const v = typeof next === "function" ? next(expenses) : next; setExpensesRaw(v); localStorage.setItem("a_exp", JSON.stringify(v)); }, [expenses]);
-  const setRevenues = useCallback(next => { const v = typeof next === "function" ? next(revenues) : next; setRevenuesRaw(v); localStorage.setItem("a_hall_rev", JSON.stringify(v)); }, [revenues]);
-  const setLeads    = useCallback(next => { const v = typeof next === "function" ? next(leads) : next; setLeadsRaw(v); localStorage.setItem("a_crm_leads", JSON.stringify(v)); }, [leads]);
+
+  const setExpenses = useCallback(next => {
+    const v = typeof next === "function" ? next(expenses) : next;
+    setExpensesRaw(v); localStorage.setItem("a_exp", JSON.stringify(v));
+    // Sync new/changed entries to Supabase
+    if (hasSupabase()) {
+      const rows = v.map(e => ({ id: String(e.id), date: e.date, category: e.category, amount: e.amount || 0, note: e.note || "", by: e.by || "" }));
+      upsertRows("hall_expenses", rows).catch(() => {});
+    }
+  }, [expenses]);
+
+  const setRevenues = useCallback(next => {
+    const v = typeof next === "function" ? next(revenues) : next;
+    setRevenuesRaw(v); localStorage.setItem("a_hall_rev", JSON.stringify(v));
+    if (hasSupabase()) {
+      const rows = v.map(r => ({ id: String(r.id), date: r.date, source: r.source, amount: r.amount || 0, note: r.note || "", by: r.by || "" }));
+      upsertRows("hall_revenues", rows).catch(() => {});
+    }
+  }, [revenues]);
+
+  const setLeads = useCallback(next => {
+    const v = typeof next === "function" ? next(leads) : next;
+    setLeadsRaw(v); localStorage.setItem("a_crm_leads", JSON.stringify(v));
+    if (hasSupabase()) {
+      const rows = v.map(l => ({
+        id: String(l.id), num: l.num || "", name: l.name || "", phone: l.phone || "",
+        ev_type: l.evType || "", ev_date: l.evDate || "", guests: l.guests || "",
+        source: l.source || "", stage: l.stage || "New Enquiry",
+        follow_date: l.followDate || null, assigned: l.assigned || "admin",
+        notes: l.notes || "", invoice_id: l.invoiceId || null, invoice_num: l.invoiceNum || null,
+        updated_at: new Date().toISOString(),
+      }));
+      upsertRows("crm_leads", rows).catch(() => {});
+    }
+  }, [leads]);
 
   const login  = useCallback((user, role) => { localStorage.setItem("a_sess", JSON.stringify({ user, role })); setCurUser(user); setCurRole(role); }, []);
   const logout = useCallback(() => { localStorage.removeItem("a_sess"); setCurUser(""); setCurRole(""); }, []);
