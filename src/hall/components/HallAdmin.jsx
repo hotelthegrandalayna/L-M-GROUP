@@ -60,7 +60,7 @@ const subTabStyle = (active) => ({
 });
 
 export default function HallAdmin() {
-  const { curRole, invoices, setInvoices, expenses, setExpenses, leads, setLeads, notify } = useHall();
+  const { curRole, invoices, setInvoices, expenses, setExpenses, revenues, setRevenues, leads, setLeads, notify } = useHall();
   const isMobile = useIsMobile();
   const [tab, setTab] = useState("overview");
   const isAdmin = curRole === "admin";
