@@ -10,6 +10,14 @@ function fmtDate(iso) {
   return new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 }
 function fmtMoney(n) { return "৳" + Number(n || 0).toLocaleString(); }
+
+// Use whichever is higher: paymentHistory total OR advance field
+// This handles old bookings where advance was set directly without a history entry
+function calcPaid(bk) {
+  const fromHistory = (bk.paymentHistory || []).reduce((s, p) => s + (p.amount || 0), 0);
+  const fromAdvance = (parseFloat(bk.advance) || 0) + (parseFloat(bk.restPayment) || 0) + (parseFloat(bk.extrasAdvance) || 0);
+  return Math.max(fromHistory, fromAdvance);
+}
 function monthLabel(ym) {
   if (!ym) return "";
   const [y, m] = ym.split("-");
@@ -35,7 +43,7 @@ function exportExcel(rows, filename) {
   ];
 
   const dataRows = rows.map(bk => {
-    const paid  = (bk.paymentHistory || []).reduce((s, p) => s + p.amount, 0);
+    const paid  = calcPaid(bk);
     const total = bk.invoiceTotal ?? bk.amount ?? 0;
     return `<Row>
       ${strCell(bk.id)}${strCell(bk.guest)}${strCell(bk.phone)}${strCell(bk.room)}
@@ -76,7 +84,7 @@ function exportExcel(rows, filename) {
 function exportPDF(rows, label) {
   const fmtM = n => "BDT " + Number(n || 0).toLocaleString();
   const rowsHtml = rows.map(bk => {
-    const paid  = (bk.paymentHistory || []).reduce((s, p) => s + p.amount, 0);
+    const paid  = calcPaid(bk);
     const total = bk.invoiceTotal ?? bk.amount ?? 0;
     const bal   = Math.max(0, total - paid);
     return `<tr>
@@ -314,7 +322,7 @@ export default function AdminInvoices() {
 
   const totals = useMemo(() => {
     const rows = selectedIds.size > 0 ? filtered.filter(b => selectedIds.has(b.id)) : filtered;
-    const paid  = rows.reduce((s, bk) => s + (bk.paymentHistory || []).reduce((a, p) => a + p.amount, 0), 0);
+    const paid  = rows.reduce((s, bk) => s + calcPaid(bk), 0);
     const total = rows.reduce((s, bk) => s + (bk.invoiceTotal ?? bk.amount ?? 0), 0);
     return { total, paid, balance: Math.max(0, total - paid) };
   }, [filtered, selectedIds]);

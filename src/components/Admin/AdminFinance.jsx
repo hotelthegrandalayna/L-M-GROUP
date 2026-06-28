@@ -17,11 +17,37 @@ export default function AdminFinance() {
   const [rNote, setRNote] = useState("");
   const [reportMonth, setReportMonth] = useState(thisMonth);
 
-  const mRev = revenues.filter(r=>r.date?.startsWith(thisMonth)).reduce((s,r)=>s+r.amount,0);
+  // Build revenue from booking payment history (Supabase-synced) + manual entries
+  const bookingRevenues = useMemo(() => {
+    const entries = [];
+    bookings.forEach(b => {
+      (b.paymentHistory || []).forEach(p => {
+        const date = p.ts ? p.ts.split("T")[0] : today;
+        entries.push({
+          id: `bk-${b.id}-${p.ts}`,
+          source: "Room Rent",
+          amount: p.amount || 0,
+          date,
+          note: `${b.guest} Rm ${b.room} — ${p.note || p.type || "payment"} (${p.method || ""})`,
+          bookingId: b.id,
+          fromBooking: true,
+        });
+      });
+    });
+    return entries;
+  }, [bookings]);
+
+  // Merge: booking-derived revenues + manual revenues (avoid duplicates from old localStorage entries)
+  const allRevenues = useMemo(() => {
+    const manualOnly = revenues.filter(r => !r.bookingId && !r.fromBooking);
+    return [...bookingRevenues, ...manualOnly];
+  }, [bookingRevenues, revenues]);
+
+  const mRev = allRevenues.filter(r=>r.date?.startsWith(thisMonth)).reduce((s,r)=>s+r.amount,0);
   const mExp = expenses.filter(e=>e.date?.startsWith(thisMonth)).reduce((s,e)=>s+e.amount,0);
-  const allRev = revenues.reduce((s,r)=>s+r.amount,0);
+  const allRev = allRevenues.reduce((s,r)=>s+r.amount,0);
   const allExp = expenses.reduce((s,e)=>s+e.amount,0);
-  const todayRev = revenues.filter(r=>r.date===today).reduce((s,r)=>s+r.amount,0);
+  const todayRev = allRevenues.filter(r=>r.date===today).reduce((s,r)=>s+r.amount,0);
   const todayExp = expenses.filter(e=>e.date===today).reduce((s,e)=>s+e.amount,0);
 
   function saveRev() {
@@ -42,9 +68,9 @@ export default function AdminFinance() {
 
   const bySource = useMemo(()=>{
     const map={};
-    revenues.filter(r=>r.date?.startsWith(thisMonth)).forEach(r=>{ map[r.source]=(map[r.source]||0)+r.amount; });
+    allRevenues.filter(r=>r.date?.startsWith(thisMonth)).forEach(r=>{ map[r.source]=(map[r.source]||0)+r.amount; });
     return Object.entries(map).sort((a,b)=>b[1]-a[1]);
-  },[revenues,thisMonth]);
+  },[allRevenues,thisMonth]);
 
   // ── Last 6 months ──
   const last6 = useMemo(()=>{
@@ -53,20 +79,20 @@ export default function AdminFinance() {
       const d=new Date(today); d.setMonth(d.getMonth()-i);
       const m=d.toISOString().slice(0,7);
       const label=d.toLocaleString("default",{month:"short",year:"2-digit"});
-      const rev=revenues.filter(r=>r.date?.startsWith(m)).reduce((s,r)=>s+r.amount,0);
+      const rev=allRevenues.filter(r=>r.date?.startsWith(m)).reduce((s,r)=>s+r.amount,0);
       const exp=expenses.filter(e=>e.date?.startsWith(m)).reduce((s,e)=>s+e.amount,0);
       const bk=bookings.filter(b=>b.checkin?.startsWith(m)&&b.status!=="cancelled").length;
       months.push({m,label,rev,exp,bk});
     }
     return months;
-  },[revenues,expenses,bookings,today]);
+  },[allRevenues,expenses,bookings,today]);
   const maxBarVal = Math.max(...last6.map(x=>x.rev),1);
 
   // ── Revenue by Room ──
   const byRoom = useMemo(()=>rooms.map(r=>({
     room:r.number, type:r.type,
-    rev:revenues.filter(rv=>bookings.find(b=>b.id===rv.bookingId&&b.room===r.number)).reduce((s,rv)=>s+rv.amount,0)
-  })).sort((a,b)=>b.rev-a.rev),[rooms,bookings,revenues]);
+    rev:allRevenues.filter(rv=>rv.bookingId && bookings.find(b=>b.id===rv.bookingId&&b.room===r.number)).reduce((s,rv)=>s+rv.amount,0)
+  })).sort((a,b)=>b.rev-a.rev),[rooms,bookings,allRevenues]);
   const maxRoomRev = byRoom.length?Math.max(...byRoom.map(r=>r.rev),1):1;
 
   // ── Monthly report ──
@@ -78,7 +104,7 @@ export default function AdminFinance() {
 
   const report = useMemo(()=>{
     const bks=bookings.filter(b=>b.checkin?.startsWith(reportMonth)&&b.status!=="cancelled");
-    const rev=revenues.filter(r=>r.date?.startsWith(reportMonth)).reduce((s,r)=>s+r.amount,0);
+    const rev=allRevenues.filter(r=>r.date?.startsWith(reportMonth)).reduce((s,r)=>s+r.amount,0);
     const exp=expenses.filter(e=>e.date?.startsWith(reportMonth)).reduce((s,e)=>s+e.amount,0);
     const nights=bks.reduce((s,b)=>s+(b.nights||0),0);
     const bySource={};
@@ -87,7 +113,7 @@ export default function AdminFinance() {
     const expCats={};
     expenses.filter(e=>e.date?.startsWith(reportMonth)).forEach(e=>{ expCats[e.category]=(expCats[e.category]||0)+e.amount; });
     return { bks, rev, exp, nights, bySource, topGuests, profit:rev-exp, expCats };
-  },[bookings,revenues,expenses,reportMonth]);
+  },[bookings,allRevenues,expenses,reportMonth]);
 
   const mBookings=bookings.filter(b=>b.checkin?.startsWith(thisMonth)&&b.status!=="cancelled");
   const avgRate=rooms.length?Math.round(rooms.reduce((s,r)=>s+r.rate,0)/rooms.length):0;
@@ -211,8 +237,8 @@ export default function AdminFinance() {
               {["Date","Source","Amount","Note","By"].map(h=><th key={h} style={{ padding:"8px 10px",textAlign:"left",fontSize:10,textTransform:"uppercase" }}>{h}</th>)}
             </tr></thead>
             <tbody>
-              {revenues.length===0&&<tr><td colSpan={5} style={{ textAlign:"center",padding:20,color:"var(--text3)" }}>No revenue entries</td></tr>}
-              {[...revenues].reverse().map((r,i)=>(
+              {allRevenues.length===0&&<tr><td colSpan={5} style={{ textAlign:"center",padding:20,color:"var(--text3)" }}>No revenue entries</td></tr>}
+              {[...allRevenues].sort((a,b)=>b.date?.localeCompare(a.date)).map((r,i)=>(
                 <tr key={r.id} style={{ borderBottom:"1px solid var(--border)",background:i%2===0?"":"var(--panel-alt)" }}>
                   <td style={{ padding:"8px 10px",color:"var(--text3)",fontSize:12 }}>{r.date}</td>
                   <td style={{ padding:"8px 10px" }}>{r.source}</td>

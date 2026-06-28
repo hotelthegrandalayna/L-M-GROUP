@@ -31,7 +31,7 @@ export function getRoomDisplayStatus(room, bookings, today) {
   const active = bookings.find(b =>
     b.room === room.number &&
     (b.status === 'checked-in') &&
-    b.checkin <= today && b.checkout > today
+    b.checkin <= today && b.checkout >= today
   );
   if (active) return 'occupied';
   const reserved = bookings.find(b =>

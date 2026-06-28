@@ -477,15 +477,18 @@ export default function Invoice() {
   }
 
   function maybeSendPrintAlert(bk, label) {
-    if (!loadWaConfig().hotelPrintAlert || bk.printAlertSent) return;
-    sendWhatsAppAlert(buildHotelPrintAlertMessage(bk, label)).catch(() => {});
     const total = bk.invoiceTotal != null ? bk.invoiceTotal : (bk.amount||0);
     const paid  = (bk.paymentHistory||[]).reduce((s,p)=>s+p.amount,0);
+    // ntfy fires independently — doesn't need WhatsApp to be enabled
     sendNtfyAlert(
       `Hotel Invoice Printed - ${bk.guest}`,
       `Room: ${bk.room}\nCheck-in: ${bk.checkin}\nCheck-out: ${bk.checkout}\nTotal: BDT ${total.toLocaleString()}\nPaid: BDT ${paid.toLocaleString()}\nBalance: BDT ${Math.max(0,total-paid).toLocaleString()}`
     ).catch(() => {});
-    updateBookings(prev => prev.map(b => b.id===bk.id ? {...b, printAlertSent:true} : b));
+    // WhatsApp only if enabled and not already sent
+    if (loadWaConfig().hotelPrintAlert && !bk.printAlertSent) {
+      sendWhatsAppAlert(buildHotelPrintAlertMessage(bk, label)).catch(() => {});
+      updateBookings(prev => prev.map(b => b.id===bk.id ? {...b, printAlertSent:true} : b));
+    }
   }
 
   function printComplete() {
