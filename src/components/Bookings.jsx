@@ -955,7 +955,14 @@ function NewBookingModal({ onClose, prefill }) {
             </button>
           )}
           <button className="btn" onClick={()=>doSave("confirmed")}><i className="ti ti-calendar" /> Save Reservation</button>
-          <button className="btn primary" onClick={()=>doSave("checked-in")}><i className="ti ti-login" /> Check In Now</button>
+          {ci <= today ? (
+            <button className="btn primary" onClick={()=>doSave("checked-in")}><i className="ti ti-login" /> Check In Now</button>
+          ) : (
+            <div style={{ display:"flex", alignItems:"center", gap:8, background:"#fff8e1", border:"1.5px solid #f0c040", borderRadius:9, padding:"8px 14px", fontSize:12, color:"#7a5c00", fontWeight:600 }}>
+              <i className="ti ti-info-circle" style={{ fontSize:16, color:"#f0a000" }} />
+              Check-in date is {ci} — only reservation available until that date
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -968,6 +975,7 @@ function NewBookingModal({ onClose, prefill }) {
         onClose={() => { setSmsData(null); onClose(); }}
       />
     )}
+
     </>
   );
 }

@@ -31,9 +31,10 @@ export function bookingConflicts(roomNum, ci, co, excludeId, bookings) {
 
 export function getRoomDisplayStatus(room, bookings, today) {
   const num = room.number;
+  // Occupied: status is checked-in AND checkout hasn't passed yet (or is today)
   const active = bookings.find(b => {
     const allRooms = [b.room, ...(b.extraRooms || []).map(r => r.number)];
-    return allRooms.includes(num) && b.status === 'checked-in' && b.checkin <= today && b.checkout >= today;
+    return allRooms.includes(num) && b.status === 'checked-in' && b.checkout >= today;
   });
   if (active) return 'occupied';
   const reserved = bookings.find(b => {

@@ -32,14 +32,19 @@ function moneyH(n) { return "\u09F3" + (n||0).toLocaleString("en-IN"); }
 function buildInvoiceHTML(b, rooms, invExtras, mode) {
   if (!b) return "";
   const disc    = b.discAmt || b.invoiceDiscount || 0;
-  const base    = b.baseAmount || b.amount || 0;
-  const roomTotal = Math.max(0, base - disc);
-  const extraRoomsInvoiceTotal = (b.extraRooms || []).reduce((s,r) => s + (r.amount||0), 0);
+  // Primary room amount = roomRate × nights (never combinedBase which includes all rooms)
+  // Fallback for old bookings without roomRate: derive from amount minus extra rooms
+  const extraRoomsOnly = (b.extraRooms || []).reduce((s,r) => s + (r.amount||0), 0);
+  const primaryRate   = b.roomRate || Math.max(0, Math.round(((b.baseAmount || b.amount || 0) - extraRoomsOnly) / (b.nights || 1)));
+  const primaryAmount = primaryRate * (b.nights || 1);
+  const extraRoomsInvoiceTotal = extraRoomsOnly;
+  const allRoomsTotal = primaryAmount + extraRoomsInvoiceTotal;
+  const roomTotal = Math.max(0, allRoomsTotal - disc);
   const validExtras = (invExtras || []).filter(x => x.desc && x.rate > 0);
   const extrasTotal = validExtras.reduce((s,x) => s + x.qty * x.rate, 0);
   const epCharge    = (b.extraPersonCharge && b.extraPersonCharge.total) || 0;
   const combinedExtras = extrasTotal + epCharge;
-  const grandTotal  = roomTotal + extraRoomsInvoiceTotal + combinedExtras;
+  const grandTotal  = roomTotal + combinedExtras;
   const advance     = b.advance || 0;
   const restPayment = b.restPayment || 0;
   const extAdv      = b.extrasAdvance || 0;
@@ -124,8 +129,8 @@ function buildInvoiceHTML(b, rooms, invExtras, mode) {
     + '<td style="padding:9px 10px;border-bottom:1px solid #eee;color:#555;font-size:11px;">'+fmtDate(b.checkin)+'</td>'
     + '<td style="padding:9px 10px;border-bottom:1px solid #eee;color:#111;font-size:11px;font-weight:500;">Room '+b.room+rName+' — Accommodation ('+b.nights+' Night'+(b.nights>1?'s':'')+')'+(b.acChoice?' ['+b.acChoice+']':'')+'</td>'
     + '<td style="padding:9px 10px;border-bottom:1px solid #eee;text-align:center;color:#333;font-size:11px;">'+b.nights+'</td>'
-    + '<td style="padding:9px 10px;border-bottom:1px solid #ddd;text-align:right;color:#333;font-size:11px;">'+(b.baseAmount?moneyH(Math.round(b.baseAmount/b.nights)):moneyH(b.amount))+'</td>'
-    + '<td style="padding:9px 10px;border-bottom:1px solid #ddd;text-align:right;color:#000;font-weight:700;font-size:12px;">'+moneyH(b.baseAmount||b.amount)+'</td>'
+    + '<td style="padding:9px 10px;border-bottom:1px solid #ddd;text-align:right;color:#333;font-size:11px;">'+moneyH(primaryRate)+'</td>'
+    + '<td style="padding:9px 10px;border-bottom:1px solid #ddd;text-align:right;color:#000;font-weight:700;font-size:12px;">'+moneyH(primaryAmount)+'</td>'
     + '</tr>';
 
   const epRow = (b.extraPersonCharge && b.extraPersonCharge.total > 0)
@@ -169,7 +174,7 @@ function buildInvoiceHTML(b, rooms, invExtras, mode) {
   const hasExtras = validExtras.length > 0 || epCharge > 0;
   const hasMultiRooms = extraRoomsList.length > 0;
   let tableBody = (hasExtras || hasMultiRooms)
-    ? secHdr("Accommodation Charges") + roomRow + extraRoomRows + dRow + subTot("Accommodation Sub-total", roomTotal + extraRoomsInvoiceTotal)
+    ? secHdr("Accommodation Charges") + roomRow + extraRoomRows + dRow + subTot("Accommodation Sub-total", roomTotal)
       + (hasExtras ? secHdr("Additional Charges") + epRow + eRows + subTot("Additional Charges Sub-total", combinedExtras) : "")
     : roomRow + extraRoomRows + dRow;
 
@@ -334,14 +339,27 @@ export default function Invoice() {
     }
   }, [pendingInvoiceId]);
 
+  // If selId is set but booking not found yet (Supabase still syncing), retry when bookings update
+  useEffect(() => {
+    if (selId && !selBk && bookings.length > 0) {
+      // Try matching by supabaseBookingId too (in case local id changed after Supabase sync)
+      const found = bookings.find(b =>
+        String(b.supabaseBookingId) === String(selId) ||
+        String(b.id) === String(selId)
+      );
+      if (found) setSelId(String(found.id));
+    }
+  }, [bookings, selId]);
+
   useEffect(() => {
     if (!selBk) { setExtras([]); setRoomAmt(""); setExtAmt(""); return; }
     const loadedExtras = (selBk.invoiceExtras || []).map(e => ({ ...e }));
     setExtras(loadedExtras);
     // Auto-fill amount with current balance due
-    const _base = selBk.baseAmount || selBk.amount || 0;
+    const _primaryAmt = (selBk.roomRate || 0) * (selBk.nights || 1);
+    const _extraAmt = (selBk.extraRooms || []).reduce((s,r) => s + (r.amount||0), 0);
     const _disc = selBk.discAmt || selBk.invoiceDiscount || 0;
-    const _rTotal = Math.max(0, _base - _disc);
+    const _rTotal = Math.max(0, _primaryAmt + _extraAmt - _disc);
     const _ep = (selBk.extraPersonCharge && selBk.extraPersonCharge.total) || 0;
     const _exTotal = loadedExtras.filter(x=>x.desc&&x.rate>0).reduce((s,x)=>s+x.qty*x.rate,0);
     const _grand = _rTotal + _exTotal + _ep;
@@ -353,10 +371,12 @@ export default function Invoice() {
     setExtAmt(_ep + _exTotal > 0 ? String(Math.max(0, _ep + _exTotal - _extAdv)) : "");
   }, [selId]);
 
-  // Derive computed values
+  // Derive computed values — use per-room rates so discount applies to full total correctly
   const disc         = selBk ? (selBk.discAmt || selBk.invoiceDiscount || 0) : 0;
-  const base         = selBk ? (selBk.baseAmount || selBk.amount || 0) : 0;
-  const roomTotal    = Math.max(0, base - disc);
+  const primaryAmt   = selBk ? (selBk.roomRate || 0) * (selBk.nights || 1) : 0;
+  const extraRoomsAmt = selBk ? (selBk.extraRooms || []).reduce((s,r) => s + (r.amount||0), 0) : 0;
+  const allRoomsAmt  = primaryAmt + extraRoomsAmt;
+  const roomTotal    = Math.max(0, allRoomsAmt - disc);
   const validExtras  = extras.filter(x => x.desc && x.rate > 0);
   const extrasTotal  = validExtras.reduce((s,x) => s + x.qty * x.rate, 0);
   const epCharge     = selBk ? ((selBk.extraPersonCharge && selBk.extraPersonCharge.total) || 0) : 0;
@@ -551,7 +571,7 @@ export default function Invoice() {
             <select value={selId} onChange={e => setSelId(e.target.value)}>
               <option value="">— Choose a booking —</option>
               {activeBookings.map(b => (
-                <option key={b.id} value={b.id}>
+                <option key={b.id} value={String(b.id)}>
                   #{b.id} · {b.guest} · Rm {b.room} · {b.checkin}
                 </option>
               ))}
