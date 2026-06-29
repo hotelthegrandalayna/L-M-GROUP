@@ -640,7 +640,7 @@ function NewBookingModal({ onClose, prefill }) {
               <div className="form-group" style={{ marginBottom:0 }}>
                 <label style={{ color:"rgba(255,255,255,.7)", fontSize:11 }}>Check-in *</label>
                 <input type="date" value={ci} min={today}
-                  onChange={e=>{ setCi(e.target.value); if(co && e.target.value >= co) setCo(addDaysIso(e.target.value,1)); }}
+                  onChange={e=>{ setCi(e.target.value); setCo(addDaysIso(e.target.value,1)); }}
                   style={{ fontWeight:800, fontSize:15 }} />
               </div>
               <div className="form-group" style={{ marginBottom:0 }}>

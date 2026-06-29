@@ -1298,8 +1298,7 @@ function InvForm({
           </span>
         </div>
 
-        <SubSection label="📅 EVENT SCHEDULE">
-          <ConflictWarning conflict={evDateConflict} field="ev" />
+        <SubSection label="👥 EVENT DETAILS">
           <div
             style={{
               display: "grid",
@@ -1307,43 +1306,6 @@ function InvForm({
               gap: 12,
             }}
           >
-            <Field
-              label={isWH ? `${et?.v || "Wedding"} Date *` : "Event Date *"}
-            >
-              <input
-                id="field-evDate"
-                type="date"
-                min={todayStr}
-                value={d.evDate || ""}
-                onChange={(e) => set("evDate", e.target.value)}
-                style={inputStyle(
-                  fieldErrors.evDate ? { borderColor: "#c0392b", background: "#fff5f5" } :
-                  evDateConflict ? { borderColor: "#f0b429" } : {},
-                )}
-              />
-              {fieldErrors.evDate && <div style={{ color: "#c0392b", fontSize: 11, marginTop: 4, fontWeight: 700 }}>⚠ {fieldErrors.evDate}</div>}
-            </Field>
-            <Field label="Time of Day">
-              <select
-                value={d.wTod || ""}
-                onChange={(e) => set("wTod", e.target.value)}
-                style={inputStyle()}
-              >
-                <option value="">—</option>
-                <option value="day">☀️ Day</option>
-                <option value="night">🌙 Night</option>
-              </select>
-            </Field>
-            <Field label="Start Time">
-              <TimeInput fieldKey="wStart" d={d} set={set}
-                mode={d.wTod === "night" ? "night-start" : "day"}
-                placeholder={d.wTod === "night" ? "e.g. 7 → 7:00 PM" : "e.g. 10 → 10:00 AM"} />
-            </Field>
-            <Field label="End Time">
-              <TimeInput fieldKey="wEnd" d={d} set={set}
-                mode={d.wTod === "night" ? "night-end" : "day"}
-                placeholder={d.wTod === "night" ? "e.g. 3 → 3:00 AM" : "e.g. 4 → 4:00 PM"} />
-            </Field>
             <Field label="Guests *">
               <input
                 type="number"
@@ -1475,8 +1437,7 @@ function InvForm({
           </p>
         )}
 
-        <SubSection label="📅 EVENT SCHEDULE">
-          <ConflictWarning conflict={hDateConflict} field="h" />
+        <SubSection label="👥 EVENT DETAILS">
           <div
             style={{
               display: "grid",
@@ -1484,23 +1445,6 @@ function InvForm({
               gap: 12,
             }}
           >
-            <Field label="Holud Date *">
-              <input
-                type="date"
-                min={todayStr}
-                value={d.hDate || ""}
-                onChange={(e) => set("hDate", e.target.value)}
-                style={inputStyle(
-                  hDateConflict ? { borderColor: "#f0b429" } : {},
-                )}
-              />
-            </Field>
-            <Field label="Start Time 🌙">
-              <TimeInput fieldKey="hStart" mode="holud-start" placeholder="e.g. 7 → 7:00 PM" d={d} set={set} />
-            </Field>
-            <Field label="End Time">
-              <TimeInput fieldKey="hEnd" mode="holud-end" placeholder="e.g. 3 → 3:00 AM" d={d} set={set} />
-            </Field>
             <Field label="Guests *">
               <input
                 type="number"
@@ -2179,27 +2123,6 @@ function InvForm({
               marginBottom: 12,
             }}
           >
-            <Field label="Event Date *">
-              <ConflictWarning conflict={evDateConflict} field="ev" />
-              <input
-                type="date"
-                min={todayStr}
-                value={d.evDate || ""}
-                onChange={(e) => set("evDate", e.target.value)}
-                style={inputStyle()}
-              />
-            </Field>
-            <Field label="Time of Day">
-              <select
-                value={d.wTod || ""}
-                onChange={(e) => set("wTod", e.target.value)}
-                style={inputStyle()}
-              >
-                <option value="">—</option>
-                <option value="day">☀️ Day</option>
-                <option value="night">🌙 Night</option>
-              </select>
-            </Field>
             <Field label="Guests *">
               <input
                 type="number"
@@ -2208,16 +2131,6 @@ function InvForm({
                 placeholder="e.g. 200"
                 style={inputStyle()}
               />
-            </Field>
-            <Field label="Start Time">
-              <TimeInput fieldKey="wStart" d={d} set={set}
-                mode={d.wTod === "night" ? "night-start" : "day"}
-                placeholder={d.wTod === "night" ? "e.g. 7 → 7:00 PM" : "e.g. 10 → 10:00 AM"} />
-            </Field>
-            <Field label="End Time">
-              <TimeInput fieldKey="wEnd" d={d} set={set}
-                mode={d.wTod === "night" ? "night-end" : "day"}
-                placeholder={d.wTod === "night" ? "e.g. 3 → 3:00 AM" : "e.g. 4 → 4:00 PM"} />
             </Field>
           </div>
           <Field label="Event Title">

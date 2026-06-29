@@ -176,7 +176,7 @@ function RoomModal({ room, onClose, onCheckout }) {
           </div>
         </div>
         <div className="form-row">
-          <div className="form-group"><label>Check-in *</label><input type="date" value={ci} min={today} onChange={e=>{ setCi(e.target.value); if(co && e.target.value >= co) setCo(addDaysIso(e.target.value,1)); }} /></div>
+          <div className="form-group"><label>Check-in *</label><input type="date" value={ci} min={today} onChange={e=>{ setCi(e.target.value); setCo(addDaysIso(e.target.value,1)); }} /></div>
           <div className="form-group"><label>Check-out *</label><input type="date" value={co} min={ci ? addDaysIso(ci,1) : addDaysIso(today,1)} onChange={e=>setCo(e.target.value)} /></div>
         </div>
         <div style={{ background:"var(--navy)", color:"#fff", borderRadius:8, padding:"11px 14px", textAlign:"center", fontSize:13, marginBottom:12, minHeight:48, display:"flex", alignItems:"center", justifyContent:"center" }}>
