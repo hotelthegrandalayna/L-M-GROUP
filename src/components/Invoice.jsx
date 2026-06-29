@@ -550,7 +550,7 @@ export default function Invoice() {
     maybeSendPrintAlert(selBk, "Complete Invoice + T&C");
   }
 
-  const activeBookings = bookings.filter(b => b.status !== "cancelled");
+  const activeBookings = bookings.filter(b => b.status === "confirmed" || b.status === "checked-in");
 
   return (
     <div style={{ padding:"18px 20px 32px" }}>

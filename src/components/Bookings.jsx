@@ -630,108 +630,73 @@ function NewBookingModal({ onClose, prefill }) {
           <button className="modal-close" onClick={onClose}><i className="ti ti-x" /></button>
         </div>
 
-        {/* ── 2-COLUMN LAYOUT ── */}
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"0 24px", alignItems:"start" }}>
+        {/* ── SINGLE COLUMN SMART LAYOUT ── */}
+        <div style={{ display:"flex", flexDirection:"column", gap:0 }}>
 
-          {/* ══ LEFT COLUMN ══ */}
-          <div>
-            {/* ── GUEST ── */}
-            <div className="form-section">
-              <div className="form-sec-title"><i className="ti ti-user" /> Guest</div>
-              <div className="form-row">
-                <div className="form-group"><label>Full Name *</label><input value={name} onChange={e=>setName(e.target.value)} placeholder="As per ID" autoFocus /></div>
-                <div className="form-group"><label>Phone *</label><input value={phone} onChange={e=>setPhone(e.target.value)} placeholder="+880..." /></div>
+          {/* STEP 1 — DATES */}
+          <div className="form-section" style={{ background:"linear-gradient(135deg,#2D1B69,#4a2ea8)", borderRadius:12, padding:"16px 18px", marginBottom:12 }}>
+            <div style={{ color:"#c9a84c", fontSize:10, fontWeight:800, letterSpacing:2, textTransform:"uppercase", marginBottom:10 }}>Step 1 — When?</div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12, alignItems:"end" }}>
+              <div className="form-group" style={{ marginBottom:0 }}>
+                <label style={{ color:"rgba(255,255,255,.7)", fontSize:11 }}>Check-in *</label>
+                <input type="date" value={ci} min={today}
+                  onChange={e=>{ setCi(e.target.value); if(co && e.target.value >= co) setCo(addDaysIso(e.target.value,1)); }}
+                  style={{ fontWeight:800, fontSize:15 }} />
               </div>
-              <div className="form-row">
-                <div className="form-group"><label>Nationality</label><input value={nat} onChange={e=>setNat(e.target.value)} placeholder="Bangladeshi" /></div>
-                <div className="form-group"><label>Source</label>
-                  <select value={src} onChange={e=>setSrc(e.target.value)}>
-                    {SOURCES.map(s=><option key={s}>{s}</option>)}
-                  </select>
-                </div>
+              <div className="form-group" style={{ marginBottom:0 }}>
+                <label style={{ color:"rgba(255,255,255,.7)", fontSize:11 }}>Check-out *</label>
+                <input type="date" value={co} min={ci ? addDaysIso(ci,1) : addDaysIso(today,1)}
+                  onChange={e=>setCo(e.target.value)}
+                  style={{ fontWeight:800, fontSize:15 }} />
               </div>
-              <div className="form-row">
-                <div className="form-group"><label>Referred by — Name</label><input value={refName} onChange={e=>setRefName(e.target.value)} placeholder="Referrer name" /></div>
-                <div className="form-group"><label>Referred by — Phone</label><input value={refPhone} onChange={e=>setRefPhone(e.target.value)} placeholder="Referrer phone" /></div>
+              <div style={{ background:"rgba(255,255,255,.1)", borderRadius:8, padding:"10px 14px", textAlign:"center" }}>
+                <div style={{ color:"rgba(255,255,255,.6)", fontSize:10, textTransform:"uppercase", letterSpacing:1 }}>Nights</div>
+                <div style={{ color:"#c9a84c", fontSize:24, fontWeight:900, lineHeight:1.1 }}>{nights || "—"}</div>
               </div>
-            </div>
-
-            {/* ── ID VERIFICATION ── */}
-            <div className="form-section">
-              <div className="form-sec-title"><i className="ti ti-id-badge" /> ID Verification</div>
-              {persons.map((p, idx) => (
-                <div key={idx} style={{ border:"1px solid var(--border)", borderRadius:8, padding:"10px 12px", marginBottom:8, background:"var(--bg4)" }}>
-                  <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8 }}>
-                    <div style={{ fontSize:11, fontWeight:700, color:"var(--text3)", textTransform:"uppercase", letterSpacing:.5 }}>
-                      <i className="ti ti-user" style={{ color:"var(--gold)", marginRight:4 }} />Person {idx+1}
-                    </div>
-                    {idx > 0 && <button type="button" onClick={()=>removePerson(idx)} style={{ border:"none", background:"transparent", color:"var(--red)", cursor:"pointer", fontSize:11, fontWeight:700 }}><i className="ti ti-x" /> Remove</button>}
-                  </div>
-                  {/* Per-person ID type + number */}
-                  <div className="form-row" style={{ marginBottom:8 }}>
-                    <div className="form-group" style={{ marginBottom:0 }}>
-                      <label style={{ fontSize:10 }}>ID Type</label>
-                      <select value={p.idType||""} onChange={e=>updatePersonField(idx,"idType",e.target.value)} style={{ fontSize:12, padding:"5px 8px" }}>
-                        <option value="">Select</option>
-                        {ID_TYPES.map(t=><option key={t}>{t}</option>)}
-                      </select>
-                    </div>
-                    <div className="form-group" style={{ marginBottom:0 }}>
-                      <label style={{ fontSize:10 }}>ID Number</label>
-                      <input value={p.idNum||""} onChange={e=>updatePersonField(idx,"idNum",e.target.value)} placeholder="Document number" style={{ fontSize:12, padding:"5px 8px" }} />
-                    </div>
-                  </div>
-                  {/* Multi-photo upload per side */}
-                  <div className="form-row">
-                    {["front","back"].map(side => (
-                      <div key={side} className="form-group" style={{ marginBottom:0 }}>
-                        <label style={{ fontSize:10 }}>{side === "front" ? "Front Side" : "Back Side"}</label>
-                        {/* Existing photos */}
-                        {(p[side]||[]).length > 0 && (
-                          <div style={{ display:"flex", flexWrap:"wrap", gap:4, marginBottom:6 }}>
-                            {(p[side]||[]).map((src, pi) => (
-                              <div key={pi} style={{ position:"relative" }}>
-                                <img src={src} alt="id" style={{ width:52, height:42, borderRadius:5, objectFit:"cover", border:"1.5px solid var(--gold)" }} />
-                                <button type="button" onClick={()=>removePhoto(idx,side,pi)} style={{
-                                  position:"absolute", top:-5, right:-5, width:16, height:16, borderRadius:"50%",
-                                  background:"#C62828", color:"#fff", border:"none", fontSize:9, cursor:"pointer",
-                                  display:"flex", alignItems:"center", justifyContent:"center", fontWeight:900, lineHeight:1 }}>×</button>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                        <label style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:4, padding:"10px 8px", border:"1.5px dashed var(--border)", borderRadius:8, cursor:"pointer", background:"var(--bg3)", minHeight:52, textAlign:"center",
-                          borderColor:(p[side]||[]).length ? "var(--gold)" : "var(--border)" }}>
-                          <i className="ti ti-camera-plus" style={{ fontSize:16, color:"var(--text3)" }} />
-                          <span style={{ fontSize:10, color:"var(--text3)" }}>{(p[side]||[]).length ? "Add more" : "Upload photos"}</span>
-                          <input type="file" accept="image/*" multiple style={{ display:"none" }} onChange={e=>handlePhotoUpload(idx,side,e.target.files)} />
-                        </label>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-              <button type="button" onClick={addPerson} style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:7, width:"100%", padding:"9px 16px", border:"2px dashed var(--gold)", borderRadius:8, background:"var(--gold4)", color:"var(--gold)", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"inherit" }}>
-                <i className="ti ti-user-plus" style={{ fontSize:15 }} /> Add Another Person's ID
-              </button>
             </div>
           </div>
 
-          {/* ══ RIGHT COLUMN ══ */}
-          <div>
-            {/* ── ROOM & STAY ── */}
-            <div className="form-section">
-              <div className="form-sec-title"><i className="ti ti-door" /> Room &amp; Stay</div>
-              <div className="form-group"><label>Room *</label>
-                <select value={room} onChange={e=>{ setRoom(e.target.value); setAcChoice("AC"); }}>
-                  <option value="">Select Room</option>
+          {/* STEP 2 — ROOM */}
+          <div className="form-section" style={{ border:"2px solid var(--navy)", borderRadius:12, padding:"16px 18px", marginBottom:12 }}>
+            <div style={{ color:"var(--navy)", fontSize:10, fontWeight:800, letterSpacing:2, textTransform:"uppercase", marginBottom:10 }}>Step 2 — Which Room?</div>
+            {!ci || !co || !nights ? (
+              <div style={{ color:"var(--text3)", fontSize:13, padding:"12px 0", textAlign:"center", opacity:.6 }}>
+                <i className="ti ti-calendar" style={{ marginRight:6 }} />Set check-in and check-out dates first
+              </div>
+            ) : (<>
+              <div className="form-group" style={{ marginBottom:10 }}>
+                <label>Room * <span style={{ color:"var(--green)", fontSize:11, fontWeight:600 }}>— showing available rooms for selected dates</span></label>
+                <select value={room} onChange={e=>{ setRoom(e.target.value); setAcChoice("AC"); }} style={{ fontWeight:700 }}>
+                  <option value="">Select a room...</option>
                   {availRooms.map(r=>(
-                    <option key={r.number} value={r.number}>{r.number}{r.name?" — "+r.name:""} · {r.type}{r.acRate&&r.nonAcRate?" · AC ৳"+r.acRate+"/Non-AC ৳"+r.nonAcRate:" · ৳"+r.rate.toLocaleString()}/n</option>
+                    <option key={r.number} value={r.number}>
+                      {r.number}{r.name?" — "+r.name:""} · {r.type}{r.acRate&&r.nonAcRate?" · AC ৳"+r.acRate+"/Non-AC ৳"+r.nonAcRate:" · ৳"+r.rate.toLocaleString()}/n
+                    </option>
                   ))}
                 </select>
               </div>
-
-              {/* ── Extra Rooms ── */}
+              {isDual && (
+                <div className="form-group" style={{ marginBottom:10 }}>
+                  <label><i className="ti ti-wind" style={{ color:"var(--navy)", marginRight:4 }} />AC or Non-AC? *</label>
+                  <div style={{ display:"flex", gap:10, marginTop:4 }}>
+                    {["AC","Non-AC"].map(opt=>(
+                      <button key={opt} type="button" onClick={()=>setAcChoice(opt)} style={{
+                        flex:1, padding:"10px 0", borderRadius:9, border:"2px solid", cursor:"pointer",
+                        fontWeight:800, fontSize:13, fontFamily:"inherit", transition:"all .15s",
+                        background: acChoice===opt ? "var(--navy)" : "var(--bg3)",
+                        color:      acChoice===opt ? "#fff" : "var(--text2)",
+                        borderColor: acChoice===opt ? "var(--navy)" : "var(--border)",
+                      }}>
+                        {opt==="AC" ? "❄️ AC" : "🌬️ Non-AC"}
+                        <div style={{ fontSize:10, fontWeight:600, opacity:.8, marginTop:2 }}>
+                          ৳{opt==="AC" ? selRoom.acRate.toLocaleString() : selRoom.nonAcRate.toLocaleString()}/night
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {/* Extra Rooms */}
               {extraRoomsData.length > 0 && (
                 <div style={{ background:"#f8f4ff", border:"1.5px solid #c4a8f0", borderRadius:9, padding:"10px 14px", marginBottom:8 }}>
                   <div style={{ fontSize:11, fontWeight:800, color:"#5a2ea8", marginBottom:8, textTransform:"uppercase", letterSpacing:.5 }}>Additional Rooms</div>
@@ -753,105 +718,131 @@ function NewBookingModal({ onClose, prefill }) {
                   ))}
                 </div>
               )}
-
-              {/* Add Room button */}
               {room && (
-                <div style={{ marginBottom:8 }}>
-                  <select
-                    value=""
-                    onChange={e => {
-                      const num = e.target.value;
-                      if (!num) return;
-                      if (String(num) === String(room)) { notify("This room is already the primary room", "error"); return; }
-                      if (extraRooms.find(x => String(x.number) === String(num))) { notify("Room already added", "error"); return; }
-                      setExtraRooms(prev => [...prev, { number: num, acChoice: "AC" }]);
-                    }}
-                    style={{ width:"100%", padding:"9px 12px", borderRadius:8, border:"1.5px dashed #c4a8f0", background:"#f8f4ff", color:"#5a2ea8", fontWeight:700, fontSize:13, cursor:"pointer" }}>
-                    <option value="">+ Add Another Room to this Booking</option>
-                    {availRooms.filter(r => String(r.number) !== String(room) && !extraRooms.find(x => String(x.number) === String(r.number))).map(r => (
-                      <option key={r.number} value={r.number}>
-                        Rm {r.number} — {r.name || r.type} {r.acRate&&r.nonAcRate ? `· AC ৳${r.acRate}/Non-AC ৳${r.nonAcRate}` : `· ৳${r.rate?.toLocaleString()}`}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                <select value="" onChange={e => {
+                  const num = e.target.value; if (!num) return;
+                  if (String(num) === String(room)) { notify("Already the primary room","error"); return; }
+                  if (extraRooms.find(x => String(x.number) === String(num))) { notify("Room already added","error"); return; }
+                  setExtraRooms(prev => [...prev, { number: num, acChoice: "AC" }]);
+                }} style={{ width:"100%", padding:"9px 12px", borderRadius:8, border:"1.5px dashed #c4a8f0", background:"#f8f4ff", color:"#5a2ea8", fontWeight:700, fontSize:13, cursor:"pointer" }}>
+                  <option value="">+ Add Another Room to this Booking</option>
+                  {availRooms.filter(r => String(r.number) !== String(room) && !extraRooms.find(x => String(x.number) === String(r.number))).map(r => (
+                    <option key={r.number} value={r.number}>
+                      Rm {r.number} — {r.name || r.type} {r.acRate&&r.nonAcRate ? `· AC ৳${r.acRate}/Non-AC ৳${r.nonAcRate}` : `· ৳${r.rate?.toLocaleString()}`}
+                    </option>
+                  ))}
+                </select>
               )}
-              {isDual && (
-                <div className="form-group">
-                  <label><i className="ti ti-wind" style={{ color:"var(--navy)", marginRight:4 }} />AC or Non-AC? *</label>
-                  <div style={{ display:"flex", gap:10, marginTop:4 }}>
-                    {["AC","Non-AC"].map(opt=>(
-                      <button key={opt} type="button" onClick={()=>setAcChoice(opt)} style={{
-                        flex:1, padding:"10px 0", borderRadius:9, border:"2px solid", cursor:"pointer",
-                        fontWeight:800, fontSize:13, fontFamily:"inherit", transition:"all .15s",
-                        background: acChoice===opt ? "var(--navy)" : "var(--bg3)",
-                        color:      acChoice===opt ? "#fff"        : "var(--text2)",
-                        borderColor: acChoice===opt ? "var(--navy)"  : "var(--border)",
-                      }}>
-                        {opt==="AC" ? "❄️ AC" : "🌬️ Non-AC"}
-                        <div style={{ fontSize:10, fontWeight:600, opacity:.8, marginTop:2 }}>
-                          ৳{opt==="AC" ? selRoom.acRate.toLocaleString() : selRoom.nonAcRate.toLocaleString()}/night
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-              <div className="form-row">
-                <div className="form-group"><label>Check-in *</label><input type="date" value={ci} onChange={e=>setCi(e.target.value)} /></div>
-                <div className="form-group"><label>Check-out *</label><input type="date" value={co} onChange={e=>setCo(e.target.value)} /></div>
-              </div>
-              <div className="form-row">
-                <div className="form-group"><label>Adults</label>
-                  <input type="number" value={adults} min={1} max={20} onChange={e=>{ setAdults(e.target.value); setEpAccepted(false); }} style={{ fontSize:16, fontWeight:800, textAlign:"center" }} />
-                </div>
-                <div className="form-group"><label>Children</label>
-                  <input type="number" value={children} min={0} max={15} onChange={e=>setChildren(e.target.value)} style={{ fontSize:16, fontWeight:800, textAlign:"center" }} />
-                </div>
-              </div>
-              {epCharge > 0 && !epAccepted && (
-                <div style={{ border:"1.5px solid var(--gold)", borderRadius:9, padding:"12px 14px", background:"#fffbee", marginTop:6 }}>
-                  <div style={{ fontSize:12, fontWeight:700, color:"#7a5500", marginBottom:8 }}>
-                    Extra person charge: {epCount} person{epCount>1?"s":""} × ৳{epRate.toLocaleString()} = <strong>৳{epCharge.toLocaleString()}</strong>
-                  </div>
-                  <div style={{ fontSize:11, color:"#7a5500", marginBottom:10 }}>
-                    (Applies for {epThreshold}+ adults. Will be added to bill.)
-                  </div>
-                  <div style={{ display:"flex", gap:8 }}>
-                    <button className="btn primary sm" onClick={()=>setEpAccepted(true)}>Accept Charge</button>
-                    <button className="btn sm" onClick={()=>setAdults(epThreshold)}>Reduce to {epThreshold}</button>
-                  </div>
-                </div>
-              )}
-              {epAccepted && epCharge > 0 && (
-                <div style={{ fontSize:12, fontWeight:700, color:"var(--green)", padding:"8px 12px", background:"#f0fdf4", borderRadius:8, marginTop:6, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-                  <span>✓ Extra person charge accepted: +৳{epCharge.toLocaleString()}</span>
-                  <button className="btn sm" onClick={()=>{ setEpAccepted(false); setAdults(epThreshold); }} style={{ fontSize:10 }}>Remove</button>
-                </div>
-              )}
-            </div>
+            </>)}
+          </div>
 
-            {/* ── DISCOUNT ── */}
-            <div className="form-section">
-              <div className="form-sec-title"><i className="ti ti-tag" /> Discount</div>
-              <div className="form-row" style={{ gridTemplateColumns:"1fr 1fr 1fr" }}>
-                <div className="form-group"><label>Type</label>
+          {/* STEP 3 — GUEST DETAILS */}
+          <div className="form-section" style={{ border:"1.5px solid var(--border)", borderRadius:12, padding:"16px 18px", marginBottom:12 }}>
+            <div style={{ color:"var(--text3)", fontSize:10, fontWeight:800, letterSpacing:2, textTransform:"uppercase", marginBottom:10 }}>Step 3 — Guest Details</div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+              <div className="form-group" style={{ marginBottom:0 }}><label>Full Name *</label><input value={name} onChange={e=>setName(e.target.value)} placeholder="As per ID" autoFocus /></div>
+              <div className="form-group" style={{ marginBottom:0 }}><label>Phone *</label><input value={phone} onChange={e=>setPhone(e.target.value)} placeholder="+880..." /></div>
+              <div className="form-group" style={{ marginBottom:0 }}><label>Adults</label><input type="number" value={adults} min={1} max={20} onChange={e=>{ setAdults(e.target.value); setEpAccepted(false); }} style={{ textAlign:"center", fontWeight:800 }} /></div>
+              <div className="form-group" style={{ marginBottom:0 }}><label>Children</label><input type="number" value={children} min={0} max={15} onChange={e=>setChildren(e.target.value)} style={{ textAlign:"center" }} /></div>
+              <div className="form-group" style={{ marginBottom:0 }}><label>Nationality</label><input value={nat} onChange={e=>setNat(e.target.value)} placeholder="Bangladeshi" /></div>
+              <div className="form-group" style={{ marginBottom:0 }}><label>Source</label>
+                <select value={src} onChange={e=>setSrc(e.target.value)}>{SOURCES.map(s=><option key={s}>{s}</option>)}</select>
+              </div>
+              <div className="form-group" style={{ marginBottom:0 }}><label>Referred by — Name</label><input value={refName} onChange={e=>setRefName(e.target.value)} placeholder="Referrer name" /></div>
+              <div className="form-group" style={{ marginBottom:0 }}><label>Referred by — Phone</label><input value={refPhone} onChange={e=>setRefPhone(e.target.value)} placeholder="Referrer phone" /></div>
+            </div>
+            {epCharge > 0 && !epAccepted && (
+              <div style={{ border:"1.5px solid var(--gold)", borderRadius:9, padding:"12px 14px", background:"#fffbee", marginTop:12 }}>
+                <div style={{ fontSize:12, fontWeight:700, color:"#7a5500", marginBottom:8 }}>
+                  Extra person charge: {epCount} person{epCount>1?"s":""} × ৳{epRate.toLocaleString()} = <strong>৳{epCharge.toLocaleString()}</strong>
+                </div>
+                <div style={{ display:"flex", gap:8 }}>
+                  <button className="btn primary sm" onClick={()=>setEpAccepted(true)}>Accept Charge</button>
+                  <button className="btn sm" onClick={()=>setAdults(epThreshold)}>Reduce to {epThreshold}</button>
+                </div>
+              </div>
+            )}
+            {epAccepted && epCharge > 0 && (
+              <div style={{ fontSize:12, fontWeight:700, color:"var(--green)", padding:"8px 12px", background:"#f0fdf4", borderRadius:8, marginTop:10, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                <span>✓ Extra person charge accepted: +৳{epCharge.toLocaleString()}</span>
+                <button className="btn sm" onClick={()=>{ setEpAccepted(false); setAdults(epThreshold); }} style={{ fontSize:10 }}>Remove</button>
+              </div>
+            )}
+          </div>
+
+          {/* STEP 4 — ID VERIFICATION */}
+          <div className="form-section" style={{ border:"1.5px solid var(--border)", borderRadius:12, padding:"16px 18px", marginBottom:12 }}>
+            <div style={{ color:"var(--text3)", fontSize:10, fontWeight:800, letterSpacing:2, textTransform:"uppercase", marginBottom:10 }}>Step 4 — ID Verification</div>
+            {persons.map((p, idx) => (
+              <div key={idx} style={{ border:"1px solid var(--border)", borderRadius:8, padding:"10px 12px", marginBottom:8, background:"var(--bg4)" }}>
+                <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8 }}>
+                  <div style={{ fontSize:11, fontWeight:700, color:"var(--text3)", textTransform:"uppercase", letterSpacing:.5 }}>
+                    <i className="ti ti-user" style={{ color:"var(--gold)", marginRight:4 }} />Person {idx+1}
+                  </div>
+                  {idx > 0 && <button type="button" onClick={()=>removePerson(idx)} style={{ border:"none", background:"transparent", color:"var(--red)", cursor:"pointer", fontSize:11, fontWeight:700 }}><i className="ti ti-x" /> Remove</button>}
+                </div>
+                <div className="form-row" style={{ marginBottom:8 }}>
+                  <div className="form-group" style={{ marginBottom:0 }}>
+                    <label style={{ fontSize:10 }}>ID Type</label>
+                    <select value={p.idType||""} onChange={e=>updatePersonField(idx,"idType",e.target.value)} style={{ fontSize:12, padding:"5px 8px" }}>
+                      <option value="">Select</option>
+                      {ID_TYPES.map(t=><option key={t}>{t}</option>)}
+                    </select>
+                  </div>
+                  <div className="form-group" style={{ marginBottom:0 }}>
+                    <label style={{ fontSize:10 }}>ID Number</label>
+                    <input value={p.idNum||""} onChange={e=>updatePersonField(idx,"idNum",e.target.value)} placeholder="Document number" style={{ fontSize:12, padding:"5px 8px" }} />
+                  </div>
+                </div>
+                <div className="form-row">
+                  {["front","back"].map(side => (
+                    <div key={side} className="form-group" style={{ marginBottom:0 }}>
+                      <label style={{ fontSize:10 }}>{side === "front" ? "Front Side" : "Back Side"}</label>
+                      {(p[side]||[]).length > 0 && (
+                        <div style={{ display:"flex", flexWrap:"wrap", gap:4, marginBottom:6 }}>
+                          {(p[side]||[]).map((src, pi) => (
+                            <div key={pi} style={{ position:"relative" }}>
+                              <img src={src} alt="id" style={{ width:52, height:42, borderRadius:5, objectFit:"cover", border:"1.5px solid var(--gold)" }} />
+                              <button type="button" onClick={()=>removePhoto(idx,side,pi)} style={{ position:"absolute", top:-5, right:-5, width:16, height:16, borderRadius:"50%", background:"#C62828", color:"#fff", border:"none", fontSize:9, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", fontWeight:900, lineHeight:1 }}>×</button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <label style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:4, padding:"10px 8px", border:"1.5px dashed var(--border)", borderRadius:8, cursor:"pointer", background:"var(--bg3)", minHeight:52, textAlign:"center", borderColor:(p[side]||[]).length ? "var(--gold)" : "var(--border)" }}>
+                        <i className="ti ti-camera-plus" style={{ fontSize:16, color:"var(--text3)" }} />
+                        <span style={{ fontSize:10, color:"var(--text3)" }}>{(p[side]||[]).length ? "Add more" : "Upload photos"}</span>
+                        <input type="file" accept="image/*" multiple style={{ display:"none" }} onChange={e=>handlePhotoUpload(idx,side,e.target.files)} />
+                      </label>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+            <button type="button" onClick={addPerson} style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:7, width:"100%", padding:"9px 16px", border:"2px dashed var(--gold)", borderRadius:8, background:"var(--gold4)", color:"var(--gold)", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"inherit" }}>
+              <i className="ti ti-user-plus" style={{ fontSize:15 }} /> Add Another Person's ID
+            </button>
+          </div>
+
+          {/* STEP 5 — PRICING & DISCOUNT */}
+          <div className="form-section" style={{ border:"1.5px solid var(--border)", borderRadius:12, padding:"16px 18px", marginBottom:12 }}>
+            <div style={{ color:"var(--text3)", fontSize:10, fontWeight:800, letterSpacing:2, textTransform:"uppercase", marginBottom:10 }}>Step 5 — Pricing & Discount</div>
+            {selRoom ? (<>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12, marginBottom:12 }}>
+                <div className="form-group" style={{ marginBottom:0 }}><label>Discount Type</label>
                   <select value={discType} onChange={e=>{ setDiscType(e.target.value); setDiscVal(0); }}>
                     <option value="none">No Discount</option>
                     <option value="percent">Percentage (%)</option>
-                    <option value="flat">Fixed Amount</option>
+                    <option value="flat">Fixed Amount (৳)</option>
                     <option value="fixed-rate">Fixed Rate/Night</option>
                   </select>
                 </div>
-                <div className="form-group"><label>Value</label>
+                <div className="form-group" style={{ marginBottom:0 }}><label>Value</label>
                   <input type="number" value={discVal} min={0} onChange={e=>setDiscVal(e.target.value)} disabled={discType==="none"} />
                 </div>
-                <div className="form-group"><label>Reason</label>
-                  <select
-                    value={["Regular guest","Returning customer","Corporate client","Long stay","Staff discount","Special occasion","Agent referral","Other"].includes(discReason) ? discReason : discReason ? "Other" : ""}
-                    onChange={e => { if (e.target.value !== "Other") setDiscReason(e.target.value); else setDiscReason(""); }}
-                    style={{ marginBottom: 6 }}>
-                    <option value="">— Select reason —</option>
+                <div className="form-group" style={{ marginBottom:0 }}><label>Reason</label>
+                  <select value={["Regular guest","Returning customer","Corporate client","Long stay","Staff discount","Special occasion","Agent referral","Other"].includes(discReason) ? discReason : discReason ? "Other" : ""}
+                    onChange={e => { if (e.target.value !== "Other") setDiscReason(e.target.value); else setDiscReason(""); }} style={{ marginBottom:6 }}>
+                    <option value="">— Select —</option>
                     <option>Regular guest</option>
                     <option>Returning customer</option>
                     <option>Corporate client</option>
@@ -864,84 +855,62 @@ function NewBookingModal({ onClose, prefill }) {
                   <input value={discReason} onChange={e=>setDiscReason(e.target.value)} placeholder="Or type custom reason..." />
                 </div>
               </div>
-              {/* Live price box */}
-              <div style={{ background:"var(--navy)", color:"#fff", borderRadius:8, padding:"13px 16px", marginTop:4 }}>
-                {!selRoom ? (
-                  <div style={{ textAlign:"center", opacity:.5, fontSize:12 }}>Select a room to see price</div>
-                ) : (
-                  <>
-                    {/* Room breakdown */}
-                    <div style={{ fontSize:11, opacity:.6, marginBottom:6, textTransform:"uppercase", letterSpacing:.5 }}>Price Breakdown</div>
-                    <div style={{ display:"flex", flexDirection:"column", gap:4, marginBottom:8 }}>
-                      <div style={{ display:"flex", justifyContent:"space-between", fontSize:12 }}>
-                        <span>Rm {selRoom.number} ({nights}n × ৳{roomRate.toLocaleString()})</span>
-                        <span>৳{base.toLocaleString()}</span>
-                      </div>
-                      {extraRoomsData.map((er,i) => (
-                        <div key={i} style={{ display:"flex", justifyContent:"space-between", fontSize:12 }}>
-                          <span>Rm {er.number} ({nights}n × ৳{er.rate.toLocaleString()})</span>
-                          <span>৳{er.amount.toLocaleString()}</span>
-                        </div>
-                      ))}
-                      {extraRoomsData.length > 0 && (
-                        <div style={{ display:"flex", justifyContent:"space-between", fontSize:12, borderTop:"1px solid rgba(255,255,255,.2)", paddingTop:4, opacity:.7 }}>
-                          <span>Combined Base</span>
-                          <span>৳{combinedBase.toLocaleString()}</span>
-                        </div>
-                      )}
+              {/* Price summary */}
+              <div style={{ background:"var(--navy)", color:"#fff", borderRadius:10, padding:"14px 16px" }}>
+                <div style={{ fontSize:10, opacity:.6, marginBottom:8, textTransform:"uppercase", letterSpacing:.5 }}>Price Summary</div>
+                <div style={{ display:"flex", flexDirection:"column", gap:5 }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", fontSize:12 }}>
+                    <span>Rm {selRoom.number} — {nights}n × ৳{roomRate.toLocaleString()}</span>
+                    <span>৳{base.toLocaleString()}</span>
+                  </div>
+                  {extraRoomsData.map((er,i) => (
+                    <div key={i} style={{ display:"flex", justifyContent:"space-between", fontSize:12 }}>
+                      <span>Rm {er.number} — {nights}n × ৳{er.rate.toLocaleString()}</span>
+                      <span>৳{er.amount.toLocaleString()}</span>
                     </div>
-                    {discAmt > 0 && (
-                      <div style={{ display:"flex", justifyContent:"space-between", fontSize:12, color:"var(--gold2)", marginBottom:4 }}>
-                        <span>Discount</span><span>−৳{discAmt.toLocaleString()}</span>
-                      </div>
-                    )}
-                    {epAmt > 0 && (
-                      <div style={{ display:"flex", justifyContent:"space-between", fontSize:12, color:"#fbbf24", marginBottom:4 }}>
-                        <span>Extra Persons</span><span>+৳{epAmt.toLocaleString()}</span>
-                      </div>
-                    )}
-                    <div style={{ display:"flex", justifyContent:"space-between", fontSize:18, fontWeight:800, color:"var(--gold2)", borderTop:"1px solid rgba(255,255,255,.2)", paddingTop:8, marginTop:4 }}>
-                      <span>Total</span><span>৳{grand.toLocaleString()}</span>
-                    </div>
-                    {adv > 0 && (
-                      <>
-                        <div style={{ display:"flex", justifyContent:"space-between", fontSize:12, color:"#6de8a8", marginTop:6 }}>
-                          <span>Advance Paid</span><span>−৳{adv.toLocaleString()}</span>
-                        </div>
-                        <div style={{ display:"flex", justifyContent:"space-between", fontSize:14, fontWeight:700, color: balance > 0 ? "#f5a0a0" : "#6de8a8", marginTop:2 }}>
-                          <span>Balance Due</span><span>৳{balance.toLocaleString()}</span>
-                        </div>
-                      </>
-                    )}
-                  </>
-                )}
+                  ))}
+                  {discAmt > 0 && <div style={{ display:"flex", justifyContent:"space-between", fontSize:12, color:"#fcd34d" }}><span>Discount</span><span>−৳{discAmt.toLocaleString()}</span></div>}
+                  {epAmt > 0 && <div style={{ display:"flex", justifyContent:"space-between", fontSize:12, color:"#fbbf24" }}><span>Extra Persons</span><span>+৳{epAmt.toLocaleString()}</span></div>}
+                  <div style={{ display:"flex", justifyContent:"space-between", fontSize:20, fontWeight:900, color:"#c9a84c", borderTop:"1px solid rgba(255,255,255,.2)", paddingTop:8, marginTop:4 }}>
+                    <span>Total</span><span>৳{grand.toLocaleString()}</span>
+                  </div>
+                </div>
+              </div>
+            </>) : (
+              <div style={{ color:"var(--text3)", fontSize:13, padding:"12px 0", textAlign:"center", opacity:.6 }}>
+                <i className="ti ti-tag" style={{ marginRight:6 }} />Select a room first to see pricing
+              </div>
+            )}
+          </div>
+
+          {/* STEP 6 — PAYMENT */}
+          <div className="form-section" style={{ border:"1.5px solid var(--border)", borderRadius:12, padding:"16px 18px", marginBottom:4 }}>
+            <div style={{ color:"var(--text3)", fontSize:10, fontWeight:800, letterSpacing:2, textTransform:"uppercase", marginBottom:10 }}>Step 6 — Payment</div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+              <div className="form-group" style={{ marginBottom:0 }}><label>Method</label>
+                <select value={method} onChange={e=>setMethod(e.target.value)}>{PAY_METHODS.map(m=><option key={m}>{m}</option>)}</select>
+              </div>
+              <div className="form-group" style={{ marginBottom:0 }}><label>Advance Paid (৳)</label>
+                <input type="number" value={advance} min={0} onChange={e=>setAdvance(e.target.value)} />
               </div>
             </div>
-
-            {/* ── PAYMENT ── */}
-            <div className="form-section">
-              <div className="form-sec-title"><i className="ti ti-cash" /> Payment</div>
-              <div className="form-row">
-                <div className="form-group"><label>Method</label>
-                  <select value={method} onChange={e=>{ setMethod(e.target.value); }}>
-                    {PAY_METHODS.map(m=><option key={m}>{m}</option>)}
-                  </select>
-                </div>
-                <div className="form-group"><label>Advance Paid (৳)</label>
-                  <input type="number" value={advance} min={0} onChange={e=>setAdvance(e.target.value)} />
-                </div>
+            {needsTxn && (
+              <div className="form-group" style={{ marginTop:10 }}><label>Transaction Number</label>
+                <input value={txnNum} onChange={e=>setTxnNum(e.target.value)} placeholder="e.g. 01X-XXXXXXXXXX" />
               </div>
-              {needsTxn && (
-                <div className="form-group"><label>Transaction Number</label>
-                  <input value={txnNum} onChange={e=>setTxnNum(e.target.value)} placeholder="e.g. 01X-XXXXXXXXXX" />
-                </div>
-              )}
-              <div className="form-group"><label>Notes</label>
-                <textarea value={notes} onChange={e=>setNotes(e.target.value)} rows={2} style={{ resize:"vertical" }} placeholder="Special requests..." />
+            )}
+            {adv > 0 && selRoom && (
+              <div style={{ display:"flex", justifyContent:"space-between", fontSize:13, fontWeight:700, padding:"10px 14px", background: balance===0 ? "#f0fdf4" : "#fff8e1", borderRadius:8, marginTop:10, color: balance===0 ? "var(--green)" : "#7a5500" }}>
+                <span>{balance===0 ? "✓ Fully Paid" : "Balance Due after advance:"}</span>
+                <span>৳{balance.toLocaleString()}</span>
               </div>
+            )}
+            <div className="form-group" style={{ marginTop:10, marginBottom:0 }}><label>Notes / Special Requests</label>
+              <textarea value={notes} onChange={e=>setNotes(e.target.value)} rows={2} style={{ resize:"vertical" }} placeholder="Special requests..." />
             </div>
           </div>
-        </div>{/* end 2-column grid */}
+
+        </div>{/* end single column */}
 
         {/* Actions */}
         <div className="modal-actions">

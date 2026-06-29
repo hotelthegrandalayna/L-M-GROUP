@@ -1773,6 +1773,146 @@ function InvForm({
         </div>
       </Section>
 
+      {/* ── DATE & TIME (quick pick — shown right after event type) ── */}
+      {d.evType && (
+        <Section label="📅 DATE & TIME">
+          {isWH ? (
+            /* Wedding + Holud — two rows side by side */
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14 }}>
+              {/* Holud */}
+              <div style={{ background:"#fffbe8", border:"1.5px solid #d4a800", borderRadius:12, padding:"14px 16px" }}>
+                <div style={{ fontSize:11, fontWeight:800, color:"#8a6200", marginBottom:10, letterSpacing:1, textTransform:"uppercase" }}>🌼 Holud Date & Time</div>
+                <ConflictWarning conflict={hDateConflict} field="h" />
+                <Field label="Holud Date *">
+                  <input type="date" min={todayStr} value={d.hDate || ""}
+                    onChange={e => set("hDate", e.target.value)}
+                    style={inputStyle(hDateConflict ? { borderColor:"#f0b429" } : {})} />
+                </Field>
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginTop:10 }}>
+                  <Field label="Start Time 🌙">
+                    <TimeInput fieldKey="hStart" mode="holud-start" placeholder="e.g. 7 → 7:00 PM" d={d} set={set} />
+                  </Field>
+                  <Field label="End Time">
+                    <TimeInput fieldKey="hEnd" mode="holud-end" placeholder="e.g. 3 → 3:00 AM" d={d} set={set} />
+                  </Field>
+                </div>
+              </div>
+              {/* Wedding */}
+              <div style={{ background:"#fff0f0", border:"1.5px solid #e07070", borderRadius:12, padding:"14px 16px" }}>
+                <div style={{ fontSize:11, fontWeight:800, color:"#7B1212", marginBottom:10, letterSpacing:1, textTransform:"uppercase" }}>💒 Wedding Date & Time</div>
+                <ConflictWarning conflict={evDateConflict} field="ev" />
+                <Field label="Wedding Date *">
+                  <input type="date" min={todayStr} value={d.evDate || ""}
+                    onChange={e => set("evDate", e.target.value)}
+                    style={inputStyle(fieldErrors.evDate ? { borderColor:"#c0392b", background:"#fff5f5" } : evDateConflict ? { borderColor:"#f0b429" } : {})} />
+                  {fieldErrors.evDate && <div style={{ color:"#c0392b", fontSize:11, marginTop:4, fontWeight:700 }}>⚠ {fieldErrors.evDate}</div>}
+                </Field>
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10, marginTop:10 }}>
+                  <Field label="Time of Day">
+                    <select value={d.wTod || ""} onChange={e => set("wTod", e.target.value)} style={inputStyle()}>
+                      <option value="">—</option>
+                      <option value="day">☀️ Day</option>
+                      <option value="night">🌙 Night</option>
+                    </select>
+                  </Field>
+                  <Field label="Start Time">
+                    <TimeInput fieldKey="wStart" d={d} set={set}
+                      mode={d.wTod === "night" ? "night-start" : "day"}
+                      placeholder={d.wTod === "night" ? "e.g. 7 → 7:00 PM" : "e.g. 10 → 10:00 AM"} />
+                  </Field>
+                  <Field label="End Time">
+                    <TimeInput fieldKey="wEnd" d={d} set={set}
+                      mode={d.wTod === "night" ? "night-end" : "day"}
+                      placeholder={d.wTod === "night" ? "e.g. 3 → 3:00 AM" : "e.g. 4 → 4:00 PM"} />
+                  </Field>
+                </div>
+              </div>
+            </div>
+          ) : isHolud ? (
+            /* Holud only — single row */
+            <div style={{ background:"#fffbe8", border:"1.5px solid #d4a800", borderRadius:12, padding:"14px 16px" }}>
+              <div style={{ fontSize:11, fontWeight:800, color:"#8a6200", marginBottom:10, letterSpacing:1, textTransform:"uppercase" }}>🌼 Holud Date & Time</div>
+              <ConflictWarning conflict={hDateConflict} field="h" />
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))", gap:12 }}>
+                <Field label="Holud Date *">
+                  <input type="date" min={todayStr} value={d.hDate || ""}
+                    onChange={e => set("hDate", e.target.value)}
+                    style={inputStyle(hDateConflict ? { borderColor:"#f0b429" } : {})} />
+                </Field>
+                <Field label="Start Time 🌙">
+                  <TimeInput fieldKey="hStart" mode="holud-start" placeholder="e.g. 7 → 7:00 PM" d={d} set={set} />
+                </Field>
+                <Field label="End Time">
+                  <TimeInput fieldKey="hEnd" mode="holud-end" placeholder="e.g. 3 → 3:00 AM" d={d} set={set} />
+                </Field>
+              </div>
+            </div>
+          ) : isWedding ? (
+            /* Wedding / Reception / Engagement — single row */
+            <div style={{ background:"#fff0f0", border:"1.5px solid #e07070", borderRadius:12, padding:"14px 16px" }}>
+              <div style={{ fontSize:11, fontWeight:800, color:"#7B1212", marginBottom:10, letterSpacing:1, textTransform:"uppercase" }}>💒 Event Date & Time</div>
+              <ConflictWarning conflict={evDateConflict} field="ev" />
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))", gap:12 }}>
+                <Field label="Event Date *">
+                  <input type="date" min={todayStr} value={d.evDate || ""}
+                    onChange={e => set("evDate", e.target.value)}
+                    style={inputStyle(fieldErrors.evDate ? { borderColor:"#c0392b", background:"#fff5f5" } : evDateConflict ? { borderColor:"#f0b429" } : {})} />
+                  {fieldErrors.evDate && <div style={{ color:"#c0392b", fontSize:11, marginTop:4, fontWeight:700 }}>⚠ {fieldErrors.evDate}</div>}
+                </Field>
+                <Field label="Time of Day">
+                  <select value={d.wTod || ""} onChange={e => set("wTod", e.target.value)} style={inputStyle()}>
+                    <option value="">—</option>
+                    <option value="day">☀️ Day</option>
+                    <option value="night">🌙 Night</option>
+                  </select>
+                </Field>
+                <Field label="Start Time">
+                  <TimeInput fieldKey="wStart" d={d} set={set}
+                    mode={d.wTod === "night" ? "night-start" : "day"}
+                    placeholder={d.wTod === "night" ? "e.g. 7 → 7:00 PM" : "e.g. 10 → 10:00 AM"} />
+                </Field>
+                <Field label="End Time">
+                  <TimeInput fieldKey="wEnd" d={d} set={set}
+                    mode={d.wTod === "night" ? "night-end" : "day"}
+                    placeholder={d.wTod === "night" ? "e.g. 3 → 3:00 AM" : "e.g. 4 → 4:00 PM"} />
+                </Field>
+              </div>
+            </div>
+          ) : (
+            /* Generic events — Birthday, Corporate, Others */
+            <div style={{ background:"#f0fff4", border:"1.5px solid #30a060", borderRadius:12, padding:"14px 16px" }}>
+              <div style={{ fontSize:11, fontWeight:800, color:"#1a7040", marginBottom:10, letterSpacing:1, textTransform:"uppercase" }}>🎉 Event Date & Time</div>
+              <ConflictWarning conflict={evDateConflict} field="ev" />
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))", gap:12 }}>
+                <Field label="Event Date *">
+                  <input type="date" min={todayStr} value={d.evDate || ""}
+                    onChange={e => set("evDate", e.target.value)}
+                    style={inputStyle(fieldErrors.evDate ? { borderColor:"#c0392b", background:"#fff5f5" } : evDateConflict ? { borderColor:"#f0b429" } : {})} />
+                  {fieldErrors.evDate && <div style={{ color:"#c0392b", fontSize:11, marginTop:4, fontWeight:700 }}>⚠ {fieldErrors.evDate}</div>}
+                </Field>
+                <Field label="Time of Day">
+                  <select value={d.wTod || ""} onChange={e => set("wTod", e.target.value)} style={inputStyle()}>
+                    <option value="">—</option>
+                    <option value="day">☀️ Day</option>
+                    <option value="night">🌙 Night</option>
+                  </select>
+                </Field>
+                <Field label="Start Time">
+                  <TimeInput fieldKey="wStart" d={d} set={set}
+                    mode={d.wTod === "night" ? "night-start" : "day"}
+                    placeholder={d.wTod === "night" ? "e.g. 7 → 7:00 PM" : "e.g. 10 → 10:00 AM"} />
+                </Field>
+                <Field label="End Time">
+                  <TimeInput fieldKey="wEnd" d={d} set={set}
+                    mode={d.wTod === "night" ? "night-end" : "day"}
+                    placeholder={d.wTod === "night" ? "e.g. 3 → 3:00 AM" : "e.g. 4 → 4:00 PM"} />
+                </Field>
+              </div>
+            </div>
+          )}
+        </Section>
+      )}
+
       {/* ── CLIENT INFORMATION ── */}
       <Section label="CLIENT INFORMATION">
         <div

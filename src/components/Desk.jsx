@@ -1,6 +1,11 @@
 import { useState } from "react";
 import { useApp } from "../context/AppContext";
 import { todayStr, money, bookingConflicts, getRoomDisplayStatus, maxId } from "../utils/helpers";
+
+function addDaysIso(iso, days) {
+  const d = new Date(iso + "T00:00:00"); d.setDate(d.getDate() + days);
+  return d.toISOString().split("T")[0];
+}
 import GuestSurveyOverlay from "./GuestSurveyOverlay";
 import { persistHotelBookingBundle } from "../lib/hotelSupabase";
 
@@ -171,8 +176,8 @@ function RoomModal({ room, onClose, onCheckout }) {
           </div>
         </div>
         <div className="form-row">
-          <div className="form-group"><label>Check-in *</label><input type="date" value={ci} onChange={e => setCi(e.target.value)} /></div>
-          <div className="form-group"><label>Check-out *</label><input type="date" value={co} onChange={e => setCo(e.target.value)} /></div>
+          <div className="form-group"><label>Check-in *</label><input type="date" value={ci} min={today} onChange={e=>{ setCi(e.target.value); if(co && e.target.value >= co) setCo(addDaysIso(e.target.value,1)); }} /></div>
+          <div className="form-group"><label>Check-out *</label><input type="date" value={co} min={ci ? addDaysIso(ci,1) : addDaysIso(today,1)} onChange={e=>setCo(e.target.value)} /></div>
         </div>
         <div style={{ background:"var(--navy)", color:"#fff", borderRadius:8, padding:"11px 14px", textAlign:"center", fontSize:13, marginBottom:12, minHeight:48, display:"flex", alignItems:"center", justifyContent:"center" }}>
           {p ? (
