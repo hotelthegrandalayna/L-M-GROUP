@@ -376,6 +376,44 @@ export default function HallAdmin() {
       {/* ════════ OVERVIEW ════════ */}
       {tab==="overview" && (
         <div>
+          {/* ── Unpaid Past Events Alert ── */}
+          {(() => {
+            const yesterday = (() => { const d = new Date(); d.setDate(d.getDate()-1); return d.toISOString().split("T")[0]; })();
+            const overdue = invoices.filter(inv => {
+              if (inv.isLead || !inv.confirmed) return false;
+              if (inv.payStatus === "Paid") return false;
+              const evDate = inv.evDate || inv.hDate || "";
+              return evDate && evDate <= yesterday;
+            });
+            if (!overdue.length) return null;
+            return (
+              <div style={{ background:"#c0392b", borderRadius:12, padding:"14px 18px", marginBottom:16, border:"3px solid #922b21", boxShadow:"0 4px 20px rgba(192,57,43,.4)" }}>
+                <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}>
+                  <span style={{ fontSize:22 }}>🚨</span>
+                  <div>
+                    <div style={{ color:"#fff", fontWeight:800, fontSize:15 }}>PAYMENT OVERDUE — {overdue.length} event{overdue.length>1?"s":""} with unpaid balance!</div>
+                    <div style={{ color:"rgba(255,255,255,.85)", fontSize:12, marginTop:2 }}>These events are over but full payment has not been collected yet.</div>
+                  </div>
+                </div>
+                <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                  {overdue.map(inv => {
+                    const bal = inv.balance ?? Math.max(0, (inv.grand||0) - (parseFloat(inv.adv)||0));
+                    return (
+                      <div key={inv.id} style={{ background:"rgba(0,0,0,.25)", borderRadius:8, padding:"10px 14px", display:"flex", alignItems:"center", gap:12, flexWrap:"wrap" }}>
+                        <div style={{ flex:1, minWidth:160 }}>
+                          <div style={{ color:"#fff", fontWeight:700, fontSize:13 }}>{inv.client} — {inv.evType}</div>
+                          <div style={{ color:"rgba(255,255,255,.75)", fontSize:11, marginTop:2 }}>📅 {inv.evDate || inv.hDate} &nbsp;·&nbsp; {inv.num} &nbsp;·&nbsp; {inv.phone}</div>
+                        </div>
+                        <div style={{ color:"#ffd700", fontWeight:900, fontSize:16, flexShrink:0 }}>৳{bal.toLocaleString()} due</div>
+                        <div style={{ color:"rgba(255,255,255,.65)", fontSize:10, flexShrink:0 }}>{inv.payStatus === "Partial" ? "Partially paid" : "Not paid"}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
+
           {/* Stats grid */}
           <div className="hall-stat-grid" style={{ display:"grid", gridTemplateColumns: isMobile?"1fr 1fr":"repeat(4,1fr)", gap:12, marginBottom:20 }}>
             {[

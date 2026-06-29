@@ -325,7 +325,7 @@ export default function Invoice() {
   const [extNote,  setExtNote]  = useState("");
   const [extTxn,   setExtTxn]   = useState("");
 
-  const selBk = useMemo(() => bookings.find(b => b.id === parseInt(selId)), [bookings, selId, extras]);
+  const selBk = useMemo(() => bookings.find(b => String(b.id) === String(selId)), [bookings, selId, extras]);
 
   useEffect(() => {
     if (pendingInvoiceId != null) {

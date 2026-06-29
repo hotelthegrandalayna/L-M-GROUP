@@ -242,7 +242,19 @@ export default function HallInvoice() {
   const { invoices, setInvoices, leads = [], setLeads, notify, invoiceJumpSignal, curUser } =
     useHall();
   const isMobile = useIsMobile();
-  const [view, setView] = useState("form"); // default: create form
+  const [view, setView] = useState("form");
+
+  // Unpaid/partial balances from past events (confirmed, event date was yesterday or earlier)
+  const yesterday = (() => {
+    const d = new Date(); d.setDate(d.getDate() - 1);
+    return d.toISOString().split("T")[0];
+  })();
+  const unpaidPastEvents = invoices.filter(inv => {
+    if (inv.isLead || !inv.confirmed) return false;
+    if (inv.payStatus === "Paid") return false;
+    const eventDate = inv.evDate || inv.hDate || "";
+    return eventDate && eventDate <= yesterday;
+  });
   const [editInv, setEditInv] = useState(() => null); // will init in effect
   const [detailInv, setDetailInv] = useState(null);
   const [search, setSearch] = useState("");
@@ -533,6 +545,65 @@ export default function HallInvoice() {
   if (view === "form")
     return (
       <>
+        {/* ── Unpaid Past Events Alert ── */}
+        {unpaidPastEvents.length > 0 && (
+          <div style={{
+            background:"#c0392b", borderRadius:12, padding:"14px 18px",
+            margin: isMobile ? "10px 8px" : "10px 28px 0",
+            border:"3px solid #922b21",
+            boxShadow:"0 4px 20px rgba(192,57,43,.4)",
+          }}>
+            <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}>
+              <span style={{ fontSize:22 }}>🚨</span>
+              <div>
+                <div style={{ color:"#fff", fontWeight:800, fontSize:15 }}>
+                  PAYMENT OVERDUE — {unpaidPastEvents.length} event{unpaidPastEvents.length>1?"s":""} with unpaid balance!
+                </div>
+                <div style={{ color:"rgba(255,255,255,.85)", fontSize:12, marginTop:2 }}>
+                  The following events have already happened but full payment has not been collected.
+                </div>
+              </div>
+            </div>
+            <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+              {unpaidPastEvents.map(inv => {
+                const bal = inv.balance ?? Math.max(0, (inv.grand||0) - (parseFloat(inv.adv)||0));
+                return (
+                  <div key={inv.id} style={{
+                    background:"rgba(0,0,0,.25)", borderRadius:8,
+                    padding:"10px 14px", display:"flex", alignItems:"center", gap:12, flexWrap:"wrap",
+                  }}>
+                    <div style={{ flex:1, minWidth:180 }}>
+                      <div style={{ color:"#fff", fontWeight:700, fontSize:13 }}>
+                        {inv.client} — {inv.evType}
+                      </div>
+                      <div style={{ color:"rgba(255,255,255,.75)", fontSize:11, marginTop:2 }}>
+                        📅 Event: {inv.evDate || inv.hDate} &nbsp;·&nbsp; Invoice: {inv.num}
+                      </div>
+                    </div>
+                    <div style={{ textAlign:"right", flexShrink:0 }}>
+                      <div style={{ color:"#ffd700", fontWeight:900, fontSize:16 }}>
+                        ৳{bal.toLocaleString()} due
+                      </div>
+                      <div style={{ color:"rgba(255,255,255,.65)", fontSize:10 }}>
+                        {inv.payStatus === "Partial" ? "Partially paid" : "Not paid"}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => { setDetailInv(inv); setView("detail"); }}
+                      style={{
+                        background:"#fff", color:"#c0392b", border:"none",
+                        borderRadius:8, padding:"8px 14px", fontWeight:800,
+                        fontSize:12, cursor:"pointer", fontFamily:"inherit", flexShrink:0,
+                      }}>
+                      View Invoice →
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         <InvForm
           key={formKey}
           inv={currentForm}

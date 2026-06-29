@@ -469,19 +469,21 @@ function NewBookingModal({ onClose, prefill }) {
   }).filter(Boolean);
   const extraRoomsTotal = extraRoomsData.reduce((s, r) => s + r.amount, 0);
 
+  // Discount applies to combined base (all rooms)
+  const combinedBase = base + extraRoomsTotal;
   function calcDiscount(b) {
     const dv = parseFloat(discVal) || 0;
     if (discType === "percent")     return Math.round(b * dv / 100);
     if (discType === "flat")        return Math.min(dv, b);
-    if (discType === "fixed-rate" && dv > 0) return Math.max(0, b - nights * dv);
+    if (discType === "fixed-rate" && dv > 0) return Math.max(0, b - nights * dv * (1 + extraRoomsData.length));
     return 0;
   }
-  const discAmt  = calcDiscount(base);
-  const roomTotal = Math.max(0, base - discAmt);
-  const epAmt    = epAccepted ? epCharge : 0;
-  const grand    = roomTotal + epAmt + extraRoomsTotal;
-  const adv      = Math.min(parseFloat(advance) || 0, grand);
-  const balance  = Math.max(0, grand - adv);
+  const discAmt   = calcDiscount(combinedBase);
+  const roomTotal = Math.max(0, combinedBase - discAmt);
+  const epAmt     = epAccepted ? epCharge : 0;
+  const grand     = roomTotal + epAmt;
+  const adv       = Math.min(parseFloat(advance) || 0, grand);
+  const balance   = Math.max(0, grand - adv);
 
   // available rooms for selected dates
   const availRooms = rooms.filter(r => {
@@ -544,7 +546,7 @@ function NewBookingModal({ onClose, prefill }) {
       id, guest: name.trim(), phone: phone.trim(), email: "",
       room: selRoom.number, type: selRoom.type,
       checkin: ci, checkout: co, nights,
-      amount: grand, baseAmount: base,
+      amount: grand, baseAmount: combinedBase,
       invoiceTotal: grand,
       acChoice: isDual ? acChoice : undefined, roomRate,
       extraRooms: extraRoomsData.map(r => ({
@@ -561,7 +563,7 @@ function NewBookingModal({ onClose, prefill }) {
       idDocs: persons.filter(p => (p.front||[]).length || (p.back||[]).length || p.idNum),
       adults: parseInt(adults) || 2, children: parseInt(children) || 0,
       advance: a, paymentMethod: method, txnNumber: t, transactionNumber: t,
-      restPayment: 0, dueAmount: Math.max(0, roomTotal - a),
+      restPayment: 0, dueAmount: Math.max(0, grand - a),
       paymentHistory: a > 0 ? [{ ts: new Date().toISOString(), amount: a, method, txnNumber: t, note: "Advance paid", type: "room", by: curUser || "staff" }] : [],
       extraPersonCharge: (epAccepted && epCharge > 0) ? { qty: epCount, rate: epRate, total: epCharge } : null,
       createdAt: new Date().toISOString(), by: curUser || "staff" };
@@ -753,7 +755,7 @@ function NewBookingModal({ onClose, prefill }) {
               )}
 
               {/* Add Room button */}
-              {room && nights > 0 && (
+              {room && (
                 <div style={{ marginBottom:8 }}>
                   <select
                     value=""
@@ -845,34 +847,70 @@ function NewBookingModal({ onClose, prefill }) {
                   <input type="number" value={discVal} min={0} onChange={e=>setDiscVal(e.target.value)} disabled={discType==="none"} />
                 </div>
                 <div className="form-group"><label>Reason</label>
-                  <input value={discReason} onChange={e=>setDiscReason(e.target.value)} placeholder="e.g. Regular guest" />
+                  <select
+                    value={["Regular guest","Returning customer","Corporate client","Long stay","Staff discount","Special occasion","Agent referral","Other"].includes(discReason) ? discReason : discReason ? "Other" : ""}
+                    onChange={e => { if (e.target.value !== "Other") setDiscReason(e.target.value); else setDiscReason(""); }}
+                    style={{ marginBottom: 6 }}>
+                    <option value="">— Select reason —</option>
+                    <option>Regular guest</option>
+                    <option>Returning customer</option>
+                    <option>Corporate client</option>
+                    <option>Long stay</option>
+                    <option>Staff discount</option>
+                    <option>Special occasion</option>
+                    <option>Agent referral</option>
+                    <option value="Other">Other (type below)</option>
+                  </select>
+                  <input value={discReason} onChange={e=>setDiscReason(e.target.value)} placeholder="Or type custom reason..." />
                 </div>
               </div>
               {/* Live price box */}
-              <div style={{ background:"var(--navy)", color:"#fff", borderRadius:8, padding:"13px 16px", textAlign:"center", minHeight:52, display:"flex", alignItems:"center", justifyContent:"center", flexWrap:"wrap", gap:"10px 18px", marginTop:4 }}>
+              <div style={{ background:"var(--navy)", color:"#fff", borderRadius:8, padding:"13px 16px", marginTop:4 }}>
                 {!selRoom ? (
-                  <span style={{ opacity:.5, fontSize:12 }}>Select a room to see price</span>
+                  <div style={{ textAlign:"center", opacity:.5, fontSize:12 }}>Select a room to see price</div>
                 ) : (
                   <>
-                    {discAmt > 0 ? (
-                      <>
-                        <div><div style={{ fontSize:10, opacity:.7 }}>Base ({nights}n × ৳{roomRate.toLocaleString()})</div><div style={{ textDecoration:"line-through", opacity:.5, fontSize:13 }}>৳{base.toLocaleString()}</div></div>
-                        <div><div style={{ fontSize:10, opacity:.7 }}>Discount</div><div style={{ color:"var(--gold2)", fontWeight:700, fontSize:14 }}>−৳{discAmt.toLocaleString()}</div></div>
-                        <div><div style={{ fontSize:10, opacity:.7 }}>Room Total</div><div style={{ fontSize:20, fontWeight:800, color:"var(--gold2)" }}>৳{roomTotal.toLocaleString()}</div></div>
-                      </>
-                    ) : (
-                      <div><div style={{ fontSize:10, opacity:.7 }}>{nights} night{nights>1?"s":""} × ৳{roomRate.toLocaleString()}</div><div style={{ fontSize:20, fontWeight:800, color:"var(--gold2)" }}>৳{roomTotal.toLocaleString()}</div></div>
+                    {/* Room breakdown */}
+                    <div style={{ fontSize:11, opacity:.6, marginBottom:6, textTransform:"uppercase", letterSpacing:.5 }}>Price Breakdown</div>
+                    <div style={{ display:"flex", flexDirection:"column", gap:4, marginBottom:8 }}>
+                      <div style={{ display:"flex", justifyContent:"space-between", fontSize:12 }}>
+                        <span>Rm {selRoom.number} ({nights}n × ৳{roomRate.toLocaleString()})</span>
+                        <span>৳{base.toLocaleString()}</span>
+                      </div>
+                      {extraRoomsData.map((er,i) => (
+                        <div key={i} style={{ display:"flex", justifyContent:"space-between", fontSize:12 }}>
+                          <span>Rm {er.number} ({nights}n × ৳{er.rate.toLocaleString()})</span>
+                          <span>৳{er.amount.toLocaleString()}</span>
+                        </div>
+                      ))}
+                      {extraRoomsData.length > 0 && (
+                        <div style={{ display:"flex", justifyContent:"space-between", fontSize:12, borderTop:"1px solid rgba(255,255,255,.2)", paddingTop:4, opacity:.7 }}>
+                          <span>Combined Base</span>
+                          <span>৳{combinedBase.toLocaleString()}</span>
+                        </div>
+                      )}
+                    </div>
+                    {discAmt > 0 && (
+                      <div style={{ display:"flex", justifyContent:"space-between", fontSize:12, color:"var(--gold2)", marginBottom:4 }}>
+                        <span>Discount</span><span>−৳{discAmt.toLocaleString()}</span>
+                      </div>
                     )}
                     {epAmt > 0 && (
-                      <>
-                        <div style={{ borderLeft:"1px solid rgba(255,255,255,.2)", paddingLeft:18 }}><div style={{ fontSize:10, opacity:.7 }}>Extra Persons</div><div style={{ color:"#fbbf24", fontWeight:700, fontSize:14 }}>+৳{epAmt.toLocaleString()}</div></div>
-                        <div><div style={{ fontSize:10, opacity:.7 }}>Grand Total</div><div style={{ fontSize:20, fontWeight:800, color:"var(--gold2)" }}>৳{grand.toLocaleString()}</div></div>
-                      </>
+                      <div style={{ display:"flex", justifyContent:"space-between", fontSize:12, color:"#fbbf24", marginBottom:4 }}>
+                        <span>Extra Persons</span><span>+৳{epAmt.toLocaleString()}</span>
+                      </div>
                     )}
+                    <div style={{ display:"flex", justifyContent:"space-between", fontSize:18, fontWeight:800, color:"var(--gold2)", borderTop:"1px solid rgba(255,255,255,.2)", paddingTop:8, marginTop:4 }}>
+                      <span>Total</span><span>৳{grand.toLocaleString()}</span>
+                    </div>
                     {adv > 0 && (
                       <>
-                        <div style={{ borderLeft:"1px solid rgba(255,255,255,.2)", paddingLeft:18 }}><div style={{ fontSize:10, opacity:.7 }}>Advance</div><div style={{ color:"#6de8a8", fontWeight:700, fontSize:14 }}>−৳{adv.toLocaleString()}</div></div>
-                        <div><div style={{ fontSize:10, opacity:.7 }}>Balance Due</div><div style={{ fontSize:20, fontWeight:800, color: balance > 0 ? "#f5a0a0" : "#6de8a8" }}>৳{balance.toLocaleString()}</div></div>
+                        <div style={{ display:"flex", justifyContent:"space-between", fontSize:12, color:"#6de8a8", marginTop:6 }}>
+                          <span>Advance Paid</span><span>−৳{adv.toLocaleString()}</span>
+                        </div>
+                        <div style={{ display:"flex", justifyContent:"space-between", fontSize:14, fontWeight:700, color: balance > 0 ? "#f5a0a0" : "#6de8a8", marginTop:2 }}>
+                          <span>Balance Due</span><span>৳{balance.toLocaleString()}</span>
+                        </div>
                       </>
                     )}
                   </>
@@ -936,8 +974,18 @@ function NewBookingModal({ onClose, prefill }) {
 
 
 export default function Bookings() {
-  const { bookings } = useApp();
+  const { bookings, updateBookings, updateRevenues, revenues } = useApp();
   const today = todayStr();
+
+  // Bangladesh time past 12pm check
+  const isPast12pmBST = (() => {
+    const bstHour = (new Date().getUTCHours() + 6) % 24;
+    return bstHour >= 12;
+  })();
+  const overdueCheckouts = bookings.filter(b =>
+    b.status === "checked-in" && b.checkout <= today && isPast12pmBST
+  );
+
   const [filter, setFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [dateFrom, setDateFrom] = useState("");
@@ -1011,8 +1059,52 @@ export default function Bookings() {
     { key:null,       label:"Actions",    w:80  },
   ];
 
+  function quickCheckout(bid) {
+    const b = bookings.find(x => x.id === bid); if (!b) return;
+    const due = Math.max(0, (b.invoiceTotal ?? b.amount ?? 0) - (parseFloat(b.advance)||0) - (parseFloat(b.restPayment)||0));
+    const updated = { ...b, status:"checked-out", dueAmount: due > 0 ? due : 0 };
+    updateBookings(bookings.map(x => x.id === bid ? updated : x));
+    if (due > 0) updateRevenues([...revenues, { id: Date.now(), source:"Room Rent", amount: due, date: today, note:`${b.guest} Rm ${b.room} — collected at checkout` }]);
+  }
+
   return (
     <div style={{ padding:"22px 24px", margin:"0 auto", overflowY:"auto", height:"100%", boxSizing:"border-box" }}>
+
+      {/* ── Overdue Checkout Alert ── */}
+      {overdueCheckouts.length > 0 && (
+        <div style={{ background:"#c0392b", borderRadius:12, padding:"14px 18px", marginBottom:18, border:"3px solid #922b21", boxShadow:"0 4px 20px rgba(192,57,43,.4)" }}>
+          <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}>
+            <span style={{ fontSize:22 }}>🚨</span>
+            <div>
+              <div style={{ color:"#fff", fontWeight:800, fontSize:15 }}>
+                CHECKOUT OVERDUE — {overdueCheckouts.length} guest{overdueCheckouts.length>1?"s":""} must check out!
+              </div>
+              <div style={{ color:"rgba(255,255,255,.8)", fontSize:12, marginTop:2 }}>
+                Past 12:00 PM Bangladesh time. These guests have not been checked out yet.
+              </div>
+            </div>
+          </div>
+          <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+            {overdueCheckouts.map(b => (
+              <div key={b.id} style={{ background:"rgba(0,0,0,.25)", borderRadius:8, padding:"10px 14px", display:"flex", alignItems:"center", gap:12 }}>
+                <div style={{ background:"#fff", borderRadius:6, width:36, height:36, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                  <span style={{ fontWeight:900, fontSize:13, color:"#c0392b" }}>{b.room}</span>
+                </div>
+                <div style={{ flex:1 }}>
+                  <div style={{ color:"#fff", fontWeight:700, fontSize:13 }}>{b.guest}</div>
+                  <div style={{ color:"rgba(255,255,255,.7)", fontSize:11 }}>
+                    📅 Checkout: {b.checkout} · {b.phone}
+                  </div>
+                </div>
+                <button onClick={() => quickCheckout(b.id)} style={{ background:"#fff", color:"#c0392b", border:"none", borderRadius:8, padding:"8px 16px", fontWeight:800, fontSize:13, cursor:"pointer", fontFamily:"inherit", flexShrink:0 }}>
+                  ✓ Check Out Now
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:18, flexWrap:"wrap", gap:10 }}>
         <div>
           <div style={{ fontSize:20, fontWeight:800, fontFamily:"'Playfair Display',serif", color:"var(--navy)" }}>Bookings</div>

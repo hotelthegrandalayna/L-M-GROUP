@@ -19,26 +19,27 @@ export function nightsBetween(ci, co) {
 export function bookingConflicts(roomNum, ci, co, excludeId, bookings) {
   const ciD = new Date(ci), coD = new Date(co);
   return bookings.some(b => {
-    if (b.room !== roomNum) return false;
     if (excludeId !== null && b.id === excludeId) return false;
     if (b.status === 'cancelled' || b.status === 'checked-out') return false;
+    // Check primary room AND all extra rooms
+    const allRooms = [b.room, ...(b.extraRooms || []).map(r => r.number)];
+    if (!allRooms.includes(roomNum)) return false;
     const bci = new Date(b.checkin), bco = new Date(b.checkout);
     return ciD < bco && coD > bci;
   });
 }
 
 export function getRoomDisplayStatus(room, bookings, today) {
-  const active = bookings.find(b =>
-    b.room === room.number &&
-    (b.status === 'checked-in') &&
-    b.checkin <= today && b.checkout >= today
-  );
+  const num = room.number;
+  const active = bookings.find(b => {
+    const allRooms = [b.room, ...(b.extraRooms || []).map(r => r.number)];
+    return allRooms.includes(num) && b.status === 'checked-in' && b.checkin <= today && b.checkout >= today;
+  });
   if (active) return 'occupied';
-  const reserved = bookings.find(b =>
-    b.room === room.number &&
-    b.status === 'confirmed' &&
-    b.checkout > today
-  );
+  const reserved = bookings.find(b => {
+    const allRooms = [b.room, ...(b.extraRooms || []).map(r => r.number)];
+    return allRooms.includes(num) && b.status === 'confirmed' && b.checkout > today;
+  });
   if (reserved) return 'reserved';
   return 'vacant';
 }

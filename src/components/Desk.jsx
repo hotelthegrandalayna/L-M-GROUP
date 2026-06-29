@@ -394,6 +394,20 @@ export default function Desk() {
   const [surveyBooking, setSurveyBooking] = useState(null);     // booking for full-screen survey
   const today = todayStr();
 
+  // Bangladesh Standard Time = UTC+6. Checkout alert fires after 12:00 PM BST.
+  const isPast12pmBST = (() => {
+    const nowUTC = new Date();
+    const bstHour = (nowUTC.getUTCHours() + 6) % 24;
+    return bstHour >= 12;
+  })();
+
+  // Guests whose checkout date has arrived but are still checked-in (overdue checkouts)
+  const overdueCheckouts = bookings.filter(b =>
+    b.status === "checked-in" &&
+    b.checkout <= today &&
+    isPast12pmBST
+  );
+
   const dRev  = revenues.filter(r => r.date === today).reduce((s,r) => s+r.amount, 0);
   const dExp  = expenses.filter(e => e.date === today).reduce((s,e) => s+e.amount, 0);
   const tRev  = revenues.reduce((s,r) => s+r.amount, 0);
@@ -456,6 +470,55 @@ export default function Desk() {
 
   return (
     <div style={{ padding:"14px 20px 18px", boxSizing:"border-box" }}>
+
+      {/* ── Overdue Checkout Alert ── */}
+      {overdueCheckouts.length > 0 && (
+        <div style={{
+          background:"#c0392b", borderRadius:12, padding:"14px 18px",
+          marginBottom:14, border:"3px solid #922b21",
+          boxShadow:"0 4px 20px rgba(192,57,43,.4)",
+        }}>
+          <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}>
+            <span style={{ fontSize:22 }}>🚨</span>
+            <div>
+              <div style={{ color:"#fff", fontWeight:800, fontSize:15 }}>
+                CHECKOUT OVERDUE — {overdueCheckouts.length} guest{overdueCheckouts.length>1?"s":""} must check out now!
+              </div>
+              <div style={{ color:"rgba(255,255,255,.8)", fontSize:12, marginTop:2 }}>
+                It is past 12:00 PM Bangladesh time. The following guest{overdueCheckouts.length>1?"s have":""} has not been checked out.
+              </div>
+            </div>
+          </div>
+          <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+            {overdueCheckouts.map(b => (
+              <div key={b.id} style={{
+                background:"rgba(0,0,0,.25)", borderRadius:8,
+                padding:"10px 14px", display:"flex", alignItems:"center", gap:12,
+              }}>
+                <div style={{ background:"#fff", borderRadius:6, width:36, height:36, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                  <span style={{ fontWeight:900, fontSize:13, color:"#c0392b" }}>{b.room}</span>
+                </div>
+                <div style={{ flex:1 }}>
+                  <div style={{ color:"#fff", fontWeight:700, fontSize:13 }}>{b.guest}</div>
+                  <div style={{ color:"rgba(255,255,255,.7)", fontSize:11 }}>
+                    📅 Checkout: {b.checkout} · {b.phone}
+                    {b.extraRooms?.length > 0 && ` · Also Rm ${b.extraRooms.map(r=>r.number).join(", ")}`}
+                  </div>
+                </div>
+                <button
+                  onClick={() => chkOut(b.id)}
+                  style={{
+                    background:"#fff", color:"#c0392b", border:"none", borderRadius:8,
+                    padding:"8px 16px", fontWeight:800, fontSize:13, cursor:"pointer",
+                    fontFamily:"inherit", flexShrink:0,
+                  }}>
+                  ✓ Check Out Now
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* ── Stat bar ── */}
       <div style={{ display:"grid", gridTemplateColumns:"repeat(6,1fr)", gap:8, marginBottom:14 }}>

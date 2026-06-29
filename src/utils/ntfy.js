@@ -26,14 +26,17 @@ export async function sendNtfyAlert(title, message, topicOverride) {
   const topic = topicOverride || cfg.topic;
   if (!topic) return;
   if (!topicOverride && !cfg.enabled) return;
+  // Strip non-ASCII from title for header safety, replace Bengali taka sign
+  const safeTitle = title.replace(/৳/g, "BDT").replace(/[^\x00-\x7F]/g, "");
+  const safeBody  = message.replace(/৳/g, "BDT");
   await fetch(`https://ntfy.sh/${encodeURIComponent(topic)}`, {
     method: "POST",
     mode: "no-cors",
     headers: {
-      "Title": encodeURIComponent(title),
+      "Title": safeTitle,
       "Priority": "high",
       "Tags": "bell",
     },
-    body: message,
+    body: safeBody,
   });
 }

@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { hasHotelSupabaseConfig, loadHotelBookingsFromSupabase, loadRoomsFromSupabase, saveRoomsToSupabase } from "../lib/hotelSupabase";
 import { hasSupabase, upsertRows, loadRows } from "../utils/supabaseSync";
+import { syncNtfyConfigFromSupabase } from "../utils/ntfy";
 
 const GA_ROOMS_VER = 'alayna-r1';
 
@@ -112,6 +113,9 @@ export function AppProvider({ children }) {
       .catch((err) => {
         console.error("Failed to load hotel bookings from Supabase:", err);
       });
+
+    // Sync ntfy config so hotel notifications work even if saved from hall admin
+    syncNtfyConfigFromSupabase().catch(() => {});
 
     // Also load rooms from Supabase — overrides hardcoded defaults
     loadRoomsFromSupabase()
