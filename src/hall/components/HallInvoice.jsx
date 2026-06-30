@@ -1739,6 +1739,7 @@ function InvForm({
                   <input type="date" min={todayStr} value={d.hDate || ""}
                     onChange={e => set("hDate", e.target.value)}
                     style={inputStyle(hDateConflict ? { borderColor:"#f0b429" } : {})} />
+                  {d.hDate && <div style={{ fontSize:11, color:"#8a6200", marginTop:3, fontWeight:600 }}>📅 {fmtDateWithDay(d.hDate)}</div>}
                 </Field>
                 <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginTop:10 }}>
                   <Field label="Start Time 🌙">
@@ -1757,6 +1758,7 @@ function InvForm({
                   <input type="date" min={todayStr} value={d.evDate || ""}
                     onChange={e => set("evDate", e.target.value)}
                     style={inputStyle(fieldErrors.evDate ? { borderColor:"#c0392b", background:"#fff5f5" } : evDateConflict ? { borderColor:"#f0b429" } : {})} />
+                  {d.evDate && <div style={{ fontSize:11, color:"#7B1212", marginTop:3, fontWeight:600 }}>📅 {fmtDateWithDay(d.evDate)}</div>}
                   {fieldErrors.evDate && <div style={{ color:"#c0392b", fontSize:11, marginTop:4, fontWeight:700 }}>⚠ {fieldErrors.evDate}</div>}
                 </Field>
                 <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10, marginTop:10 }}>
@@ -1790,6 +1792,7 @@ function InvForm({
                   <input type="date" min={todayStr} value={d.hDate || ""}
                     onChange={e => set("hDate", e.target.value)}
                     style={inputStyle(hDateConflict ? { borderColor:"#f0b429" } : {})} />
+                  {d.hDate && <div style={{ fontSize:11, color:"#8a6200", marginTop:3, fontWeight:600 }}>📅 {fmtDateWithDay(d.hDate)}</div>}
                 </Field>
                 <Field label="Start Time 🌙">
                   <TimeInput fieldKey="hStart" mode="holud-start" placeholder="e.g. 7 → 7:00 PM" d={d} set={set} />
@@ -1809,6 +1812,7 @@ function InvForm({
                   <input type="date" min={todayStr} value={d.evDate || ""}
                     onChange={e => set("evDate", e.target.value)}
                     style={inputStyle(fieldErrors.evDate ? { borderColor:"#c0392b", background:"#fff5f5" } : evDateConflict ? { borderColor:"#f0b429" } : {})} />
+                  {d.evDate && <div style={{ fontSize:11, color:"#7B1212", marginTop:3, fontWeight:600 }}>📅 {fmtDateWithDay(d.evDate)}</div>}
                   {fieldErrors.evDate && <div style={{ color:"#c0392b", fontSize:11, marginTop:4, fontWeight:700 }}>⚠ {fieldErrors.evDate}</div>}
                 </Field>
                 <Field label="Time of Day">
@@ -1840,6 +1844,7 @@ function InvForm({
                   <input type="date" min={todayStr} value={d.evDate || ""}
                     onChange={e => set("evDate", e.target.value)}
                     style={inputStyle(fieldErrors.evDate ? { borderColor:"#c0392b", background:"#fff5f5" } : evDateConflict ? { borderColor:"#f0b429" } : {})} />
+                  {d.evDate && <div style={{ fontSize:11, color:"#1a7040", marginTop:3, fontWeight:600 }}>📅 {fmtDateWithDay(d.evDate)}</div>}
                   {fieldErrors.evDate && <div style={{ color:"#c0392b", fontSize:11, marginTop:4, fontWeight:700 }}>⚠ {fieldErrors.evDate}</div>}
                 </Field>
                 <Field label="Time of Day">

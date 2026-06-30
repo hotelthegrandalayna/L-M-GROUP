@@ -651,12 +651,14 @@ function NewBookingModal({ onClose, prefill }) {
                 <input type="date" value={ci} min={yesterday}
                   onChange={e=>{ setCi(e.target.value); setCo(addDaysIso(e.target.value,1)); }}
                   style={{ fontWeight:800, fontSize:15 }} />
+                {ci && <div style={{ color:"rgba(255,255,255,.6)", fontSize:11, marginTop:3 }}>{formatDate(ci)}</div>}
               </div>
               <div className="form-group" style={{ marginBottom:0 }}>
                 <label style={{ color:"rgba(255,255,255,.7)", fontSize:11 }}>Check-out *</label>
                 <input type="date" value={co} min={ci ? addDaysIso(ci,1) : addDaysIso(today,1)}
                   onChange={e=>setCo(e.target.value)}
                   style={{ fontWeight:800, fontSize:15 }} />
+                {co && <div style={{ color:"rgba(255,255,255,.6)", fontSize:11, marginTop:3 }}>{formatDate(co)}</div>}
               </div>
               <div style={{ background:"rgba(255,255,255,.1)", borderRadius:8, padding:"10px 14px", textAlign:"center" }}>
                 <div style={{ color:"rgba(255,255,255,.6)", fontSize:10, textTransform:"uppercase", letterSpacing:1 }}>Nights</div>
