@@ -25,7 +25,10 @@ function Badge({ status }) {
 function addDaysIso(iso, days) {
   const d = new Date(iso + "T00:00:00");
   d.setDate(d.getDate() + days);
-  return d.toISOString().split("T")[0];
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 function getHotelPaidAmount(b) {
@@ -411,6 +414,7 @@ function SMSSendModal({ booking, refName, refPhone, status, onClose }) {
 function NewBookingModal({ onClose, prefill }) {
   const { curUser, rooms, bookings, updateBookings, revenues, updateRevenues, notify, extraPersonRules } = useApp();
   const today = todayStr();
+  const yesterday = addDaysIso(today, -1);
   const tmr   = addDaysIso(today, 1);
 
   // Guest — pre-fill from prefill prop if provided (Add Another Room)
@@ -441,8 +445,11 @@ function NewBookingModal({ onClose, prefill }) {
   const [method,   setMethod]   = useState("Cash");
   const [advance,  setAdvance]  = useState(0);
   const [txnNum,   setTxnNum]   = useState("");
-  const [notes,    setNotes]    = useState("");
-  const [smsData,  setSmsData]  = useState(null); // { booking, refName, refPhone }
+  const [notes,       setNotes]       = useState("");
+  const [guestType,   setGuestType]   = useState("single"); // "single" | "couple" | "group"
+  const [spouseName,  setSpouseName]  = useState("");
+  const [groupMembers, setGroupMembers] = useState([""]);
+  const [smsData,     setSmsData]     = useState(null); // { booking, refName, refPhone }
 
   const needsTxn = ["bKash","Nagad"].includes(method);
   const epThreshold = (extraPersonRules?.threshold) || 3;
@@ -565,6 +572,9 @@ function NewBookingModal({ onClose, prefill }) {
       restPayment: 0, dueAmount: Math.max(0, grand - a),
       paymentHistory: a > 0 ? [{ ts: new Date().toISOString(), amount: a, method, txnNumber: t, note: "Advance paid", type: "room", by: curUser || "staff" }] : [],
       extraPersonCharge: (epAccepted && epCharge > 0) ? { qty: epCount, rate: epRate, total: epCharge } : null,
+      guestType: guestType || "single",
+      spouseName: guestType === "couple" ? spouseName.trim() : "",
+      groupMembers: guestType === "group" ? groupMembers.map(m=>m.trim()).filter(Boolean) : [],
       createdAt: new Date().toISOString(), by: curUser || "staff" };
     updateBookings([...bookings, bkObj]);
     void persistHotelBookingBundle(bkObj)
@@ -638,7 +648,7 @@ function NewBookingModal({ onClose, prefill }) {
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12, alignItems:"end" }}>
               <div className="form-group" style={{ marginBottom:0 }}>
                 <label style={{ color:"rgba(255,255,255,.7)", fontSize:11 }}>Check-in *</label>
-                <input type="date" value={ci} min={today}
+                <input type="date" value={ci} min={yesterday}
                   onChange={e=>{ setCi(e.target.value); setCo(addDaysIso(e.target.value,1)); }}
                   style={{ fontWeight:800, fontSize:15 }} />
               </div>
@@ -741,6 +751,51 @@ function NewBookingModal({ onClose, prefill }) {
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
               <div className="form-group" style={{ marginBottom:0 }}><label>Full Name *</label><input value={name} onChange={e=>setName(e.target.value)} placeholder="As per ID" autoFocus /></div>
               <div className="form-group" style={{ marginBottom:0 }}><label>Phone *</label><input value={phone} onChange={e=>setPhone(e.target.value)} placeholder="+880..." /></div>
+              <div className="form-group" style={{ marginBottom:0 }}>
+                <label>Guest Type</label>
+                <select value={guestType} onChange={e=>{
+                  setGuestType(e.target.value);
+                  if(e.target.value!=="couple") setSpouseName("");
+                  if(e.target.value!=="group") setGroupMembers([""]);
+                }}>
+                  <option value="single">Single / Family</option>
+                  <option value="couple">Couple</option>
+                  <option value="group">Group</option>
+                </select>
+              </div>
+              {guestType === "couple" && (
+                <div className="form-group" style={{ marginBottom:0 }}>
+                  <label>Spouse / Wife Name</label>
+                  <input value={spouseName} onChange={e=>setSpouseName(e.target.value)} placeholder="As per ID" />
+                </div>
+              )}
+            </div>
+            {guestType === "group" && (
+              <div style={{ marginTop:12, border:"1.5px solid #c4a8f0", borderRadius:9, padding:"12px 14px", background:"#f8f4ff" }}>
+                <div style={{ fontSize:11, fontWeight:800, color:"#5a2ea8", marginBottom:10, textTransform:"uppercase", letterSpacing:.5 }}>
+                  👥 Group Members (other than main guest)
+                </div>
+                {groupMembers.map((m, i) => (
+                  <div key={i} style={{ display:"flex", gap:8, marginBottom:7, alignItems:"center" }}>
+                    <input
+                      value={m}
+                      onChange={e => setGroupMembers(prev => prev.map((x,j) => j===i ? e.target.value : x))}
+                      placeholder={`Member ${i+1} name`}
+                      style={{ flex:1, fontSize:13 }}
+                    />
+                    {groupMembers.length > 1 && (
+                      <button type="button" onClick={() => setGroupMembers(prev => prev.filter((_,j) => j!==i))}
+                        style={{ background:"none", border:"none", cursor:"pointer", color:"#c0392b", fontSize:18, lineHeight:1, padding:"0 4px" }}>✕</button>
+                    )}
+                  </div>
+                ))}
+                <button type="button" onClick={() => setGroupMembers(prev => [...prev, ""])}
+                  style={{ display:"flex", alignItems:"center", gap:6, padding:"7px 14px", border:"1.5px dashed #c4a8f0", borderRadius:7, background:"transparent", color:"#5a2ea8", fontSize:12, fontWeight:700, cursor:"pointer", marginTop:2 }}>
+                  + Add Member
+                </button>
+              </div>
+            )}
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginTop: guestType === "group" ? 12 : 0 }}>
               <div className="form-group" style={{ marginBottom:0 }}><label>Adults</label><input type="number" value={adults} min={1} max={20} onChange={e=>{ setAdults(e.target.value); setEpAccepted(false); }} style={{ textAlign:"center", fontWeight:800 }} /></div>
               <div className="form-group" style={{ marginBottom:0 }}><label>Children</label><input type="number" value={children} min={0} max={15} onChange={e=>setChildren(e.target.value)} style={{ textAlign:"center" }} /></div>
               <div className="form-group" style={{ marginBottom:0 }}><label>Nationality</label><input value={nat} onChange={e=>setNat(e.target.value)} placeholder="Bangladeshi" /></div>

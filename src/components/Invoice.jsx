@@ -92,7 +92,9 @@ function buildInvoiceHTML(b, rooms, invExtras, mode) {
     + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:0;padding-top:12px;border-top:1px solid #e8e4dc;">'
       + '<div style="padding-right:18px;">'
         + '<div style="font-size:10px;font-weight:800;letter-spacing:2px;text-transform:uppercase;color:#C9A84C;margin-bottom:6px;">Bill To</div>'
-        + '<div style="font-size:18px;font-weight:700;color:#000;font-family:Georgia,serif;margin-bottom:4px;">'+b.guest+'</div>'
+        + '<div style="font-size:18px;font-weight:700;color:#000;font-family:Georgia,serif;margin-bottom:2px;">'+b.guest+'</div>'
+        + (b.spouseName ? '<div style="font-size:12px;color:#555;margin-bottom:3px;">& '+b.spouseName+'</div>' : '')
+        + ((b.groupMembers && b.groupMembers.length) ? '<div style="font-size:10px;color:#555;margin-bottom:3px;line-height:1.6;">Members: '+b.groupMembers.join(', ')+'</div>' : '')
         + '<div style="font-size:10px;color:#555;margin-bottom:2px;">'+b.phone+'</div>'
         + (b.idNum ? '<div style="font-size:9.5px;color:#aaa;">'+b.idType+': '+b.idNum+'</div>' : '')
       + '</div>'

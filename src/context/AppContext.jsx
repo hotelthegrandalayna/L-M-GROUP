@@ -92,6 +92,9 @@ export function AppProvider({ children }) {
     if (!hasHotelSupabaseConfig()) return;
     const { silent = true } = opts;
 
+    // Always sync ntfy config so notifications work from any device
+    syncNtfyConfigFromSupabase().catch(() => {});
+
     // Always sync rooms (admin edits must propagate instantly across devices)
     loadRoomsFromSupabase()
       .then((remoteRooms) => {
@@ -147,7 +150,6 @@ export function AppProvider({ children }) {
 
     // Initial load — also fetch expenses/revenues
     syncFromSupabase({ silent: false });
-    syncNtfyConfigFromSupabase().catch(() => {});
 
     // Re-sync when tab becomes visible (catches edits made on another device)
     const onVisibility = () => {
@@ -155,8 +157,8 @@ export function AppProvider({ children }) {
     };
     document.addEventListener('visibilitychange', onVisibility);
 
-    // Poll every 60 seconds so long-running sessions stay in sync
-    const interval = setInterval(() => syncFromSupabase(), 60_000);
+    // Poll every 30 seconds so long-running sessions stay in sync
+    const interval = setInterval(() => syncFromSupabase(), 30_000);
 
     return () => {
       document.removeEventListener('visibilitychange', onVisibility);
