@@ -66,17 +66,16 @@ function BookingModal({ booking, onClose }) {
       txnNumber: needsTxn ? payTxn : "", note: payNote || "Payment collected", type: "room", by: curUser || "staff" };
     const newRest = (parseFloat(b.restPayment) || 0) + amt;
     const newDue = Math.max(0, invoiceTotal - (parseFloat(b.advance) || 0) - newRest);
-    const updated = bookings.map(x => x.id === b.id ? {
+    updateBookings(prev => prev.map(x => x.id === b.id ? {
       ...x,
-      paymentHistory: [...history, entry],
+      paymentHistory: [...(x.paymentHistory || []), entry],
       restPayment: newRest,
       dueAmount: newDue,
       transactionNumber: needsTxn ? payTxn : (x.transactionNumber || x.txnNumber || ""),
       txnNumber: needsTxn ? payTxn : (x.txnNumber || x.transactionNumber || ""),
       paymentMethod: payMtd,
-    } : x);
-    updateBookings(updated);
-    updateRevenues([...revenues, { id: maxId(revenues), source: "Room Rent", amount: amt, date: today,
+    } : x));
+    updateRevenues(prev => [...prev, { id: maxId(prev), source: "Room Rent", amount: amt, date: today,
       note: b.guest + " Rm " + b.room + " - " + (payNote || "payment") + " (" + payMtd + ")", bookingId: b.id }]);
     notify("Payment of " + money(amt) + " recorded", "success");
     logEvent("hotel", "room_payment_collected", { num:String(b.id), guest:b.guest, amount:amt, note:`Rm ${b.room} · via ${payMtd}` }, curUser);
@@ -102,9 +101,9 @@ function BookingModal({ booking, onClose }) {
     const newNights = nightsBetween(b.checkin, newCo);
     const newAmt    = room ? newNights * room.rate : b.amount + extCost;
     const updatedB  = { ...b, checkout: newCo, nights: newNights, amount: newAmt };
-    updateBookings(bookings.map(x => x.id === b.id ? updatedB : x));
+    updateBookings(prev => prev.map(x => x.id === b.id ? updatedB : x));
     void persistHotelBookingBundle(updatedB).catch(err => console.error("Supabase extend sync failed:", err));
-    if (extCost > 0) updateRevenues([...revenues, { id: maxId(revenues), source: "Room Rent", amount: extCost, date: today,
+    if (extCost > 0) updateRevenues(prev => [...prev, { id: maxId(prev), source: "Room Rent", amount: extCost, date: today,
       note: b.guest + " Rm " + b.room + " - stay extended " + extDays + "d", bookingId: b.id }]);
     notify("Stay extended to " + newCo, "success");
     onClose();
@@ -113,7 +112,7 @@ function BookingModal({ booking, onClose }) {
   function cancelBooking() {
     if (!window.confirm("Cancel this booking? This cannot be undone.")) return;
     const updated = { ...b, status: "cancelled" };
-    updateBookings(bookings.map(x => x.id === b.id ? updated : x));
+    updateBookings(prev => prev.map(x => x.id === b.id ? updated : x));
     void persistHotelBookingBundle(updated).catch(err => console.error("Supabase cancel sync failed:", err));
     notify("Booking cancelled", "success");
     logEvent("hotel", "booking_cancelled", { num:String(b.id), guest:b.guest, amount:invoiceTotal, note:`Rm ${b.room}` }, curUser);
@@ -123,7 +122,7 @@ function BookingModal({ booking, onClose }) {
   function saveEdit() {
     if (!eGuest.trim()) { notify("Guest name required", "error"); return; }
     const updated = { ...b, guest: eGuest.trim(), phone: ePhone.trim(), notes: eNotes.trim() };
-    updateBookings(bookings.map(x => x.id === b.id ? updated : x));
+    updateBookings(prev => prev.map(x => x.id === b.id ? updated : x));
     void persistHotelBookingBundle(updated).catch(err => console.error("Supabase edit sync failed:", err));
     notify("Booking updated", "success");
     logEvent("hotel", "invoice_updated", { num:String(b.id), guest:eGuest.trim(), amount:invoiceTotal, note:`Rm ${b.room} · details edited` }, curUser);
@@ -605,8 +604,8 @@ function NewBookingModal({ onClose, prefill }) {
       `🏨 New Hotel Booking — ${bkObj.guest}`,
       `Room: ${bkObj.room}\nCheck-in: ${bkObj.checkin}\nCheck-out: ${bkObj.checkout}\nNights: ${bkObj.nights}\nTotal: ৳${(bkObj.amount||0).toLocaleString()}\nAdvance: ৳${(bkObj.advance||0).toLocaleString()}`
     ).catch(() => {});
-    if (a > 0) updateRevenues([...revenues, {
-      id: maxId(revenues), source: "Room Rent", amount: a, date: today,
+    if (a > 0) updateRevenues(prev => [...prev, {
+      id: maxId(prev), source: "Room Rent", amount: a, date: today,
       note: name.trim() + " Rm " + selRoom.number + (status === "confirmed" ? " — reservation deposit" : " — advance payment") + " (" + method + ")",
       bookingId: id }]);
     notify(name.trim() + (status === "checked-in" ? " checked in ✓" : " booking saved") + (discAmt > 0 ? " · Discount " + money(discAmt) : ""), "success");

@@ -87,72 +87,80 @@ export function HallProvider({ children }) {
   const [invoiceJumpSignal, setInvoiceJumpSignal] = useState(0);
   const bumpInvoiceJump = useCallback(() => setInvoiceJumpSignal(n => n+1), []);
 
-  useEffect(() => {
-    let active = true;
+  const syncHallFromSupabase = useCallback(async () => {
+    if (!hasHallSupabaseConfig()) return;
 
-    if (!hasHallSupabaseConfig()) return () => { active = false; };
-
-    (async () => {
-      try {
-        const remoteInvoices = await loadHallInvoicesFromSupabase();
-        if (!active) return;
-        if (remoteInvoices.length) {
-          setInvoicesRaw(remoteInvoices);
-          localStorage.setItem("a_inv", JSON.stringify(remoteInvoices));
-        }
-      } catch (err) {
-        console.error("Failed to load hall invoices from Supabase:", err);
+    try {
+      const remoteInvoices = await loadHallInvoicesFromSupabase();
+      if (remoteInvoices.length) {
+        setInvoicesRaw(remoteInvoices);
+        localStorage.setItem("a_inv", JSON.stringify(remoteInvoices));
       }
+    } catch (err) {
+      console.error("Failed to load hall invoices from Supabase:", err);
+    }
 
-      // Load CRM leads from Supabase
-      try {
-        const rows = await loadRows("crm_leads");
-        if (!active || !rows) return;
-        if (rows.length) {
-          const leads = rows.map(r => ({
-            id: r.id, num: r.num, name: r.name, phone: r.phone,
-            evType: r.ev_type, evDate: r.ev_date, guests: r.guests,
-            source: r.source, stage: r.stage, followDate: r.follow_date,
-            assigned: r.assigned, notes: r.notes,
-            invoiceId: r.invoice_id, invoiceNum: r.invoice_num,
-            createdAt: r.created_at, updatedAt: r.updated_at,
-          }));
-          setLeadsRaw(leads);
-          localStorage.setItem("a_crm_leads", JSON.stringify(leads));
-        }
-      } catch {}
+    try {
+      const rows = await loadRows("crm_leads");
+      if (rows && rows.length) {
+        const leads = rows.map(r => ({
+          id: r.id, num: r.num, name: r.name, phone: r.phone,
+          evType: r.ev_type, evDate: r.ev_date, guests: r.guests,
+          source: r.source, stage: r.stage, followDate: r.follow_date,
+          assigned: r.assigned, notes: r.notes,
+          invoiceId: r.invoice_id, invoiceNum: r.invoice_num,
+          createdAt: r.created_at, updatedAt: r.updated_at,
+        }));
+        setLeadsRaw(leads);
+        localStorage.setItem("a_crm_leads", JSON.stringify(leads));
+      }
+    } catch {}
 
-      // Load hall expenses from Supabase
-      try {
-        const rows = await loadRows("hall_expenses");
-        if (!active || !rows) return;
-        if (rows.length) {
-          const exps = rows.map(r => ({
-            id: r.id, date: r.date, category: r.category,
-            amount: r.amount, note: r.note, by: r.by,
-          }));
-          setExpensesRaw(exps);
-          localStorage.setItem("a_exp", JSON.stringify(exps));
-        }
-      } catch {}
+    try {
+      const rows = await loadRows("hall_expenses");
+      if (rows && rows.length) {
+        const exps = rows.map(r => ({
+          id: r.id, date: r.date, category: r.category,
+          amount: r.amount, note: r.note, by: r.by,
+        }));
+        setExpensesRaw(exps);
+        localStorage.setItem("a_exp", JSON.stringify(exps));
+      }
+    } catch {}
 
-      // Load hall revenues from Supabase
-      try {
-        const rows = await loadRows("hall_revenues");
-        if (!active || !rows) return;
-        if (rows.length) {
-          const revs = rows.map(r => ({
-            id: r.id, date: r.date, source: r.source,
-            amount: r.amount, note: r.note, by: r.by,
-          }));
-          setRevenuesRaw(revs);
-          localStorage.setItem("a_hall_rev", JSON.stringify(revs));
-        }
-      } catch {}
-    })();
-
-    return () => { active = false; };
+    try {
+      const rows = await loadRows("hall_revenues");
+      if (rows && rows.length) {
+        const revs = rows.map(r => ({
+          id: r.id, date: r.date, source: r.source,
+          amount: r.amount, note: r.note, by: r.by,
+        }));
+        setRevenuesRaw(revs);
+        localStorage.setItem("a_hall_rev", JSON.stringify(revs));
+      }
+    } catch {}
   }, []);
+
+  useEffect(() => {
+    if (!hasHallSupabaseConfig()) return;
+
+    // Initial load
+    syncHallFromSupabase();
+
+    // Re-sync when tab becomes visible (catches edits made on another device)
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') syncHallFromSupabase();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+
+    // Poll every 60 seconds so open tabs stay in sync
+    const interval = setInterval(() => syncHallFromSupabase(), 60_000);
+
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      clearInterval(interval);
+    };
+  }, [syncHallFromSupabase]);
 
   const setInvoices = useCallback(next => { const v = typeof next === "function" ? next(invoices) : next; setInvoicesRaw(v); localStorage.setItem("a_inv", JSON.stringify(v)); }, [invoices]);
 

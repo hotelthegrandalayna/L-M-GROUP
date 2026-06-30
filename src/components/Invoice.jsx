@@ -330,7 +330,14 @@ export default function Invoice() {
   const [extNote,  setExtNote]  = useState("");
   const [extTxn,   setExtTxn]   = useState("");
 
-  const selBk = useMemo(() => bookings.find(b => String(b.id) === String(selId)), [bookings, selId, extras]);
+  const selBk = useMemo(() => {
+    if (!selId) return null;
+    return bookings.find(b =>
+      String(b.id) === String(selId) ||
+      String(b.supabaseBookingId) === String(selId) ||
+      String(b.supabaseId) === String(selId)
+    );
+  }, [bookings, selId, extras]);
 
   useEffect(() => {
     if (pendingInvoiceId != null) {
@@ -425,7 +432,7 @@ export default function Invoice() {
 
   function saveChanges(silent) {
     if (!selBk) { if(!silent) notify("Select a booking first","error"); return; }
-    const newTotal = Math.max(0, base + validExtras.reduce((s,x) => s+x.qty*x.rate, 0) - disc);
+    const newTotal = grandTotal;
     const updated = bookings.map(b => b.id === selBk.id ? {
       ...b,
       invoiceExtras: validExtras,
@@ -450,7 +457,7 @@ export default function Invoice() {
       notify("Transaction / reference number is required for " + method + " payments","error"); return;
     }
     const entry = { ts:new Date().toISOString(), amount:amt, method, txn:txn||"", note:note||"", type:type==="room"?"room":"service", by:curUser||"staff" };
-    const updated = bookings.map(b => {
+    updateBookings(prev => prev.map(b => {
       if (b.id !== selBk.id) return b;
       const hist = [...(b.paymentHistory || []), entry];
       const newAdv   = b.advance || 0;
@@ -458,11 +465,12 @@ export default function Invoice() {
       const newExtAdv= type==="extras"? (b.extrasAdvance||0)+amt : (b.extrasAdvance||0);
       const newDue   = Math.max(0, (b.invoiceTotal ?? b.amount ?? 0) - newAdv - newRest - newExtAdv);
       return { ...b, paymentHistory:hist, advance:newAdv, restPayment:newRest, extrasAdvance:newExtAdv, dueAmount:newDue };
+    }));
+    updateRevenues(prev => {
+      const rev = { id:maxId(prev), source:"Room Rent", amount:amt, date:todayStr(),
+        note:selBk.guest+" Rm "+selBk.room+" - "+(note||type+" payment")+" ("+method+")", bookingId:selBk.id };
+      return [...prev, rev];
     });
-    updateBookings(updated);
-    const rev = { id:maxId(revenues), source:"Room Rent", amount:amt, date:todayStr(),
-      note:selBk.guest+" Rm "+selBk.room+" - "+(note||type+" payment")+" ("+method+")", bookingId:selBk.id };
-    updateRevenues([...revenues, rev]);
     notify("Payment of " + money(amt) + " recorded","success");
     logEvent("hotel", "room_payment_collected", { num:String(selBk.id), guest:selBk.guest, amount:amt, note:`Rm ${selBk.room} · via ${method}` }, curUser);
     void persistHotelBookingBundle({

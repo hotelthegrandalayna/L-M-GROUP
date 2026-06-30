@@ -87,68 +87,82 @@ export function AppProvider({ children }) {
     localStorage.setItem('ga_sms_tpl', JSON.stringify(val));
   }, [smsTemplates]);
 
-  useEffect(() => {
-    let cancelled = false;
+  // Central Supabase sync function — called on mount, on tab focus, and every 60s
+  const syncFromSupabase = useCallback((opts = {}) => {
+    if (!hasHotelSupabaseConfig()) return;
+    const { silent = true } = opts;
 
-    if (!hasHotelSupabaseConfig()) return undefined;
-
-    loadHotelBookingsFromSupabase()
-      .then((remoteBookings) => {
-        if (cancelled) return;
-        if (Array.isArray(remoteBookings) && remoteBookings.length > 0) {
-          // Filter out any bookings the user has already deleted locally
-          const deletedIds = (() => {
-            try { return new Set(JSON.parse(localStorage.getItem('ga_deleted_booking_ids') || '[]')); }
-            catch { return new Set(); }
-          })();
-          const filtered = remoteBookings.filter(b => {
-            const sbId = String(b.supabaseBookingId ?? b.id ?? '');
-            const localId = String(b.id ?? '');
-            return !deletedIds.has(sbId) && !deletedIds.has(localId);
-          });
-          setBookings(filtered);
-          localStorage.setItem('ga_bookings', JSON.stringify(filtered));
-        }
-      })
-      .catch((err) => {
-        console.error("Failed to load hotel bookings from Supabase:", err);
-      });
-
-    // Sync ntfy config so hotel notifications work even if saved from hall admin
-    syncNtfyConfigFromSupabase().catch(() => {});
-
-    // Also load rooms from Supabase — overrides hardcoded defaults
+    // Always sync rooms (admin edits must propagate instantly across devices)
     loadRoomsFromSupabase()
       .then((remoteRooms) => {
-        if (cancelled || !remoteRooms) return;
+        if (!remoteRooms) return;
         setRoomsRaw(remoteRooms);
         localStorage.setItem('ga_rooms_ver', GA_ROOMS_VER);
         localStorage.setItem('ga_rooms', JSON.stringify(remoteRooms));
       })
       .catch(() => {});
 
-    // Load hotel expenses from Supabase
-    loadRows("expenses")
-      .then(rows => {
-        if (cancelled || !rows || !rows.length) return;
-        const exps = rows.map(r => ({ id: r.id, date: r.date, category: r.category, amount: r.amount, note: r.note, by: r.by }));
-        setExpenses(exps);
-        localStorage.setItem('ga_expenses', JSON.stringify(exps));
-      }).catch(() => {});
+    // Sync bookings
+    loadHotelBookingsFromSupabase()
+      .then((remoteBookings) => {
+        if (!Array.isArray(remoteBookings) || remoteBookings.length === 0) return;
+        const deletedIds = (() => {
+          try { return new Set(JSON.parse(localStorage.getItem('ga_deleted_booking_ids') || '[]')); }
+          catch { return new Set(); }
+        })();
+        const filtered = remoteBookings.filter(b => {
+          const sbId = String(b.supabaseBookingId ?? b.id ?? '');
+          const localId = String(b.id ?? '');
+          return !deletedIds.has(sbId) && !deletedIds.has(localId);
+        });
+        setBookings(filtered);
+        localStorage.setItem('ga_bookings', JSON.stringify(filtered));
+      })
+      .catch((err) => {
+        console.error("Failed to load hotel bookings from Supabase:", err);
+      });
 
-    // Load hotel revenues from Supabase
-    loadRows("revenues")
-      .then(rows => {
-        if (cancelled || !rows || !rows.length) return;
-        const revs = rows.map(r => ({ id: r.id, date: r.date, source: r.source, amount: r.amount, note: r.note, by: r.by, bookingId: r.booking_id }));
-        setRevenues(revs);
-        localStorage.setItem('ga_revenues', JSON.stringify(revs));
-      }).catch(() => {});
+    // Sync expenses + revenues (only on initial load to avoid overwriting local-only entries)
+    if (!silent) {
+      loadRows("expenses")
+        .then(rows => {
+          if (!rows || !rows.length) return;
+          const exps = rows.map(r => ({ id: r.id, date: r.date, category: r.category, amount: r.amount, note: r.note, by: r.by }));
+          setExpenses(exps);
+          localStorage.setItem('ga_expenses', JSON.stringify(exps));
+        }).catch(() => {});
+
+      loadRows("revenues")
+        .then(rows => {
+          if (!rows || !rows.length) return;
+          const revs = rows.map(r => ({ id: r.id, date: r.date, source: r.source, amount: r.amount, note: r.note, by: r.by, bookingId: r.booking_id }));
+          setRevenues(revs);
+          localStorage.setItem('ga_revenues', JSON.stringify(revs));
+        }).catch(() => {});
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!hasHotelSupabaseConfig()) return undefined;
+
+    // Initial load — also fetch expenses/revenues
+    syncFromSupabase({ silent: false });
+    syncNtfyConfigFromSupabase().catch(() => {});
+
+    // Re-sync when tab becomes visible (catches edits made on another device)
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') syncFromSupabase();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+
+    // Poll every 60 seconds so long-running sessions stay in sync
+    const interval = setInterval(() => syncFromSupabase(), 60_000);
 
     return () => {
-      cancelled = true;
+      document.removeEventListener('visibilitychange', onVisibility);
+      clearInterval(interval);
     };
-  }, []);
+  }, [syncFromSupabase]);
 
   // UI
   const [activeTab,      setActiveTab]      = useState('desk');
@@ -180,30 +194,36 @@ export function AppProvider({ children }) {
   }, [rooms]);
 
   const updateBookings = useCallback((next) => {
-    const val = typeof next === 'function' ? next(bookings) : next;
-    setBookings(val);
-    localStorage.setItem('ga_bookings', JSON.stringify(val));
-  }, [bookings]);
+    setBookings(prev => {
+      const val = typeof next === 'function' ? next(prev) : next;
+      localStorage.setItem('ga_bookings', JSON.stringify(val));
+      return val;
+    });
+  }, []);
 
   const updateRevenues = useCallback((next) => {
-    const val = typeof next === 'function' ? next(revenues) : next;
-    setRevenues(val);
-    localStorage.setItem('ga_revenues', JSON.stringify(val));
-    if (hasSupabase()) {
-      const rows = val.map(r => ({ id: String(r.id), date: r.date, source: r.source, amount: r.amount || 0, note: r.note || "", by: r.by || "", booking_id: r.bookingId || null }));
-      upsertRows("revenues", rows).catch(() => {});
-    }
-  }, [revenues]);
+    setRevenues(prev => {
+      const val = typeof next === 'function' ? next(prev) : next;
+      localStorage.setItem('ga_revenues', JSON.stringify(val));
+      if (hasSupabase()) {
+        const rows = val.map(r => ({ id: String(r.id), date: r.date, source: r.source, amount: r.amount || 0, note: r.note || "", by: r.by || "", booking_id: r.bookingId || null }));
+        upsertRows("revenues", rows).catch(() => {});
+      }
+      return val;
+    });
+  }, []);
 
   const updateExpenses = useCallback((next) => {
-    const val = typeof next === 'function' ? next(expenses) : next;
-    setExpenses(val);
-    localStorage.setItem('ga_expenses', JSON.stringify(val));
-    if (hasSupabase()) {
-      const rows = val.map(e => ({ id: String(e.id), date: e.date, category: e.category, amount: e.amount || 0, note: e.note || "", by: e.by || "" }));
-      upsertRows("expenses", rows).catch(() => {});
-    }
-  }, [expenses]);
+    setExpenses(prev => {
+      const val = typeof next === 'function' ? next(prev) : next;
+      localStorage.setItem('ga_expenses', JSON.stringify(val));
+      if (hasSupabase()) {
+        const rows = val.map(e => ({ id: String(e.id), date: e.date, category: e.category, amount: e.amount || 0, note: e.note || "", by: e.by || "" }));
+        upsertRows("expenses", rows).catch(() => {});
+      }
+      return val;
+    });
+  }, []);
 
   const notify = useCallback((msg, type = 'info') => {
     setNotification({ msg, type });
