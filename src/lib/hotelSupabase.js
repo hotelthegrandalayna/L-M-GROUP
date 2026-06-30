@@ -278,47 +278,45 @@ export async function deleteHotelBookings(bookingIds = []) {
   });
 }
 
-// ── Room sync ─────────────────────────────────────────────────────────────────
+// ── Room sync — stored as JSON blob in app_config (same table as ntfy, guaranteed to work) ──
 export async function loadRoomsFromSupabase() {
   if (!hasHotelSupabaseConfig()) return null;
   try {
-    const rows = await request("hotel_rooms", { query: { order: "id.asc" } });
-    if (!Array.isArray(rows) || rows.length === 0) return null;
-    return rows.map(r => ({
-      id:         r.id,
-      number:     r.number || "",
-      name:       r.name || "",
-      type:       r.type || "",
-      rate:       r.rate || 0,
-      acRate:     r.ac_rate || 0,
-      nonAcRate:  r.non_ac_rate || 0,
-      status:     r.status || "vacant",
-      notes:      r.notes || "",
-    }));
+    const SUPABASE_URL = import.meta.env?.VITE_SUPABASE_URL?.trim() || "";
+    const SUPABASE_KEY = import.meta.env?.VITE_SUPABASE_PUBLISHABLE_KEY?.trim() || import.meta.env?.VITE_SUPABASE_ANON_KEY?.trim() || "";
+    const res = await fetch(
+      SUPABASE_URL.replace(/\/$/, "") + "/rest/v1/app_config?key=eq.hotel_rooms",
+      { headers: { apikey: SUPABASE_KEY, Authorization: "Bearer " + SUPABASE_KEY } }
+    );
+    if (!res.ok) return null;
+    const rows = await res.json();
+    const val = rows?.[0]?.value;
+    if (!Array.isArray(val) || val.length === 0) return null;
+    return val;
   } catch { return null; }
 }
 
 export async function saveRoomsToSupabase(rooms) {
   if (!hasHotelSupabaseConfig()) return;
-  // Run all upserts in parallel — isolated per-room so one failure doesn't block others
-  await Promise.allSettled(rooms.map(r => {
-    const row = {
-      id:           r.id,
-      number:       r.number,
-      name:         r.name || "",
-      type:         r.type || "",
-      rate:         r.rate || 0,
-      ac_rate:      r.acRate || 0,
-      non_ac_rate:  r.nonAcRate || 0,
-      status:       r.status || "vacant",
-      notes:        r.notes || "",
-    };
-    return request("hotel_rooms", {
+  const SUPABASE_URL = import.meta.env?.VITE_SUPABASE_URL?.trim() || "";
+  const SUPABASE_KEY = import.meta.env?.VITE_SUPABASE_PUBLISHABLE_KEY?.trim() || import.meta.env?.VITE_SUPABASE_ANON_KEY?.trim() || "";
+  const res = await fetch(
+    SUPABASE_URL.replace(/\/$/, "") + "/rest/v1/app_config",
+    {
       method: "POST",
-      body: row,
-      extraHeaders: { Prefer: "resolution=merge-duplicates,return=minimal" },
-    });
-  }));
+      headers: {
+        apikey: SUPABASE_KEY,
+        Authorization: "Bearer " + SUPABASE_KEY,
+        "Content-Type": "application/json",
+        Prefer: "resolution=merge-duplicates,return=minimal",
+      },
+      body: JSON.stringify({ key: "hotel_rooms", value: rooms, updated_at: new Date().toISOString() }),
+    }
+  );
+  if (!res.ok) {
+    const msg = await res.text().catch(() => res.statusText);
+    throw new Error("Supabase rooms save failed: " + msg);
+  }
 }
 
 export async function loadHotelBookingsFromSupabase() {
