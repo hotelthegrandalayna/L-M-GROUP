@@ -91,6 +91,20 @@ const SVC_ICONS = {
   },
 };
 
+function DateInput({ value, onChange, min, style }) {
+  const display = value ? value.split('-').reverse().join('/') : '';
+  const ref = useRef(null);
+  return (
+    <div style={{ position:'relative' }}>
+      <input type="text" value={display} placeholder="DD/MM/YYYY" readOnly
+        onClick={() => ref.current?.showPicker?.() || ref.current?.click()}
+        style={{ ...style, cursor:'pointer', width:'100%', boxSizing:'border-box' }} />
+      <input type="date" ref={ref} value={value||''} min={min} onChange={onChange}
+        style={{ position:'absolute', inset:0, opacity:0, width:'100%', height:'100%', cursor:'pointer', zIndex:1 }} />
+    </div>
+  );
+}
+
 function fmtDate(iso) {
   if (!iso) return "";
   const d = new Date(iso + "T00:00:00");
@@ -1736,10 +1750,10 @@ function InvForm({
                 <div style={{ fontSize:11, fontWeight:800, color:"#8a6200", marginBottom:10, letterSpacing:1, textTransform:"uppercase" }}>🌼 Holud Date & Time</div>
                 <ConflictWarning conflict={hDateConflict} field="h" />
                 <Field label="Holud Date *">
-                  <input type="date" min={todayStr} value={d.hDate || ""}
+                  <DateInput min={todayStr} value={d.hDate || ""}
                     onChange={e => set("hDate", e.target.value)}
                     style={inputStyle(hDateConflict ? { borderColor:"#f0b429" } : {})} />
-                  {d.hDate && <div style={{ fontSize:11, color:"#8a6200", marginTop:3, fontWeight:600 }}>📅 {fmtDateWithDay(d.hDate)}</div>}
+                  {d.hDate && <div style={{ fontSize:11, color:"#8a6200", marginTop:3, fontWeight:600 }}>📅 {new Date(d.hDate+"T00:00:00").toLocaleDateString("en-GB",{weekday:"long"})}</div>}
                 </Field>
                 <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginTop:10 }}>
                   <Field label="Start Time 🌙">
@@ -1755,10 +1769,10 @@ function InvForm({
                 <div style={{ fontSize:11, fontWeight:800, color:"#7B1212", marginBottom:10, letterSpacing:1, textTransform:"uppercase" }}>💒 Wedding Date & Time</div>
                 <ConflictWarning conflict={evDateConflict} field="ev" />
                 <Field label="Wedding Date *">
-                  <input type="date" min={todayStr} value={d.evDate || ""}
+                  <DateInput min={todayStr} value={d.evDate || ""}
                     onChange={e => set("evDate", e.target.value)}
                     style={inputStyle(fieldErrors.evDate ? { borderColor:"#c0392b", background:"#fff5f5" } : evDateConflict ? { borderColor:"#f0b429" } : {})} />
-                  {d.evDate && <div style={{ fontSize:11, color:"#7B1212", marginTop:3, fontWeight:600 }}>📅 {fmtDateWithDay(d.evDate)}</div>}
+                  {d.evDate && <div style={{ fontSize:11, color:"#7B1212", marginTop:3, fontWeight:600 }}>📅 {new Date(d.evDate+"T00:00:00").toLocaleDateString("en-GB",{weekday:"long"})}</div>}
                   {fieldErrors.evDate && <div style={{ color:"#c0392b", fontSize:11, marginTop:4, fontWeight:700 }}>⚠ {fieldErrors.evDate}</div>}
                 </Field>
                 <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10, marginTop:10 }}>
@@ -1789,10 +1803,10 @@ function InvForm({
               <ConflictWarning conflict={hDateConflict} field="h" />
               <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))", gap:12 }}>
                 <Field label="Holud Date *">
-                  <input type="date" min={todayStr} value={d.hDate || ""}
+                  <DateInput min={todayStr} value={d.hDate || ""}
                     onChange={e => set("hDate", e.target.value)}
                     style={inputStyle(hDateConflict ? { borderColor:"#f0b429" } : {})} />
-                  {d.hDate && <div style={{ fontSize:11, color:"#8a6200", marginTop:3, fontWeight:600 }}>📅 {fmtDateWithDay(d.hDate)}</div>}
+                  {d.hDate && <div style={{ fontSize:11, color:"#8a6200", marginTop:3, fontWeight:600 }}>📅 {new Date(d.hDate+"T00:00:00").toLocaleDateString("en-GB",{weekday:"long"})}</div>}
                 </Field>
                 <Field label="Start Time 🌙">
                   <TimeInput fieldKey="hStart" mode="holud-start" placeholder="e.g. 7 → 7:00 PM" d={d} set={set} />
@@ -1809,10 +1823,10 @@ function InvForm({
               <ConflictWarning conflict={evDateConflict} field="ev" />
               <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))", gap:12 }}>
                 <Field label="Event Date *">
-                  <input type="date" min={todayStr} value={d.evDate || ""}
+                  <DateInput min={todayStr} value={d.evDate || ""}
                     onChange={e => set("evDate", e.target.value)}
                     style={inputStyle(fieldErrors.evDate ? { borderColor:"#c0392b", background:"#fff5f5" } : evDateConflict ? { borderColor:"#f0b429" } : {})} />
-                  {d.evDate && <div style={{ fontSize:11, color:"#7B1212", marginTop:3, fontWeight:600 }}>📅 {fmtDateWithDay(d.evDate)}</div>}
+                  {d.evDate && <div style={{ fontSize:11, color:"#7B1212", marginTop:3, fontWeight:600 }}>📅 {new Date(d.evDate+"T00:00:00").toLocaleDateString("en-GB",{weekday:"long"})}</div>}
                   {fieldErrors.evDate && <div style={{ color:"#c0392b", fontSize:11, marginTop:4, fontWeight:700 }}>⚠ {fieldErrors.evDate}</div>}
                 </Field>
                 <Field label="Time of Day">
@@ -1841,10 +1855,10 @@ function InvForm({
               <ConflictWarning conflict={evDateConflict} field="ev" />
               <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))", gap:12 }}>
                 <Field label="Event Date *">
-                  <input type="date" min={todayStr} value={d.evDate || ""}
+                  <DateInput min={todayStr} value={d.evDate || ""}
                     onChange={e => set("evDate", e.target.value)}
                     style={inputStyle(fieldErrors.evDate ? { borderColor:"#c0392b", background:"#fff5f5" } : evDateConflict ? { borderColor:"#f0b429" } : {})} />
-                  {d.evDate && <div style={{ fontSize:11, color:"#1a7040", marginTop:3, fontWeight:600 }}>📅 {fmtDateWithDay(d.evDate)}</div>}
+                  {d.evDate && <div style={{ fontSize:11, color:"#1a7040", marginTop:3, fontWeight:600 }}>📅 {new Date(d.evDate+"T00:00:00").toLocaleDateString("en-GB",{weekday:"long"})}</div>}
                   {fieldErrors.evDate && <div style={{ color:"#c0392b", fontSize:11, marginTop:4, fontWeight:700 }}>⚠ {fieldErrors.evDate}</div>}
                 </Field>
                 <Field label="Time of Day">

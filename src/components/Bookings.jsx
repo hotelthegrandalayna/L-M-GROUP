@@ -1,5 +1,20 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { useApp } from "../context/AppContext";
+
+function DateInput({ value, onChange, min, style, className }) {
+  const display = value ? value.split('-').reverse().join('/') : '';
+  const ref = useRef(null);
+  return (
+    <div style={{ position:'relative' }}>
+      <input type="text" value={display} placeholder="DD/MM/YYYY" readOnly
+        onClick={() => ref.current?.showPicker?.() || ref.current?.click()}
+        style={{ ...style, cursor:'pointer', width:'100%', boxSizing:'border-box' }}
+        className={className} />
+      <input type="date" ref={ref} value={value||''} min={min} onChange={onChange}
+        style={{ position:'absolute', inset:0, opacity:0, width:'100%', height:'100%', cursor:'pointer', zIndex:1 }} />
+    </div>
+  );
+}
 import { todayStr, money, nightsBetween, bookingConflicts, maxId, formatDate } from "../utils/helpers";
 import { sendWhatsAppAlert, buildHotelWaMessage } from "../utils/whatsapp";
 import { sendNtfyAlert } from "../utils/ntfy";
@@ -648,17 +663,17 @@ function NewBookingModal({ onClose, prefill }) {
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12, alignItems:"end" }}>
               <div className="form-group" style={{ marginBottom:0 }}>
                 <label style={{ color:"rgba(255,255,255,.7)", fontSize:11 }}>Check-in *</label>
-                <input type="date" value={ci} min={yesterday}
+                <DateInput value={ci} min={yesterday}
                   onChange={e=>{ setCi(e.target.value); setCo(addDaysIso(e.target.value,1)); }}
                   style={{ fontWeight:800, fontSize:15 }} />
-                {ci && <div style={{ color:"rgba(255,255,255,.6)", fontSize:11, marginTop:3 }}>{formatDate(ci)}</div>}
+                {ci && <div style={{ color:"rgba(255,255,255,.6)", fontSize:11, marginTop:3 }}>{new Date(ci+"T00:00:00").toLocaleDateString("en-GB",{weekday:"long"})}</div>}
               </div>
               <div className="form-group" style={{ marginBottom:0 }}>
                 <label style={{ color:"rgba(255,255,255,.7)", fontSize:11 }}>Check-out *</label>
-                <input type="date" value={co} min={ci ? addDaysIso(ci,1) : addDaysIso(today,1)}
+                <DateInput value={co} min={ci ? addDaysIso(ci,1) : addDaysIso(today,1)}
                   onChange={e=>setCo(e.target.value)}
                   style={{ fontWeight:800, fontSize:15 }} />
-                {co && <div style={{ color:"rgba(255,255,255,.6)", fontSize:11, marginTop:3 }}>{formatDate(co)}</div>}
+                {co && <div style={{ color:"rgba(255,255,255,.6)", fontSize:11, marginTop:3 }}>{new Date(co+"T00:00:00").toLocaleDateString("en-GB",{weekday:"long"})}</div>}
               </div>
               <div style={{ background:"rgba(255,255,255,.1)", borderRadius:8, padding:"10px 14px", textAlign:"center" }}>
                 <div style={{ color:"rgba(255,255,255,.6)", fontSize:10, textTransform:"uppercase", letterSpacing:1 }}>Nights</div>
