@@ -2,6 +2,7 @@
 import { createContext, useContext, useState, useCallback, useEffect } from "react";
 import { hasHallSupabaseConfig, loadHallInvoicesFromSupabase } from "./lib/hallSupabase";
 import { hasSupabase, upsertRow, upsertRows, deleteRow, loadRows } from "../utils/supabaseSync";
+import { syncNtfyConfigFromSupabase } from "../utils/ntfy";
 
 const Ctx = createContext(null);
 
@@ -89,6 +90,8 @@ export function HallProvider({ children }) {
 
   const syncHallFromSupabase = useCallback(async () => {
     if (!hasHallSupabaseConfig()) return;
+
+    syncNtfyConfigFromSupabase().catch(() => {});
 
     try {
       const remoteInvoices = await loadHallInvoicesFromSupabase();
