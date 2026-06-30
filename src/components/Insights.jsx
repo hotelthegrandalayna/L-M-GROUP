@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
-import { todayStr } from '../utils/helpers';
+import { todayStr, formatDate } from '../utils/helpers';
 
 function Panel({ title, icon, right, children }) {
   return (
@@ -206,7 +206,7 @@ export default function Insights() {
                   {checkinsToday.map(b=>(
                     <div key={b.id} style={{ display:'flex', gap:10, padding:'8px 10px', background:'var(--green-bg)', border:'1px solid var(--green-bd)', borderRadius:8, fontSize:12 }}>
                       <i className="ti ti-login" style={{ color:'var(--green)', fontSize:15, marginTop:1, flexShrink:0 }} />
-                      <div><strong>Check-in today:</strong> {b.guest} — Rm {b.room}<div style={{ fontSize:11, color:'var(--text3)' }}>{b.checkin} → {b.checkout} · {b.nights} nights</div></div>
+                      <div><strong>Check-in today:</strong> {b.guest} — Rm {b.room}<div style={{ fontSize:11, color:'var(--text3)' }}>{formatDate(b.checkin)} → {formatDate(b.checkout)} · {b.nights} nights</div></div>
                     </div>
                   ))}
                   {checkoutsToday.map(b=>(

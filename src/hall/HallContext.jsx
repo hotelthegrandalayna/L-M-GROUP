@@ -165,7 +165,13 @@ export function HallProvider({ children }) {
     };
   }, [syncHallFromSupabase]);
 
-  const setInvoices = useCallback(next => { const v = typeof next === "function" ? next(invoices) : next; setInvoicesRaw(v); localStorage.setItem("a_inv", JSON.stringify(v)); }, [invoices]);
+  const setInvoices = useCallback(next => {
+    setInvoicesRaw(prev => {
+      const v = typeof next === "function" ? next(prev) : next;
+      localStorage.setItem("a_inv", JSON.stringify(v));
+      return v;
+    });
+  }, []);
 
   const setExpenses = useCallback(next => {
     const v = typeof next === "function" ? next(expenses) : next;

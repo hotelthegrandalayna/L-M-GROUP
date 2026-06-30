@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useApp } from "../context/AppContext";
-import { todayStr, money, bookingConflicts, getRoomDisplayStatus, maxId } from "../utils/helpers";
+import { todayStr, money, bookingConflicts, getRoomDisplayStatus, maxId, formatDate } from "../utils/helpers";
 
 function addDaysIso(iso, days) {
   const d = new Date(iso + "T00:00:00");
@@ -136,7 +136,7 @@ function RoomModal({ room, onClose, onCheckout }) {
         <i className="ti ti-calendar-event" style={{ color:"#F59E0B", fontSize:15, flexShrink:0 }} />
         <div style={{ flex:1, minWidth:0 }}>
           <div style={{ fontSize:12, fontWeight:700 }}>{b.guest}</div>
-          <div style={{ fontSize:11, color:"var(--text3)" }}>{b.checkin} to {b.checkout} | {b.nights}n | {money(b.amount)}</div>
+          <div style={{ fontSize:11, color:"var(--text3)" }}>{formatDate(b.checkin)} to {formatDate(b.checkout)} | {b.nights}n | {money(b.amount)}</div>
         </div>
         <button className="btn sm danger" style={{ fontSize:10, padding:"4px 8px" }} onClick={() => cancelRes(b.id)}><i className="ti ti-x" /></button>
       </div>
@@ -510,7 +510,7 @@ export default function Desk() {
                 <div style={{ flex:1 }}>
                   <div style={{ color:"#fff", fontWeight:700, fontSize:13 }}>{b.guest}</div>
                   <div style={{ color:"rgba(255,255,255,.7)", fontSize:11 }}>
-                    📅 Checkout: {b.checkout} · {b.phone}
+                    📅 Checkout: {formatDate(b.checkout)} · {b.phone}
                     {b.extraRooms?.length > 0 && ` · Also Rm ${b.extraRooms.map(r=>r.number).join(", ")}`}
                   </div>
                 </div>
@@ -631,7 +631,7 @@ export default function Desk() {
                             <td style={{ padding:"9px 12px" }}><strong style={{ color:"var(--navy)" }}>Rm {b.room}</strong></td>
                             <td style={{ padding:"9px 12px" }}><strong>{b.guest}</strong></td>
                             <td style={{ padding:"9px 12px", color:"var(--text3)", fontSize:12 }}>{b.phone}</td>
-                            <td style={{ padding:"9px 12px" }}>{b.checkout}</td>
+                            <td style={{ padding:"9px 12px" }}>{formatDate(b.checkout)}</td>
                             <td style={{ padding:"9px 12px", fontWeight:800, color:bal>0?"var(--red2)":"var(--green)" }}>{money(bal)}</td>
                             <td style={{ padding:"9px 12px" }}>
                               <button className="btn sm gold" onClick={() => chkOut(b.id)}><i className="ti ti-logout" /> Out</button>

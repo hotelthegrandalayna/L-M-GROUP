@@ -582,7 +582,7 @@ export default function Invoice() {
               <option value="">— Choose a booking —</option>
               {activeBookings.map(b => (
                 <option key={b.id} value={String(b.id)}>
-                  #{b.id} · {b.guest} · Rm {b.room} · {b.checkin}
+                  #{b.id} · {b.guest} · Rm {b.room} · {fmtDate(b.checkin)}
                 </option>
               ))}
             </select>

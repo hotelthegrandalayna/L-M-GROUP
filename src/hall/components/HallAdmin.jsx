@@ -114,7 +114,7 @@ export default function HallAdmin() {
   const chartData = useMemo(() => {
     return MONTHS_S.map((mo, mi) => {
       const prefix = `${chartYear}-${String(mi+1).padStart(2,"0")}`;
-      const monthInv = invoices.filter(i=>(i.invDate||i.evDate||"").startsWith(prefix));
+      const monthInv = invoices.filter(i=>(i.evDate||i.invDate||"").startsWith(prefix));
       const billed   = monthInv.reduce((s,i)=>s+(i.grand||0),0);
       const received = monthInv.reduce((s,i)=>s+(parseFloat(i.adv)||0),0);
       return { mo, billed, received };
@@ -127,7 +127,7 @@ export default function HallAdmin() {
   const monthBreakdown = useMemo(() => {
     return MONTHS_S.map((mo, mi) => {
       const prefix = `${chartYear}-${String(mi+1).padStart(2,"0")}`;
-      const monthInv = invoices.filter(i=>(i.invDate||i.evDate||"").startsWith(prefix));
+      const monthInv = invoices.filter(i=>(i.evDate||i.invDate||"").startsWith(prefix));
       const billed   = monthInv.reduce((s,i)=>s+(i.grand||0),0);
       const received = monthInv.reduce((s,i)=>s+(parseFloat(i.adv)||0),0);
       const guests   = monthInv.reduce((s,i)=>s+(parseInt(i.wGuests||i.hGuests||i.guests)||0),0);
@@ -141,7 +141,7 @@ export default function HallAdmin() {
     pending:acc.pending+m.pending,
   }),{ count:0,guests:0,billed:0,received:0,pending:0 }), [monthBreakdown]);
 
-  const allYears = useMemo(()=>[...new Set(invoices.map(i=>(i.invDate||i.evDate||"").slice(0,4)).filter(Boolean))].sort().reverse(),[invoices]);
+  const allYears = useMemo(()=>[...new Set(invoices.map(i=>(i.evDate||i.invDate||"").slice(0,4)).filter(Boolean))].sort().reverse(),[invoices]);
 
   // ── Invoice detail modal & multi-select ──────────────────────────────────────
   const [viewInv, setViewInv] = useState(null);
@@ -169,7 +169,7 @@ export default function HallAdmin() {
     return invoices.filter(i => {
       if (selMonths.length) {
         const prefix = `${invYear}-`;
-        const ok = selMonths.some(m => (i.invDate||i.evDate||"").startsWith(prefix+String(m).padStart(2,"0")));
+        const ok = selMonths.some(m => (i.evDate||i.invDate||"").startsWith(prefix+String(m).padStart(2,"0")));
         if (!ok) return false;
       }
       if (invFStatus && (i.payStatus||"").toLowerCase() !== invFStatus.toLowerCase()) return false;
@@ -656,7 +656,7 @@ export default function HallAdmin() {
         <div>
           {/* ── P&L ── */}
           {isAdmin && (() => {
-            const pnlInv = pnlMonth==="all" ? invoices : invoices.filter(i=>(i.invDate||i.evDate||"").startsWith(pnlMonth));
+            const pnlInv = pnlMonth==="all" ? invoices : invoices.filter(i=>(i.evDate||i.invDate||"").startsWith(pnlMonth));
             const pnlExp = pnlMonth==="all" ? expenses : expenses.filter(e=>(e.date||"").startsWith(pnlMonth));
             const inc = pnlInv.reduce((s,i)=>s+(parseFloat(i.adv)||0),0);
             const bil = pnlInv.reduce((s,i)=>s+(i.grand||0),0);
@@ -668,7 +668,7 @@ export default function HallAdmin() {
             const catSorted = Object.entries(catTotals).sort((a,b)=>b[1]-a[1]);
             const mxC = catSorted.length ? catSorted[0][1] : 1;
             // build unique months for selector
-            const allMonths = [...new Set([...invoices.map(i=>(i.invDate||i.evDate||"").slice(0,7)), ...expenses.map(e=>(e.date||"").slice(0,7))].filter(Boolean))].sort().reverse();
+            const allMonths = [...new Set([...invoices.map(i=>(i.evDate||i.invDate||"").slice(0,7)), ...expenses.map(e=>(e.date||"").slice(0,7))].filter(Boolean))].sort().reverse();
             return (
               <div style={{ background:"#fff", border:`1.5px solid ${C.border}`, borderTop:`3px solid ${C.maroon}`, borderRadius:12, padding:"20px 22px", marginBottom:18 }}>
                 <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:14 }}>
@@ -1120,8 +1120,8 @@ function InsightsPanel({ invoices, expenses, leads }) {
     return <span style={{ color, fontWeight:700, fontSize:12 }}>{diff >= 0 ? "▲" : "▼"} {Math.abs(diff)}%</span>;
   }
 
-  const thisInv  = invoices.filter(i => (i.invDate||i.evDate||"").startsWith(thisMonth));
-  const lastInv  = invoices.filter(i => (i.invDate||i.evDate||"").startsWith(lastMonth));
+  const thisInv  = invoices.filter(i => (i.evDate||i.invDate||"").startsWith(thisMonth));
+  const lastInv  = invoices.filter(i => (i.evDate||i.invDate||"").startsWith(lastMonth));
   const thisExp  = expenses.filter(e => (e.date||"").startsWith(thisMonth));
 
   const thisBilled   = thisInv.reduce((s,i)=>s+(i.grand||0),0);
@@ -1159,7 +1159,7 @@ function InsightsPanel({ invoices, expenses, leads }) {
   // Busiest month historically
   const byMonth = {};
   invoices.forEach(i => {
-    const m = (i.invDate||i.evDate||"").slice(5,7);
+    const m = (i.evDate||i.invDate||"").slice(5,7);
     if (m) byMonth[m] = (byMonth[m]||0)+1;
   });
   const busiestMonth = Object.entries(byMonth).sort((a,b)=>b[1]-a[1])[0];

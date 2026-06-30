@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { useApp } from "../context/AppContext";
-import { todayStr, money, nightsBetween, bookingConflicts, maxId } from "../utils/helpers";
+import { todayStr, money, nightsBetween, bookingConflicts, maxId, formatDate } from "../utils/helpers";
 import { sendWhatsAppAlert, buildHotelWaMessage } from "../utils/whatsapp";
 import { sendNtfyAlert } from "../utils/ntfy";
 import { logEvent } from "../utils/auditLog";
@@ -1124,7 +1124,7 @@ export default function Bookings() {
                 <div style={{ flex:1 }}>
                   <div style={{ color:"#fff", fontWeight:700, fontSize:13 }}>{b.guest}</div>
                   <div style={{ color:"rgba(255,255,255,.7)", fontSize:11 }}>
-                    📅 Checkout: {b.checkout} · {b.phone}
+                    📅 Checkout: {formatDate(b.checkout)} · {b.phone}
                   </div>
                 </div>
                 <button onClick={() => quickCheckout(b.id)} style={{ background:"#fff", color:"#c0392b", border:"none", borderRadius:8, padding:"8px 16px", fontWeight:800, fontSize:13, cursor:"pointer", fontFamily:"inherit", flexShrink:0 }}>
@@ -1225,8 +1225,8 @@ export default function Bookings() {
                     <strong>Rm {b.room}{b.extraRooms?.length > 0 ? ", " + b.extraRooms.map(r=>r.number).join(", ") : ""}</strong>
                     <div style={{ fontSize:10, color:"var(--text3)" }}>{b.type}{b.extraRooms?.length > 0 ? ` +${b.extraRooms.length} more` : ""}</div>
                   </td>
-                  <td style={{ padding:"10px 12px" }}>{b.checkin}</td>
-                  <td style={{ padding:"10px 12px" }}>{b.checkout}</td>
+                  <td style={{ padding:"10px 12px" }}>{formatDate(b.checkin)}</td>
+                  <td style={{ padding:"10px 12px" }}>{formatDate(b.checkout)}</td>
                   <td style={{ padding:"10px 12px", textAlign:"center" }}>{b.nights}</td>
                   <td style={{ padding:"10px 12px" }}>
                     <div style={{ fontWeight:700 }}>{money(invoiceTotal)}</div>

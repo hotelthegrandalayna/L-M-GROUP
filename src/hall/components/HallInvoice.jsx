@@ -93,12 +93,20 @@ const SVC_ICONS = {
 
 function fmtDate(iso) {
   if (!iso) return "";
-  const d = new Date(iso);
+  const d = new Date(iso + "T00:00:00");
   return d.toLocaleDateString("en-GB", {
     day: "numeric",
     month: "long",
     year: "numeric",
   });
+}
+
+function fmtDateWithDay(iso) {
+  if (!iso) return "";
+  const d = new Date(iso + "T00:00:00");
+  const day = d.toLocaleDateString("en-GB", { weekday: "long" });
+  const date = d.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+  return `${day}, ${date}`;
 }
 
 function calcSub(services) {
@@ -897,7 +905,7 @@ export default function HallInvoice() {
                   </span>
                 </div>
                 <div style={{ fontSize: 11, color: C.dim }}>
-                  {inv.evType} · {inv.evDate}
+                  {inv.evType} · {fmtDate(inv.evDate)}
                 </div>
               </div>
               <div style={{ textAlign: "right", flexShrink: 0 }}>
@@ -3896,18 +3904,18 @@ function InvDetail({
           ${isHolud ? `
             <div style="background:#fff8e1;border:1.5px solid #d4a800;border-radius:7px;padding:10px 12px;margin-bottom:10px">
               <div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#8a6200;font-weight:800;margin-bottom:7px">🌼 HOLUD CEREMONY</div>
-              ${inv.hDate ? `<div style="display:flex;gap:6px;margin-bottom:4px"><span style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#7B1212;font-weight:700;min-width:80px">DATE</span><span style="font-size:12px;color:#111;font-weight:600">${fmtDate(inv.hDate)}</span></div>` : ""}
+              ${inv.hDate ? `<div style="display:flex;gap:6px;margin-bottom:4px"><span style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#7B1212;font-weight:700;min-width:80px">DATE</span><span style="font-size:12px;color:#111;font-weight:600">${fmtDateWithDay(inv.hDate)}</span></div>` : ""}
               ${inv.hStart || inv.hEnd ? `<div style="display:flex;gap:6px;margin-bottom:4px"><span style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#7B1212;font-weight:700;min-width:80px">TIME</span><span style="font-size:12px;color:#111;font-weight:600">${inv.hStart || "?"}${inv.hStart || inv.hEnd ? " – " : ""}${inv.hEnd || "?"}</span></div>` : ""}
               ${inv.hGuests || inv.hTables ? `<div style="display:flex;gap:6px;margin-bottom:4px"><span style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#7B1212;font-weight:700;min-width:80px">GUESTS</span><span style="font-size:12px;color:#111;font-weight:600">${inv.hGuests ? inv.hGuests + " guests" : ""}${inv.hGuests && inv.hTables ? " · " : ""}${inv.hTables ? inv.hTables + " tables" : ""}</span></div>` : ""}
             </div>
             <div style="background:#fff0f0;border:1.5px solid #e07070;border-radius:7px;padding:10px 12px;margin-bottom:10px">
               <div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#7B1212;font-weight:800;margin-bottom:7px">💒 WEDDING CEREMONY</div>
-              ${inv.evDate ? `<div style="display:flex;gap:6px;margin-bottom:4px"><span style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#7B1212;font-weight:700;min-width:80px">DATE</span><span style="font-size:12px;color:#111;font-weight:600">${fmtDate(inv.evDate)}</span></div>` : ""}
+              ${inv.evDate ? `<div style="display:flex;gap:6px;margin-bottom:4px"><span style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#7B1212;font-weight:700;min-width:80px">DATE</span><span style="font-size:12px;color:#111;font-weight:600">${fmtDateWithDay(inv.evDate)}</span></div>` : ""}
               ${inv.wStart || inv.wEnd ? `<div style="display:flex;gap:6px;margin-bottom:4px"><span style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#7B1212;font-weight:700;min-width:80px">TIME</span><span style="font-size:12px;color:#111;font-weight:600">${inv.wStart || "?"}${inv.wStart || inv.wEnd ? " – " : ""}${inv.wEnd || "?"}</span></div>` : ""}
               ${inv.wGuests || inv.wTables ? `<div style="display:flex;gap:6px;margin-bottom:4px"><span style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#7B1212;font-weight:700;min-width:80px">GUESTS</span><span style="font-size:12px;color:#111;font-weight:600">${inv.wGuests ? inv.wGuests + " guests" : ""}${inv.wGuests && inv.wTables ? " · " : ""}${inv.wTables ? inv.wTables + " tables" : ""}</span></div>` : ""}
             </div>
           ` : `
-            ${inv.evDate ? `<div style="display:flex;gap:6px;margin-bottom:4px"><span style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#7B1212;font-weight:700;min-width:90px">DATE</span><span style="font-size:13px;color:#111;font-weight:600">${fmtDate(inv.evDate)}</span></div>` : ""}
+            ${inv.evDate ? `<div style="display:flex;gap:6px;margin-bottom:4px"><span style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#7B1212;font-weight:700;min-width:90px">DATE</span><span style="font-size:13px;color:#111;font-weight:600">${fmtDateWithDay(inv.evDate)}</span></div>` : ""}
             ${inv.wGuests || inv.wTables ? `<div style="display:flex;gap:6px;margin-bottom:4px"><span style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#7B1212;font-weight:700;min-width:90px">GUESTS</span><span style="font-size:13px;color:#111;font-weight:600">${inv.wGuests ? inv.wGuests + " guests" : ""}${inv.wGuests && inv.wTables ? " · " : ""}${inv.wTables ? inv.wTables + " tables" : ""}</span></div>` : ""}
             ${inv.wStart || inv.wEnd ? `<div style="display:flex;gap:6px;margin-bottom:4px"><span style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#7B1212;font-weight:700;min-width:90px">TIME</span><span style="font-size:13px;color:#111;font-weight:600">${inv.wStart || "?"}${inv.wStart || inv.wEnd ? " – " : ""}${inv.wEnd || "?"}</span></div>` : ""}
           `}

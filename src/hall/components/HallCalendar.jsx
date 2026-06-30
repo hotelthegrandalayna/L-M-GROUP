@@ -45,7 +45,7 @@ function InvPreviewModal({ inv, onClose }) {
         <div style={{ background:"linear-gradient(135deg,#5a0a0a,#7B1212)",padding:"14px 18px",display:"flex",justifyContent:"space-between",alignItems:"center" }}>
           <div>
             <div style={{ fontSize:15,fontWeight:800,fontFamily:"'Playfair Display',serif",color:"#f2dfc0" }}>{inv.client}</div>
-            <div style={{ fontSize:11,color:"#c9a84c",marginTop:2 }}>Invoice #{inv.num} &nbsp;·&nbsp; {inv.evDate}</div>
+            <div style={{ fontSize:11,color:"#c9a84c",marginTop:2 }}>Invoice #{inv.num} &nbsp;·&nbsp; {fmtDate(inv.evDate)}</div>
           </div>
           <button onClick={onClose} style={{ background:"rgba(255,255,255,.15)",border:"none",borderRadius:8,color:"#f2dfc0",cursor:"pointer",fontSize:18,padding:"4px 10px",lineHeight:1 }}>✕</button>
         </div>
