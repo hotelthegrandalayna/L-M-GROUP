@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import { hasHotelSupabaseConfig, loadHotelBookingsFromSupabase, loadRoomsFromSupabase, saveRoomsToSupabase } from "../lib/hotelSupabase";
 import { hasSupabase, upsertRows, loadRows } from "../utils/supabaseSync";
 import { syncNtfyConfigFromSupabase } from "../utils/ntfy";
@@ -67,6 +67,9 @@ export function AppProvider({ children }) {
     try { const s = JSON.parse(localStorage.getItem('ga_sess')); return s?.user || ''; } catch { return ''; }
   });
 
+  // Track last local rooms edit so poll doesn't overwrite it before Supabase save completes
+  const roomsEditedAt = useRef(0);
+
   // Core data
   const [rooms,        setRoomsRaw]   = useState(initRooms);
   const [bookings,     setBookings]   = useState(() => ls('ga_bookings', []));
@@ -95,15 +98,18 @@ export function AppProvider({ children }) {
     // Always sync ntfy config so notifications work from any device
     syncNtfyConfigFromSupabase().catch(() => {});
 
-    // Always sync rooms (admin edits must propagate instantly across devices)
-    loadRoomsFromSupabase()
-      .then((remoteRooms) => {
-        if (!remoteRooms) return;
-        setRoomsRaw(remoteRooms);
-        localStorage.setItem('ga_rooms_ver', GA_ROOMS_VER);
-        localStorage.setItem('ga_rooms', JSON.stringify(remoteRooms));
-      })
-      .catch(() => {});
+    // Sync rooms — but skip if edited locally within last 30s to avoid overwriting a save in progress
+    const roomsRecentlyEdited = Date.now() - roomsEditedAt.current < 30_000;
+    if (!roomsRecentlyEdited) {
+      loadRoomsFromSupabase()
+        .then((remoteRooms) => {
+          if (!remoteRooms) return;
+          setRoomsRaw(remoteRooms);
+          localStorage.setItem('ga_rooms_ver', GA_ROOMS_VER);
+          localStorage.setItem('ga_rooms', JSON.stringify(remoteRooms));
+        })
+        .catch(() => {});
+    }
 
     // Sync bookings
     loadHotelBookingsFromSupabase()
@@ -186,14 +192,18 @@ export function AppProvider({ children }) {
     localStorage.setItem('ga_expenses', JSON.stringify(e));
   }, [bookings, revenues, expenses, rooms]);
 
-  const setRooms = useCallback((next) => {
-    const val = typeof next === 'function' ? next(rooms) : next;
-    setRoomsRaw(val);
-    localStorage.setItem('ga_rooms_ver', GA_ROOMS_VER);
-    localStorage.setItem('ga_rooms', JSON.stringify(val));
-    // Persist to Supabase so rates are never lost across devices or cache clears
-    saveRoomsToSupabase(val).catch(() => {});
-  }, [rooms]);
+  const setRooms = useCallback((next, onSynced) => {
+    setRoomsRaw(prev => {
+      const val = typeof next === 'function' ? next(prev) : next;
+      localStorage.setItem('ga_rooms_ver', GA_ROOMS_VER);
+      localStorage.setItem('ga_rooms', JSON.stringify(val));
+      roomsEditedAt.current = Date.now();
+      saveRoomsToSupabase(val)
+        .then(() => onSynced && onSynced(true))
+        .catch(() => onSynced && onSynced(false));
+      return val;
+    });
+  }, []);
 
   const updateBookings = useCallback((next) => {
     setBookings(prev => {

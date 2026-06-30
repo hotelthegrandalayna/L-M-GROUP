@@ -8,6 +8,7 @@ const AMENITIES  = ["AC","WiFi","TV","Hot Water","Mini Bar","Balcony","Sea View"
 export default function AdminRooms() {
   const { rooms, setRooms, notify } = useApp();
   const [modal,   setModal]   = useState(null);
+  const [syncing, setSyncing] = useState(false);
   const [num,     setNum]     = useState("");
   const [name,    setName]    = useState("");
   const [type,    setType]    = useState("Standard");
@@ -48,14 +49,21 @@ export default function AdminRooms() {
       acRate:  dualAC ? parseFloat(acRate)||0    : undefined,
       nonAcRate: dualAC ? parseFloat(nonAcRate)||0 : undefined,
     };
+    setSyncing(true);
+    const onSynced = (ok) => {
+      setSyncing(false);
+      if (ok) {
+        notify("Room " + num + " saved ✓ — visible on all devices now", "success");
+      } else {
+        notify("⚠️ Room saved locally but failed to reach Supabase — check your internet or Supabase config", "error");
+      }
+    };
     if (modal==="new") {
       if (rooms.find(r=>r.number===num)) { notify("Room number already exists","error"); return; }
       const newId = rooms.length ? Math.max(...rooms.map(r=>r.id||0))+1 : 1;
-      setRooms([...rooms, { ...updated, id:newId }]);
-      notify("Room "+num+" added","success");
+      setRooms([...rooms, { ...updated, id:newId }], onSynced);
     } else {
-      setRooms(rooms.map(r=>r.id===modal.id?{...r,...updated}:r));
-      notify("Room "+num+" updated","success");
+      setRooms(rooms.map(r=>r.id===modal.id?{...r,...updated}:r), onSynced);
     }
     setModal(null);
   }
@@ -161,7 +169,10 @@ export default function AdminRooms() {
             <div className="form-group"><label>Notes</label><input value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Special notes about this room" /></div>
             <div className="modal-actions">
               <button className="btn" onClick={()=>setModal(null)}>Cancel</button>
-              <button className="btn primary" onClick={save}><i className="ti ti-device-floppy" /> {modal==="new"?"Add Room":"Save Changes"}</button>
+              <button className="btn primary" onClick={save} disabled={syncing}>
+                <i className={"ti " + (syncing ? "ti-loader-2" : "ti-device-floppy")} />
+                {syncing ? " Saving to cloud..." : modal==="new" ? " Add Room" : " Save Changes"}
+              </button>
             </div>
           </div>
         </div>
