@@ -21,6 +21,47 @@ import { sendWhatsAppAlert, buildHotelWaMessage } from "../utils/whatsapp";
 import { sendNtfyAlert } from "../utils/ntfy";
 import { logEvent } from "../utils/auditLog";
 import { persistHotelBookingBundle } from "../lib/hotelSupabase";
+import { buildInvoiceHTML } from "./Invoice";
+
+function InvoicePreviewModal({ booking, rooms, onClose }) {
+  const html = buildInvoiceHTML(booking, rooms, booking.extras || [], "room");
+  const print = () => {
+    const w = window.open("", "_blank");
+    w.document.write(`<html><head><title>Invoice</title></head><body>${html}</body></html>`);
+    w.document.close();
+    w.focus();
+    w.print();
+    w.close();
+  };
+  return (
+    <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && onClose()}
+      style={{ zIndex: 9999 }}>
+      <div style={{ background:"#fff", borderRadius:12, width:"96vw", maxWidth:800,
+        maxHeight:"92vh", display:"flex", flexDirection:"column", overflow:"hidden",
+        boxShadow:"0 8px 40px rgba(0,0,0,.18)" }}>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
+          padding:"14px 20px", borderBottom:"1px solid #eee", background:"var(--navy)" }}>
+          <span style={{ color:"#fff", fontWeight:800, fontSize:15 }}>
+            <i className="ti ti-file-invoice" style={{ marginRight:8, color:"var(--gold)" }} />
+            Invoice — {booking.guest} · Rm {booking.room}
+          </span>
+          <div style={{ display:"flex", gap:8 }}>
+            <button onClick={print} style={{ background:"var(--gold)", color:"#fff", border:"none",
+              borderRadius:8, padding:"7px 18px", fontWeight:700, cursor:"pointer", fontSize:13 }}>
+              <i className="ti ti-printer" style={{ marginRight:6 }} />Print
+            </button>
+            <button onClick={onClose} style={{ background:"rgba(255,255,255,.15)", color:"#fff",
+              border:"none", borderRadius:8, padding:"7px 12px", cursor:"pointer", fontSize:16 }}>
+              <i className="ti ti-x" />
+            </button>
+          </div>
+        </div>
+        <div style={{ overflowY:"auto", flex:1, padding:20 }}
+          dangerouslySetInnerHTML={{ __html: html }} />
+      </div>
+    </div>
+  );
+}
 
 const STATUS_COLORS = {
   confirmed:    { bg:"#fffbee", border:"#FCD34D", color:"#8a6200", icon:"ti-calendar-check" },
@@ -1050,6 +1091,7 @@ export default function Bookings() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo,   setDateTo]   = useState("");
   const [sel,     setSel]     = useState(null);
+  const [preview, setPreview] = useState(null);
   const [showNew, setShowNew] = useState(false);
   const [newPrefill, setNewPrefill] = useState(null);
   const [sortKey, setSortKey] = useState("id");
@@ -1243,7 +1285,7 @@ export default function Bookings() {
               const bal  = Math.max(0, invoiceTotal - paid);
               return (
                 <tr key={b.id} style={{ borderBottom:"1px solid var(--border)", background: i%2===0?"":"var(--panel-alt)", cursor:"pointer" }}
-                  onClick={() => {setPendingInvoiceId(b.id);setActiveTab("invoice");}}>
+                  onClick={() => setPreview(b)}>
                   <td style={{ padding:"10px 12px", fontWeight:700, color:"var(--text3)", fontSize:12 }}>#{b.id}</td>
                   <td style={{ padding:"10px 12px" }}>
                     <div style={{ fontWeight:700 }}>{b.guest}</div>
@@ -1263,7 +1305,7 @@ export default function Bookings() {
                   </td>
                   <td style={{ padding:"10px 12px" }}><Badge status={b.status} /></td>
                   <td style={{ padding:"10px 12px" }}>
-                    <button className="btn sm" onClick={e=>{e.stopPropagation();setPendingInvoiceId(b.id);setActiveTab("invoice");}} style={{ fontSize:11 }}>
+                    <button className="btn sm" onClick={e=>{e.stopPropagation();setPreview(b);}} style={{ fontSize:11 }}>
                       <i className="ti ti-file-invoice" /> Invoice
                     </button>
                   </td>
@@ -1295,6 +1337,7 @@ export default function Bookings() {
           }
         }}
       />}
+      {preview && <InvoicePreviewModal booking={preview} rooms={rooms} onClose={() => setPreview(null)} />}
     </div>
   );
 }

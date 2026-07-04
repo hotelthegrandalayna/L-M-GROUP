@@ -29,7 +29,7 @@ function fmtDate(d) {
 function moneyH(n) { return "\u09F3" + (n||0).toLocaleString("en-IN"); }
 
 // ─── Invoice HTML builder (mirrors original renderInvoice) ─────────────────
-function buildInvoiceHTML(b, rooms, invExtras, mode) {
+export function buildInvoiceHTML(b, rooms, invExtras, mode) {
   if (!b) return "";
   const disc    = b.discAmt || b.invoiceDiscount || 0;
   // Primary room amount = roomRate × nights (never combinedBase which includes all rooms)
