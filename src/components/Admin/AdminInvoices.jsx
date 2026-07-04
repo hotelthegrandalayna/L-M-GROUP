@@ -382,7 +382,7 @@ export default function AdminInvoices() {
       ids.push(String(sbId), String(target.id));
       localStorage.setItem('ga_deleted_booking_ids', JSON.stringify([...new Set(ids)]));
     } catch {}
-    void deleteHotelBooking(sbId).catch(err => console.error("Supabase delete failed:", err));
+    void deleteHotelBooking(sbId, target.guest_id).catch(err => console.error("Supabase delete failed:", err));
   }
 
   function confirmBulkDelete() {
@@ -402,7 +402,8 @@ export default function AdminInvoices() {
       const merged = [...new Set([...existing, ...sbIds.map(String), ...localIds.map(String)])];
       localStorage.setItem('ga_deleted_booking_ids', JSON.stringify(merged));
     } catch {}
-    void deleteHotelBookings(sbIds).catch(err => console.error("Supabase bulk delete failed:", err));
+    const guestIds = toDelete.map(b => b.guest_id).filter(Boolean);
+    void deleteHotelBookings(sbIds, guestIds).catch(err => console.error("Supabase bulk delete failed:", err));
   }
 
   return (

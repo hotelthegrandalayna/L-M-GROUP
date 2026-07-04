@@ -238,22 +238,32 @@ export async function persistHotelBookingBundle(booking) {
 
   const bookingRow = buildBookingRow(booking, guest.id);
   let bookingResult;
+  const isNewGuest = !guestId;
 
-  if (bookingId && guestId) {
-    const bookingRows = await request("bookings", {
-      method: "PATCH",
-      query: { id: `eq.${bookingId}` },
-      body: bookingRow,
-      extraHeaders: { Prefer: "return=representation" },
-    });
-    bookingResult = Array.isArray(bookingRows) ? bookingRows[0] : bookingRows;
-  } else {
-    const bookingRows = await request("bookings", {
-      method: "POST",
-      body: bookingRow,
-      extraHeaders: { Prefer: "return=representation" },
-    });
-    bookingResult = Array.isArray(bookingRows) ? bookingRows[0] : bookingRows;
+  try {
+    if (bookingId && guestId) {
+      const bookingRows = await request("bookings", {
+        method: "PATCH",
+        query: { id: `eq.${bookingId}` },
+        body: bookingRow,
+        extraHeaders: { Prefer: "return=representation" },
+      });
+      bookingResult = Array.isArray(bookingRows) ? bookingRows[0] : bookingRows;
+    } else {
+      const bookingRows = await request("bookings", {
+        method: "POST",
+        body: bookingRow,
+        extraHeaders: { Prefer: "return=representation" },
+      });
+      bookingResult = Array.isArray(bookingRows) ? bookingRows[0] : bookingRows;
+    }
+  } catch (err) {
+    // If booking insert failed and we just created a new guest, clean it up
+    // so we don't leave an orphaned guest row with no booking
+    if (isNewGuest && guest?.id) {
+      request("guests", { method: "DELETE", query: { id: `eq.${guest.id}` } }).catch(() => {});
+    }
+    throw err;
   }
 
   return {
@@ -262,20 +272,30 @@ export async function persistHotelBookingBundle(booking) {
   };
 }
 
-export async function deleteHotelBooking(bookingId) {
+async function cleanupOrphanedGuest(guestId) {
+  if (!guestId) return;
+  const remaining = await request("bookings", { query: { guest_id: `eq.${guestId}` } }).catch(() => null);
+  if (Array.isArray(remaining) && remaining.length === 0) {
+    await request("guests", { method: "DELETE", query: { id: `eq.${guestId}` } }).catch(() => {});
+  }
+}
+
+export async function deleteHotelBooking(bookingId, guestId) {
   if (!hasHotelSupabaseConfig() || !bookingId) return;
   await request("bookings", {
     method: "DELETE",
     query: { id: `eq.${bookingId}` },
   });
+  await cleanupOrphanedGuest(guestId);
 }
 
-export async function deleteHotelBookings(bookingIds = []) {
+export async function deleteHotelBookings(bookingIds = [], guestIds = []) {
   if (!hasHotelSupabaseConfig() || !bookingIds.length) return;
   await request("bookings", {
     method: "DELETE",
     query: { id: `in.(${bookingIds.join(",")})` },
   });
+  await Promise.all(guestIds.map(cleanupOrphanedGuest));
 }
 
 // ── Room sync — stored as JSON blob in app_config (same table as ntfy, guaranteed to work) ──
@@ -322,16 +342,30 @@ export async function saveRoomsToSupabase(rooms) {
 export async function loadHotelBookingsFromSupabase() {
   if (!hasHotelSupabaseConfig()) return [];
 
-  const [bookingRows, guestRows] = await Promise.all([
-    request("bookings", { query: { order: "created_at.desc" } }),
-    request("guests", { query: { order: "created_at.desc" } }),
-  ]);
+  // Only fetch bookings where checkout >= 30 days ago — covers all active guests,
+  // future reservations, and recent history. Old data stays in Supabase but isn't
+  // re-downloaded every 30 seconds, which was causing 14 GB/month egress.
+  const d = new Date();
+  d.setDate(d.getDate() - 30);
+  const cutoff = d.toISOString().slice(0, 10);
+
+  const bookingRows = await request("bookings", {
+    query: { "checkout_date=gte": cutoff, order: "created_at.desc" },
+  });
+
+  if (!Array.isArray(bookingRows) || bookingRows.length === 0) return [];
+
+  // Only fetch the guests we actually need
+  const guestIds = [...new Set(bookingRows.map(r => r.guest_id).filter(Boolean))];
+  const guestRows = guestIds.length
+    ? await request("guests", { query: { "id=in": `(${guestIds.join(",")})` } })
+    : [];
 
   const guestById = new Map(
     (Array.isArray(guestRows) ? guestRows : []).map((g) => [g.id, g]),
   );
 
-  return (Array.isArray(bookingRows) ? bookingRows : []).map((row) =>
+  return bookingRows.map((row) =>
     fromDbBooking(row, guestById.get(row.guest_id)),
   );
 }

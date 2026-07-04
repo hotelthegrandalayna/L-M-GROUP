@@ -131,8 +131,9 @@ export function AppProvider({ children }) {
         console.error("Failed to load hotel bookings from Supabase:", err);
       });
 
-    // Sync revenues on every poll so today's revenue is accurate across all devices
-    loadRows("revenues")
+    // Sync revenues — only last 2 months to reduce egress
+    const revCutoff = (() => { const d = new Date(); d.setMonth(d.getMonth() - 1); return d.toISOString().slice(0, 7) + "-01"; })();
+    loadRows("revenues", `&date=gte.${revCutoff}`)
       .then(rows => {
         const localRevs = (() => { try { return JSON.parse(localStorage.getItem('ga_revenues') || '[]'); } catch { return []; } })();
         if (rows && rows.length > 0) {
@@ -156,14 +157,6 @@ export function AppProvider({ children }) {
           setExpenses(exps);
           localStorage.setItem('ga_expenses', JSON.stringify(exps));
         }).catch(() => {});
-
-      loadRows("revenues")
-        .then(rows => {
-          if (!rows || !rows.length) return;
-          const revs = rows.map(r => ({ id: r.id, date: r.date, source: r.source, amount: r.amount, note: r.note, by: r.by, bookingId: r.booking_id }));
-          setRevenues(revs);
-          localStorage.setItem('ga_revenues', JSON.stringify(revs));
-        }).catch(() => {});
     }
   }, []);
 
@@ -179,8 +172,8 @@ export function AppProvider({ children }) {
     };
     document.addEventListener('visibilitychange', onVisibility);
 
-    // Poll every 30 seconds so long-running sessions stay in sync
-    const interval = setInterval(() => syncFromSupabase(), 30_000);
+    // Poll every 2 minutes — tab focus catches most changes anyway
+    const interval = setInterval(() => syncFromSupabase(), 120_000);
 
     return () => {
       document.removeEventListener('visibilitychange', onVisibility);
