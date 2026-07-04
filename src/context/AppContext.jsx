@@ -134,10 +134,17 @@ export function AppProvider({ children }) {
     // Sync revenues on every poll so today's revenue is accurate across all devices
     loadRows("revenues")
       .then(rows => {
-        if (!rows || !rows.length) return;
-        const revs = rows.map(r => ({ id: r.id, date: r.date, source: r.source, amount: r.amount, note: r.note, by: r.by, bookingId: r.booking_id }));
-        setRevenues(revs);
-        localStorage.setItem('ga_revenues', JSON.stringify(revs));
+        const localRevs = (() => { try { return JSON.parse(localStorage.getItem('ga_revenues') || '[]'); } catch { return []; } })();
+        if (rows && rows.length > 0) {
+          // Supabase has data — use it
+          const revs = rows.map(r => ({ id: r.id, date: r.date, source: r.source, amount: r.amount, note: r.note, by: r.by, bookingId: r.booking_id }));
+          setRevenues(revs);
+          localStorage.setItem('ga_revenues', JSON.stringify(revs));
+        } else if (localRevs.length > 0) {
+          // Supabase is empty but local has data — push local up to Supabase
+          const dbRows = localRevs.map(r => ({ id: String(r.id), date: r.date, source: r.source || 'Room Rent', amount: r.amount || 0, note: r.note || '', by: r.by || '', booking_id: r.bookingId || null }));
+          upsertRows("revenues", dbRows).catch(() => {});
+        }
       }).catch(() => {});
 
     // Sync expenses (only on initial load)
