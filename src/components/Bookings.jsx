@@ -502,6 +502,7 @@ function NewBookingModal({ onClose, prefill }) {
   const [method,   setMethod]   = useState("Cash");
   const [advance,  setAdvance]  = useState(0);
   const [txnNum,   setTxnNum]   = useState("");
+  const [payLater, setPayLater] = useState(false);
   const [notes,       setNotes]       = useState("");
   const [guestType,   setGuestType]   = useState("single"); // "single" | "couple" | "group"
   const [spouseName,  setSpouseName]  = useState("");
@@ -593,6 +594,7 @@ function NewBookingModal({ onClose, prefill }) {
     if (!phone.trim()) { notify("Phone required", "error"); return; }
     if (!selRoom)      { notify("Select a room", "error"); return; }
     if (!nights)       { notify("Check-out must be after check-in", "error"); return; }
+    if ((parseFloat(advance) || 0) <= 0 && !payLater) { notify("Enter payment amount or select Pay Later", "error"); return; }
     if (bookingConflicts(selRoom.number, ci, co, null, bookings)) {
       notify(`Room ${selRoom.number} is already booked for those dates`, "error"); return;
     }
@@ -999,28 +1001,57 @@ function NewBookingModal({ onClose, prefill }) {
           </div>
 
           {/* STEP 6 — PAYMENT */}
-          <div className="form-section" style={{ border:"1.5px solid var(--border)", borderRadius:12, padding:"16px 18px", marginBottom:4 }}>
-            <div style={{ color:"var(--text3)", fontSize:10, fontWeight:800, letterSpacing:2, textTransform:"uppercase", marginBottom:10 }}>Step 6 — Payment</div>
+          <div className="form-section" style={{ border:"2px solid #4a2ea8", borderRadius:12, padding:"18px 20px", marginBottom:4, background:"#faf8ff" }}>
+            <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:14 }}>
+              <div style={{ width:28, height:28, borderRadius:"50%", background:"#4a2ea8", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                <i className="ti ti-currency-taka" style={{ color:"#fff", fontSize:14 }} />
+              </div>
+              <span style={{ color:"#4a2ea8", fontSize:11, fontWeight:800, letterSpacing:2, textTransform:"uppercase" }}>Step 6 — Payment</span>
+              <span style={{ marginLeft:"auto", fontSize:11, color:"var(--red)", fontWeight:700 }}>* Required</span>
+            </div>
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
               <div className="form-group" style={{ marginBottom:0 }}><label>Method</label>
-                <select value={method} onChange={e=>setMethod(e.target.value)}>{PAY_METHODS.map(m=><option key={m}>{m}</option>)}</select>
+                <select value={method} onChange={e=>setMethod(e.target.value)} disabled={payLater}>{PAY_METHODS.map(m=><option key={m}>{m}</option>)}</select>
               </div>
-              <div className="form-group" style={{ marginBottom:0 }}><label>Advance Paid (৳)</label>
-                <input type="number" value={advance} min={0} onChange={e=>setAdvance(e.target.value)} />
+              <div className="form-group" style={{ marginBottom:0 }}><label>Payment Amount (৳)</label>
+                <input type="number" value={advance} min={0} onChange={e=>setAdvance(e.target.value)} disabled={payLater}
+                  style={{ borderColor: !payLater && (parseFloat(advance)||0) <= 0 ? "var(--red)" : undefined }} />
               </div>
             </div>
-            {needsTxn && (
+            {needsTxn && !payLater && (
               <div className="form-group" style={{ marginTop:10 }}><label>Transaction Number</label>
                 <input value={txnNum} onChange={e=>setTxnNum(e.target.value)} placeholder="e.g. 01X-XXXXXXXXXX" />
               </div>
             )}
-            {adv > 0 && selRoom && (
+            {adv > 0 && selRoom && !payLater && (
               <div style={{ display:"flex", justifyContent:"space-between", fontSize:13, fontWeight:700, padding:"10px 14px", background: balance===0 ? "#f0fdf4" : "#fff8e1", borderRadius:8, marginTop:10, color: balance===0 ? "var(--green)" : "#7a5500" }}>
-                <span>{balance===0 ? "✓ Fully Paid" : "Balance Due after advance:"}</span>
+                <span>{balance===0 ? "✓ Fully Paid" : "Balance Due after payment:"}</span>
                 <span>৳{balance.toLocaleString()}</span>
               </div>
             )}
-            <div className="form-group" style={{ marginTop:10, marginBottom:0 }}><label>Notes / Special Requests</label>
+
+            {/* Pay Later option */}
+            <div style={{ marginTop:14, padding:"12px 16px", borderRadius:10, background: payLater ? "#fff8e1" : "#f5f5f5", border: payLater ? "1.5px solid #f0c040" : "1.5px solid #e0e0e0", cursor:"pointer" }}
+              onClick={() => { setPayLater(p => !p); if (!payLater) setAdvance(0); }}>
+              <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                <div style={{ width:20, height:20, borderRadius:4, border:"2px solid " + (payLater ? "#f0c040" : "#aaa"),
+                  background: payLater ? "#f0c040" : "#fff", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                  {payLater && <i className="ti ti-check" style={{ fontSize:12, color:"#7a5c00" }} />}
+                </div>
+                <div>
+                  <div style={{ fontWeight:700, fontSize:13, color: payLater ? "#7a5c00" : "var(--text2)" }}>Pay Later</div>
+                  <div style={{ fontSize:11, color:"var(--text3)" }}>Guest will pay at checkout. Manager takes responsibility.</div>
+                </div>
+              </div>
+              {payLater && (
+                <div style={{ marginTop:10, padding:"8px 12px", background:"#fffbe6", borderRadius:8, fontSize:12, color:"#7a5c00", fontWeight:600, display:"flex", alignItems:"center", gap:6 }}>
+                  <i className="ti ti-user-check" style={{ fontSize:14 }} />
+                  Responsible: {curUser || "Manager"}
+                </div>
+              )}
+            </div>
+
+            <div className="form-group" style={{ marginTop:12, marginBottom:0 }}><label>Notes / Special Requests</label>
               <textarea value={notes} onChange={e=>setNotes(e.target.value)} rows={2} style={{ resize:"vertical" }} placeholder="Special requests..." />
             </div>
           </div>
