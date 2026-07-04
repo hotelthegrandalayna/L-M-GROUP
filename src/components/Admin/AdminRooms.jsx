@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useApp } from "../../context/AppContext";
 import { money } from "../../utils/helpers";
 
-const ROOM_TYPES = ["Standard","Deluxe","Suite","Family","Executive","Presidential"];
+const ROOM_TYPES = ["Classic Single","AC Room","Double Room","Standard","Deluxe","Suite","Family","Executive","Presidential"];
 const AMENITIES  = ["AC","WiFi","TV","Hot Water","Mini Bar","Balcony","Sea View","City View","Bathtub","Kitchenette"];
 
 export default function AdminRooms() {
