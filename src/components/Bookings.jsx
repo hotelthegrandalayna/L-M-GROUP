@@ -1032,7 +1032,7 @@ function NewBookingModal({ onClose, prefill }) {
 
 
 export default function Bookings() {
-  const { bookings, updateBookings, updateRevenues, revenues } = useApp();
+  const { bookings, updateBookings, updateRevenues, revenues, setPendingInvoiceId, setActiveTab } = useApp();
   const today = todayStr();
 
   // Bangladesh time past 12pm check
@@ -1242,7 +1242,7 @@ export default function Bookings() {
               const bal  = Math.max(0, invoiceTotal - paid);
               return (
                 <tr key={b.id} style={{ borderBottom:"1px solid var(--border)", background: i%2===0?"":"var(--panel-alt)", cursor:"pointer" }}
-                  onClick={() => setSel(b)}>
+                  onClick={() => {setPendingInvoiceId(b.id);setActiveTab("invoice");}}>
                   <td style={{ padding:"10px 12px", fontWeight:700, color:"var(--text3)", fontSize:12 }}>#{b.id}</td>
                   <td style={{ padding:"10px 12px" }}>
                     <div style={{ fontWeight:700 }}>{b.guest}</div>
@@ -1262,8 +1262,8 @@ export default function Bookings() {
                   </td>
                   <td style={{ padding:"10px 12px" }}><Badge status={b.status} /></td>
                   <td style={{ padding:"10px 12px" }}>
-                    <button className="btn sm" onClick={e=>{e.stopPropagation();setSel(b);}} style={{ fontSize:11 }}>
-                      <i className="ti ti-eye" /> View
+                    <button className="btn sm" onClick={e=>{e.stopPropagation();setPendingInvoiceId(b.id);setActiveTab("invoice");}} style={{ fontSize:11 }}>
+                      <i className="ti ti-file-invoice" /> Invoice
                     </button>
                   </td>
                 </tr>
@@ -1280,7 +1280,6 @@ export default function Bookings() {
         <span style={{ color:"var(--red)" }}><i className="ti ti-alert-circle" /> Due: {money(filtered.reduce((s,b)=>{ const inv=b.invoiceTotal??b.amount; const pd=getHotelPaidAmount(b); return s+Math.max(0,inv-pd); },0))}</span>
       </div>
 
-      {sel     && <BookingModal  booking={sel} onClose={() => setSel(null)} />}
       {showNew && <NewBookingModal
         prefill={newPrefill}
         onClose={(result) => {
