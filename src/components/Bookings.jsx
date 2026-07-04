@@ -427,7 +427,7 @@ function SMSSendModal({ booking, refName, refPhone, status, onClose }) {
 }
 
 function NewBookingModal({ onClose, prefill }) {
-  const { curUser, rooms, bookings, updateBookings, revenues, updateRevenues, notify, extraPersonRules } = useApp();
+  const { curUser, rooms, bookings, updateBookings, revenues, updateRevenues, notify, extraPersonRules, setPendingInvoiceId, setActiveTab } = useApp();
   const today = todayStr();
   const yesterday = addDaysIso(today, -1);
   const tmr   = addDaysIso(today, 1);
@@ -465,6 +465,7 @@ function NewBookingModal({ onClose, prefill }) {
   const [spouseName,  setSpouseName]  = useState("");
   const [groupMembers, setGroupMembers] = useState([""]);
   const [smsData,     setSmsData]     = useState(null); // { booking, refName, refPhone }
+  const pendingCheckinId = useRef(null);
 
   const needsTxn = ["bKash","Nagad"].includes(method);
   const epThreshold = (extraPersonRules?.threshold) || 3;
@@ -636,6 +637,7 @@ function NewBookingModal({ onClose, prefill }) {
     notify(name.trim() + (status === "checked-in" ? " checked in ✓" : " booking saved") + (discAmt > 0 ? " · Discount " + money(discAmt) : ""), "success");
     logEvent("hotel", status === "checked-in" ? "booking_checked_in" : "booking_created",
       { num:String(id), guest:bkObj.guest, amount:roomTotal, note:`Rm ${selRoom.number}${discAmt>0?` · Discount ৳${discAmt}`:""}` }, curUser);
+    if (status === "checked-in") pendingCheckinId.current = id;
     setSmsData({ booking: bkObj, refName: refName.trim(), refPhone: refPhone.trim(), status });
   }
 
@@ -1012,7 +1014,15 @@ function NewBookingModal({ onClose, prefill }) {
         refName={smsData.refName}
         refPhone={smsData.refPhone}
         status={smsData.status}
-        onClose={() => { setSmsData(null); onClose(); }}
+        onClose={() => {
+          setSmsData(null);
+          if (pendingCheckinId.current !== null) {
+            setPendingInvoiceId(pendingCheckinId.current);
+            setActiveTab("invoice");
+            pendingCheckinId.current = null;
+          }
+          onClose();
+        }}
       />
     )}
 

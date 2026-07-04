@@ -131,7 +131,16 @@ export function AppProvider({ children }) {
         console.error("Failed to load hotel bookings from Supabase:", err);
       });
 
-    // Sync expenses + revenues (only on initial load to avoid overwriting local-only entries)
+    // Sync revenues on every poll so today's revenue is accurate across all devices
+    loadRows("revenues")
+      .then(rows => {
+        if (!rows || !rows.length) return;
+        const revs = rows.map(r => ({ id: r.id, date: r.date, source: r.source, amount: r.amount, note: r.note, by: r.by, bookingId: r.booking_id }));
+        setRevenues(revs);
+        localStorage.setItem('ga_revenues', JSON.stringify(revs));
+      }).catch(() => {});
+
+    // Sync expenses (only on initial load)
     if (!silent) {
       loadRows("expenses")
         .then(rows => {

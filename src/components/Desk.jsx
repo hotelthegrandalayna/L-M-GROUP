@@ -422,7 +422,7 @@ export default function Desk() {
   const tRev  = revenues.reduce((s,r) => s+r.amount, 0);
   const tExp  = expenses.reduce((s,e) => s+e.amount, 0);
   const inhouse    = bookings.filter(b => b.status === "checked-in");
-  const arrivals   = bookings.filter(b => b.checkin === today && b.status === "confirmed");
+  const arrivals   = bookings.filter(b => b.checkin === today && (b.status === "confirmed" || b.status === "checked-in"));
   const departures = bookings.filter(b => b.checkout === today && b.status === "checked-in");
   const occ = rooms.filter(r => getRoomDisplayStatus(r, bookings, today) === "occupied").length;
   const occPct = rooms.length ? Math.round(occ/rooms.length*100) : 0;
