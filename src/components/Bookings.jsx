@@ -500,7 +500,7 @@ function NewBookingModal({ onClose, prefill }) {
   const [discReason, setDiscReason] = useState("");
   // Payment
   const [method,   setMethod]   = useState("Cash");
-  const [advance,  setAdvance]  = useState(0);
+  const [advance,  setAdvance]  = useState('');
   const [txnNum,   setTxnNum]   = useState("");
   const [payLater, setPayLater] = useState(false);
   const [notes,       setNotes]       = useState("");
@@ -896,7 +896,7 @@ function NewBookingModal({ onClose, prefill }) {
                   <div style={{ fontSize:11, fontWeight:700, color:"var(--text3)", textTransform:"uppercase", letterSpacing:.5 }}>
                     <i className="ti ti-user" style={{ color:"var(--gold)", marginRight:4 }} />Person {idx+1}
                   </div>
-                  {idx > 0 && <button type="button" onClick={()=>removePerson(idx)} style={{ border:"none", background:"transparent", color:"var(--red)", cursor:"pointer", fontSize:11, fontWeight:700 }}><i className="ti ti-x" /> Remove</button>}
+                  {idx > 0 && <button type="button" onClick={()=>removePerson(idx)} style={{ border:"none", background:"transparent", color:"var(--red2)", cursor:"pointer", fontSize:11, fontWeight:700 }}><i className="ti ti-x" /> Remove</button>}
                 </div>
                 <div className="form-row" style={{ marginBottom:8 }}>
                   <div className="form-group" style={{ marginBottom:0 }}>
@@ -1007,7 +1007,7 @@ function NewBookingModal({ onClose, prefill }) {
                 <i className="ti ti-currency-taka" style={{ color:"#fff", fontSize:14 }} />
               </div>
               <span style={{ color:"#4a2ea8", fontSize:11, fontWeight:800, letterSpacing:2, textTransform:"uppercase" }}>Step 6 — Payment</span>
-              <span style={{ marginLeft:"auto", fontSize:11, color:"var(--red)", fontWeight:700 }}>* Required</span>
+              <span style={{ marginLeft:"auto", fontSize:11, color:"var(--red2)", fontWeight:700 }}>* Required</span>
             </div>
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
               <div className="form-group" style={{ marginBottom:0 }}><label>Method</label>
@@ -1015,7 +1015,7 @@ function NewBookingModal({ onClose, prefill }) {
               </div>
               <div className="form-group" style={{ marginBottom:0 }}><label>Payment Amount (৳)</label>
                 <input type="number" value={advance} min={0} onChange={e=>setAdvance(e.target.value)} disabled={payLater}
-                  style={{ borderColor: !payLater && (parseFloat(advance)||0) <= 0 ? "var(--red)" : undefined }} />
+                  style={{ borderColor: undefined }} />
               </div>
             </div>
             {needsTxn && !payLater && (
@@ -1032,7 +1032,7 @@ function NewBookingModal({ onClose, prefill }) {
 
             {/* Pay Later option */}
             <div style={{ marginTop:14, padding:"12px 16px", borderRadius:10, background: payLater ? "#fff8e1" : "#f5f5f5", border: payLater ? "1.5px solid #f0c040" : "1.5px solid #e0e0e0", cursor:"pointer" }}
-              onClick={() => { setPayLater(p => !p); if (!payLater) setAdvance(0); }}>
+              onClick={() => { setPayLater(p => !p); if (!payLater) setAdvance(''); }}>
               <div style={{ display:"flex", alignItems:"center", gap:10 }}>
                 <div style={{ width:20, height:20, borderRadius:4, border:"2px solid " + (payLater ? "#f0c040" : "#aaa"),
                   background: payLater ? "#f0c040" : "#fff", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
@@ -1331,7 +1331,7 @@ export default function Bookings() {
                   <td style={{ padding:"10px 12px", textAlign:"center" }}>{b.nights}</td>
                   <td style={{ padding:"10px 12px" }}>
                     <div style={{ fontWeight:700 }}>{money(invoiceTotal)}</div>
-                    {bal > 0 && <div style={{ fontSize:10, color:"var(--red)", fontWeight:600 }}>Due: {money(bal)}</div>}
+                    {bal > 0 && <div style={{ fontSize:10, color:"var(--red2)", fontWeight:600 }}>Due: {money(bal)}</div>}
                     {bal <= 0 && invoiceTotal > 0 && <div style={{ fontSize:10, color:"var(--green)" }}>Paid</div>}
                   </td>
                   <td style={{ padding:"10px 12px" }}><Badge status={b.status} /></td>
@@ -1351,7 +1351,7 @@ export default function Bookings() {
         <span><i className="ti ti-list" /> Showing {filtered.length} of {bookings.length} {!showHistory && <span style={{ color:"var(--navy)", fontWeight:700 }}>(today's view)</span>}</span>
         <span><i className="ti ti-currency-taka" style={{ color:"var(--gold2)" }} /> Total: {money(filtered.reduce((s,b)=>s+(b.invoiceTotal??b.amount),0))}</span>
         <span style={{ color:"var(--green)" }}><i className="ti ti-circle-check" /> Paid: {money(filtered.reduce((s,b)=>s+getHotelPaidAmount(b),0))}</span>
-        <span style={{ color:"var(--red)" }}><i className="ti ti-alert-circle" /> Due: {money(filtered.reduce((s,b)=>{ const inv=b.invoiceTotal??b.amount; const pd=getHotelPaidAmount(b); return s+Math.max(0,inv-pd); },0))}</span>
+        <span style={{ color:"var(--red2)" }}><i className="ti ti-alert-circle" /> Due: {money(filtered.reduce((s,b)=>{ const inv=b.invoiceTotal??b.amount; const pd=getHotelPaidAmount(b); return s+Math.max(0,inv-pd); },0))}</span>
       </div>
 
       {showNew && <NewBookingModal
