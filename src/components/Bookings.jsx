@@ -4,14 +4,15 @@ import { useApp } from "../context/AppContext";
 function DateInput({ value, onChange, min, style, className }) {
   const display = value ? value.split('-').reverse().join('/') : '';
   const ref = useRef(null);
+  const open = () => { try { ref.current?.showPicker?.(); } catch { ref.current?.click?.(); } };
   return (
-    <div style={{ position:'relative' }}>
+    <div style={{ position:'relative' }} onClick={open}>
       <input type="text" value={display} placeholder="DD/MM/YYYY" readOnly
-        onClick={() => ref.current?.showPicker?.() || ref.current?.click()}
-        style={{ ...style, cursor:'pointer', width:'100%', boxSizing:'border-box' }}
+        style={{ ...style, cursor:'pointer', width:'100%', boxSizing:'border-box', pointerEvents:'none' }}
         className={className} />
       <input type="date" ref={ref} value={value||''} min={min} onChange={onChange}
-        style={{ position:'absolute', inset:0, opacity:0, width:'100%', height:'100%', cursor:'pointer', zIndex:1 }} />
+        style={{ position:'absolute', inset:0, opacity:0, width:'100%', height:'100%', cursor:'pointer', zIndex:2 }}
+        onFocus={open} />
     </div>
   );
 }
