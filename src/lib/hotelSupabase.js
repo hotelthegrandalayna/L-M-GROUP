@@ -350,7 +350,7 @@ export async function loadHotelBookingsFromSupabase() {
   const cutoff = d.toISOString().slice(0, 10);
 
   const bookingRows = await request("bookings", {
-    query: { "checkout_date=gte": cutoff, order: "created_at.desc" },
+    query: { checkout_date: `gte.${cutoff}`, order: "created_at.desc" },
   });
 
   if (!Array.isArray(bookingRows) || bookingRows.length === 0) return [];
@@ -358,7 +358,7 @@ export async function loadHotelBookingsFromSupabase() {
   // Only fetch the guests we actually need
   const guestIds = [...new Set(bookingRows.map(r => r.guest_id).filter(Boolean))];
   const guestRows = guestIds.length
-    ? await request("guests", { query: { "id=in": `(${guestIds.join(",")})` } })
+    ? await request("guests", { query: { id: `in.(${guestIds.join(",")})` } })
     : [];
 
   const guestById = new Map(
