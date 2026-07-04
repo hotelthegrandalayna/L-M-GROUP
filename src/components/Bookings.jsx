@@ -1237,37 +1237,43 @@ export default function Bookings() {
         </div>
       )}
 
-      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:18, flexWrap:"wrap", gap:10 }}>
-        <div>
+      {/* Page header — New Booking is the hero, history toggle is secondary */}
+      <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:18 }}>
+        {/* Left: page title */}
+        <div style={{ minWidth:0 }}>
           <div style={{ fontSize:20, fontWeight:800, fontFamily:"'Playfair Display',serif", color:"var(--navy)" }}>Bookings</div>
-          <div style={{ fontSize:12, color:"var(--text3)" }}>
-            {showHistory
-              ? `${bookings.length} total reservations`
-              : `Today's activity & upcoming reservations — ${today}`}
+          <div style={{ fontSize:11, color:"var(--text3)" }}>
+            {showHistory ? `${bookings.length} total reservations` : `Today's activity & upcoming — ${today}`}
           </div>
         </div>
+
+        {/* Center: New Booking hero button */}
+        <div style={{ flex:1, display:"flex", justifyContent:"center" }}>
+          <button onClick={()=>{ setNewPrefill(null); setShowNew(true); }} style={{
+            display:"flex", alignItems:"center", gap:10,
+            padding:"14px 40px", borderRadius:14, border:"none", cursor:"pointer",
+            background:"linear-gradient(135deg,#4a2ea8 0%,#C9983A 100%)",
+            color:"#fff", fontSize:17, fontWeight:900, fontFamily:"inherit",
+            boxShadow:"0 6px 24px rgba(74,46,168,.5)",
+            letterSpacing:.4, transition:"transform .15s, box-shadow .15s",
+          }}
+            onMouseEnter={e=>{e.currentTarget.style.transform="translateY(-3px)";e.currentTarget.style.boxShadow="0 10px 32px rgba(74,46,168,.6)";}}
+            onMouseLeave={e=>{e.currentTarget.style.transform="";e.currentTarget.style.boxShadow="0 6px 24px rgba(74,46,168,.5)";}}
+          >
+            <i className="ti ti-calendar-plus" style={{ fontSize:22 }} /> New Booking
+          </button>
+        </div>
+
+        {/* Right: Show History — small and subtle */}
         <button onClick={() => setShowHistory(h => !h)} style={{
-          display:"flex", alignItems:"center", gap:6,
-          padding:"8px 16px", borderRadius:8, border:"1.5px solid var(--border)", cursor:"pointer",
-          background: showHistory ? "var(--navy)" : "var(--bg3)",
+          display:"flex", alignItems:"center", gap:5,
+          padding:"6px 12px", borderRadius:8, border:"1.5px solid var(--border)", cursor:"pointer",
+          background: showHistory ? "var(--navy)" : "transparent",
           color: showHistory ? "#fff" : "var(--text3)",
-          fontSize:12, fontWeight:700, fontFamily:"inherit",
+          fontSize:11, fontWeight:600, fontFamily:"inherit", whiteSpace:"nowrap",
         }}>
-          <i className={"ti " + (showHistory ? "ti-calendar-event" : "ti-history")} style={{ fontSize:14 }} />
-          {showHistory ? "Today's View" : "Show History"}
-        </button>
-        <button onClick={()=>{ setNewPrefill(null); setShowNew(true); }} style={{
-          display:"flex", alignItems:"center", gap:8,
-          padding:"11px 24px", borderRadius:10, border:"none", cursor:"pointer",
-          background:"linear-gradient(135deg,#4a2ea8 0%,#C9983A 100%)",
-          color:"#fff", fontSize:15, fontWeight:800, fontFamily:"inherit",
-          boxShadow:"0 4px 18px rgba(74,46,168,.45)",
-          letterSpacing:.3, transition:"transform .15s, box-shadow .15s",
-        }}
-          onMouseEnter={e=>{e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow="0 8px 28px rgba(74,46,168,.55)";}}
-          onMouseLeave={e=>{e.currentTarget.style.transform="";e.currentTarget.style.boxShadow="0 4px 18px rgba(74,46,168,.45)";}}
-        >
-          <i className="ti ti-calendar-plus" style={{ fontSize:18 }} /> New Booking
+          <i className={"ti " + (showHistory ? "ti-calendar-event" : "ti-history")} style={{ fontSize:13 }} />
+          {showHistory ? "Today" : "History"}
         </button>
       </div>
 
