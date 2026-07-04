@@ -1074,7 +1074,7 @@ function NewBookingModal({ onClose, prefill }) {
 
 
 export default function Bookings() {
-  const { bookings, updateBookings, updateRevenues, revenues, setPendingInvoiceId, setActiveTab } = useApp();
+  const { bookings, rooms, updateBookings, updateRevenues, revenues, setPendingInvoiceId, setActiveTab } = useApp();
   const today = todayStr();
 
   // Bangladesh time past 12pm check
