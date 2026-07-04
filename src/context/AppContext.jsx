@@ -136,13 +136,20 @@ export function AppProvider({ children }) {
     loadRows("revenues", `&date=gte.${revCutoff}`)
       .then(rows => {
         const localRevs = (() => { try { return JSON.parse(localStorage.getItem('ga_revenues') || '[]'); } catch { return []; } })();
+        const remoteIds = new Set((rows || []).map(r => String(r.id)));
+        // Push any local revenues that are missing from Supabase
+        const missing = localRevs.filter(r => !remoteIds.has(String(r.id)));
+        if (missing.length > 0) {
+          const dbRows = missing.map(r => ({ id: String(r.id), date: r.date, source: r.source || 'Room Rent', amount: r.amount || 0, note: r.note || '', by: r.by || '', booking_id: r.bookingId || null }));
+          upsertRows("revenues", dbRows).catch(() => {});
+        }
         if (rows && rows.length > 0) {
-          // Supabase has data — use it
-          const revs = rows.map(r => ({ id: r.id, date: r.date, source: r.source, amount: r.amount, note: r.note, by: r.by, bookingId: r.booking_id }));
-          setRevenues(revs);
-          localStorage.setItem('ga_revenues', JSON.stringify(revs));
+          // Merge Supabase rows with any local-only rows not yet confirmed
+          const remoteRevs = rows.map(r => ({ id: r.id, date: r.date, source: r.source, amount: r.amount, note: r.note, by: r.by, bookingId: r.booking_id }));
+          const merged = [...remoteRevs, ...missing];
+          setRevenues(merged);
+          localStorage.setItem('ga_revenues', JSON.stringify(merged));
         } else if (localRevs.length > 0) {
-          // Supabase is empty but local has data — push local up to Supabase
           const dbRows = localRevs.map(r => ({ id: String(r.id), date: r.date, source: r.source || 'Room Rent', amount: r.amount || 0, note: r.note || '', by: r.by || '', booking_id: r.bookingId || null }));
           upsertRows("revenues", dbRows).catch(() => {});
         }
