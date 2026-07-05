@@ -317,8 +317,7 @@ function RoomModal({ room, onClose, onCheckout }) {
 
 // ── Checkout Confirmation Modal ────────────────────────────────────────────
 function CheckoutModal({ b, onConfirm, onClose }) {
-  const tot = b.invoiceTotal != null ? b.invoiceTotal : b.amount;
-  const out = Math.max(0, tot - ((b.advance || 0) + (b.extrasAdvance || 0)));
+  const out = getHotelDue(b);
   const hasBal = out > 0;
 
   return (
