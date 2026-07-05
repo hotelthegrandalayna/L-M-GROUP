@@ -560,6 +560,31 @@ export default function Invoice() {
     maybeSendPrintAlert(selBk, "Complete Invoice + T&C");
   }
 
+  // Extend Stay
+  const [extDays, setExtDays] = useState(1);
+  function extendStay() {
+    if (!selBk) return;
+    const cur = new Date(selBk.checkout);
+    cur.setDate(cur.getDate() + extDays);
+    const newCo = cur.toISOString().slice(0, 10);
+    const addedAmt = (selBk.roomRate || 0) * extDays;
+    const updatedB = {
+      ...selBk,
+      checkout: newCo,
+      nights: (selBk.nights || 1) + extDays,
+      amount: (selBk.amount || 0) + addedAmt,
+      invoiceTotal: (selBk.invoiceTotal || selBk.amount || 0) + addedAmt,
+    };
+    updateBookings(prev => prev.map(b => b.id === selBk.id ? updatedB : b));
+    void persistHotelBookingBundle(updatedB).catch(() => {});
+    updateRevenues(prev => {
+      const rev = { id: maxId(prev), source: "Room Rent", amount: addedAmt, date: todayStr(),
+        note: selBk.guest + " Rm " + selBk.room + " - stay extended " + extDays + "d", bookingId: selBk.id };
+      return [...prev, rev];
+    });
+    notify("Stay extended to " + newCo + " ✓", "success");
+  }
+
   const activeBookings = bookings.filter(b => b.status === "confirmed" || b.status === "checked-in");
 
   return (
@@ -746,6 +771,37 @@ export default function Invoice() {
           <button onClick={() => saveChanges(false)} style={{ background:"#1a7040", color:"#fff", border:"none", borderRadius:8, padding:"11px 14px", fontWeight:700, fontSize:13, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:6, fontFamily:"'DM Sans',sans-serif" }}>
             <i className="ti ti-device-floppy" /> Save Invoice
           </button>
+
+          {/* Extend Stay — only for checked-in guests */}
+          {selBk && selBk.status === "checked-in" && (
+            <div style={{ border:"2px solid #4a2ea8", borderRadius:10, overflow:"hidden" }}>
+              <div style={{ background:"#4a2ea8", padding:"9px 14px", display:"flex", alignItems:"center", gap:7 }}>
+                <i className="ti ti-calendar-plus" style={{ color:"#E8C96A", fontSize:15 }} />
+                <span style={{ fontSize:11, fontWeight:800, color:"#fff", textTransform:"uppercase", letterSpacing:1 }}>Extend Stay</span>
+                <span style={{ marginLeft:"auto", fontSize:11, color:"rgba(255,255,255,.7)" }}>Current checkout: {selBk.checkout}</span>
+              </div>
+              <div style={{ padding:"12px 14px", background:"#faf8ff", display:"flex", flexDirection:"column", gap:10 }}>
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, alignItems:"end" }}>
+                  <div className="form-group" style={{ marginBottom:0 }}>
+                    <label>Extra Nights</label>
+                    <input type="number" min={1} max={30} value={extDays}
+                      onChange={e => setExtDays(Math.max(1, parseInt(e.target.value)||1))}
+                      style={{ fontWeight:700 }} />
+                  </div>
+                  <div style={{ fontSize:12, color:"var(--text3)", paddingBottom:4 }}>
+                    New checkout:<br/>
+                    <strong style={{ color:"#4a2ea8", fontSize:13 }}>
+                      {(() => { const d = new Date(selBk.checkout); d.setDate(d.getDate()+extDays); return d.toISOString().slice(0,10); })()}
+                    </strong>
+                    {selBk.roomRate > 0 && <span style={{ display:"block", fontSize:11, color:"var(--text3)" }}>+৳{((selBk.roomRate||0)*extDays).toLocaleString()}</span>}
+                  </div>
+                </div>
+                <button onClick={extendStay} style={{ width:"100%", padding:"9px 0", background:"#4a2ea8", color:"#fff", border:"none", borderRadius:7, fontSize:12, fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>
+                  <i className="ti ti-calendar-plus" /> Confirm Extension
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* PRINT section */}
           <div style={{ border:"2px solid var(--navy)", borderRadius:10, overflow:"hidden", boxShadow:"0 3px 14px rgba(10,22,40,.13)" }}>
