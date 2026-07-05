@@ -527,6 +527,145 @@ function DeskServiceModal({ booking, onConfirm, onClose }) {
   );
 }
 
+// ── Extend Stay Modal ─────────────────────────────────────────────────────
+function ExtendStayModal({ booking, rooms, onConfirm, onClose }) {
+  const today = todayStr();
+  const [newCheckout, setNewCheckout] = useState(() => addDaysIso(booking.checkout, 1));
+  const [roomNumber, setRoomNumber]   = useState(booking.room);
+  const [discType,   setDiscType]     = useState("none");
+  const [discVal,    setDiscVal]      = useState("");
+  const [advance,    setAdvance]      = useState("");
+  const [method,     setMethod]       = useState("Cash");
+  const [txn,        setTxn]          = useState("");
+
+  const selectedRoom = rooms.find(r => r.number === roomNumber) || rooms.find(r => r.number === booking.room);
+  const rate = selectedRoom ? (selectedRoom.acRate || selectedRoom.rate || 0) : (booking.roomRate || booking.amount / (booking.nights || 1));
+
+  const extraNights = (() => {
+    if (!newCheckout || newCheckout <= booking.checkout) return 0;
+    return Math.round((new Date(newCheckout) - new Date(booking.checkout)) / 86400000);
+  })();
+
+  const subtotal  = extraNights * rate;
+  const discAmt   = discType === "pct" ? subtotal * (parseFloat(discVal) || 0) / 100
+                  : discType === "fixed" ? parseFloat(discVal) || 0 : 0;
+  const extTotal  = Math.max(0, subtotal - discAmt);
+  const adv       = parseFloat(advance) || 0;
+  const needsTxn  = ["bKash","Nagad"].includes(method);
+
+  const canConfirm = extraNights > 0;
+
+  return (
+    <div className="modal-overlay open" onClick={e => e.target===e.currentTarget && onClose()} style={{ zIndex:9999 }}>
+      <div className="modal-box" style={{ maxWidth:500 }}>
+        <div className="modal-header">
+          <div>
+            <div className="modal-title" style={{ color:"#4a2ea8" }}>
+              <i className="ti ti-calendar-plus" /> Extend Stay — {booking.guest}
+            </div>
+            <div className="modal-sub">Rm {booking.room} · Currently checking out {booking.checkout}</div>
+          </div>
+          <button className="modal-close" onClick={onClose}><i className="ti ti-x" /></button>
+        </div>
+
+        {/* Room selection */}
+        <div className="form-group">
+          <label>Room <span style={{ fontSize:11, color:"var(--text3)", fontWeight:400 }}>(change if moving rooms)</span></label>
+          <select value={roomNumber} onChange={e => setRoomNumber(e.target.value)}>
+            {rooms.map(r => (
+              <option key={r.number} value={r.number}>
+                Rm {r.number} — {r.name || r.type} · ৳{(r.acRate || r.rate || 0).toLocaleString()}/night
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* New checkout */}
+        <div className="form-row">
+          <div className="form-group">
+            <label>New Check-out Date *</label>
+            <input type="date" value={newCheckout} min={addDaysIso(booking.checkout, 1)}
+              onChange={e => setNewCheckout(e.target.value)} />
+          </div>
+          <div className="form-group">
+            <label>Additional Nights</label>
+            <input readOnly value={extraNights > 0 ? extraNights + " night" + (extraNights > 1 ? "s" : "") : "—"} style={{ background:"var(--bg3)", color:"var(--text2)" }} />
+          </div>
+        </div>
+
+        {/* Pricing summary */}
+        <div style={{ background:"#f0ebff", border:"1.5px solid #c4b5f4", borderRadius:10, padding:"12px 14px", marginBottom:12 }}>
+          <div style={{ display:"flex", justifyContent:"space-between", fontSize:13, color:"var(--text2)", marginBottom:4 }}>
+            <span>{extraNights} night{extraNights !== 1 ? "s" : ""} × ৳{rate.toLocaleString()}</span>
+            <span style={{ fontWeight:700 }}>৳{subtotal.toLocaleString()}</span>
+          </div>
+          {discAmt > 0 && (
+            <div style={{ display:"flex", justifyContent:"space-between", fontSize:13, color:"var(--green)", marginBottom:4 }}>
+              <span>Discount</span><span>−৳{discAmt.toLocaleString()}</span>
+            </div>
+          )}
+          <div style={{ borderTop:"1px solid #c4b5f4", paddingTop:8, marginTop:4, display:"flex", justifyContent:"space-between", fontSize:15, fontWeight:800, color:"#4a2ea8" }}>
+            <span>Extension Total</span><span>৳{extTotal.toLocaleString()}</span>
+          </div>
+        </div>
+
+        {/* Discount */}
+        <div className="form-row">
+          <div className="form-group" style={{ marginBottom:0 }}>
+            <label>Discount</label>
+            <select value={discType} onChange={e => { setDiscType(e.target.value); setDiscVal(""); }}>
+              <option value="none">No discount</option>
+              <option value="pct">Percentage (%)</option>
+              <option value="fixed">Fixed amount (৳)</option>
+            </select>
+          </div>
+          {discType !== "none" && (
+            <div className="form-group" style={{ marginBottom:0 }}>
+              <label>{discType === "pct" ? "Discount %" : "Amount (৳)"}</label>
+              <input type="number" value={discVal} min={0} onChange={e => setDiscVal(e.target.value)}
+                placeholder={discType === "pct" ? "e.g. 10" : "e.g. 500"} />
+            </div>
+          )}
+        </div>
+
+        <div style={{ height:12 }} />
+
+        {/* Advance */}
+        <div className="form-row">
+          <div className="form-group" style={{ marginBottom:0 }}>
+            <label>Collect Advance (৳)</label>
+            <input type="number" value={advance} min={0} onChange={e => setAdvance(e.target.value)} placeholder="0 (optional)" />
+          </div>
+          <div className="form-group" style={{ marginBottom:0 }}>
+            <label>Payment Method</label>
+            <select value={method} onChange={e => { setMethod(e.target.value); setTxn(""); }}>
+              {["Cash","bKash","Nagad","Card","Bank Transfer"].map(m => <option key={m}>{m}</option>)}
+            </select>
+          </div>
+        </div>
+        {needsTxn && (
+          <div className="form-group" style={{ marginTop:10 }}>
+            <label style={{ color:"#4a2ea8" }}>Transaction No. *</label>
+            <input value={txn} onChange={e => setTxn(e.target.value)} placeholder="Transaction ID" />
+          </div>
+        )}
+
+        <div className="modal-actions" style={{ marginTop:16 }}>
+          <button className="btn" onClick={onClose}>Cancel</button>
+          <button
+            disabled={!canConfirm || (needsTxn && adv > 0 && !txn.trim())}
+            onClick={() => canConfirm && onConfirm({ newCheckout, roomNumber, extTotal, discAmt, advance: adv, method, txn })}
+            style={{ padding:"9px 22px", borderRadius:8, border:"none", cursor: canConfirm ? "pointer" : "not-allowed",
+              fontWeight:800, fontSize:14, fontFamily:"inherit",
+              background: canConfirm ? "#4a2ea8" : "#ccc", color:"#fff" }}>
+            <i className="ti ti-calendar-plus" /> Confirm Extension
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Check-In Preview Modal (Option A flow) ────────────────────────────────
 function CheckInPreviewModal({ booking, rooms, onConfirm, onEdit, onClose }) {
   const html = buildInvoiceHTML(booking, rooms, [], "room");
@@ -580,6 +719,7 @@ export default function Desk() {
   const [collectTarget, setCollectTarget] = useState(null);    // booking to collect payment for
   const [serviceTarget, setServiceTarget] = useState(null);    // booking to add service to
   const [checkinPreview, setCheckinPreview] = useState(null);  // booking preview before check-in
+  const [extendTarget, setExtendTarget] = useState(null);      // booking to extend stay for
   const today = todayStr();
 
   // Bangladesh Standard Time = UTC+6. Checkout alert fires after 12:00 PM BST.
@@ -638,6 +778,35 @@ export default function Desk() {
     void persistHotelBookingBundle(updated).catch(()=>{});
     notify("Service charge added to invoice","success");
     setServiceTarget(null);
+  }
+
+  // Extend stay from Desk popup
+  function handleExtendStay(b, { newCheckout, roomNumber, extTotal, discAmt, advance, method, txn }) {
+    const extraNights = Math.round((new Date(newCheckout) - new Date(b.checkout)) / 86400000);
+    const updated = {
+      ...b,
+      checkout: newCheckout,
+      room: roomNumber,
+      nights: (b.nights || 0) + extraNights,
+      invoiceTotal: (b.invoiceTotal ?? b.amount ?? 0) + extTotal,
+      dueAmount: Math.max(0, getHotelDue(b) + extTotal - advance),
+      extrasAdvance: (b.extrasAdvance || 0) + advance,
+      invoiceExtras: [
+        ...(b.invoiceExtras || []),
+        { desc: `Extension: +${extraNights} night${extraNights > 1 ? "s" : ""}${roomNumber !== b.room ? " (Rm " + roomNumber + ")" : ""}${discAmt > 0 ? " (disc ৳" + discAmt + ")" : ""}`, qty: extraNights, rate: extTotal / (extraNights || 1), date: newCheckout },
+      ],
+    };
+    updateBookings(prev => prev.map(x => x.id === b.id ? updated : x));
+    if (advance > 0) {
+      updateRevenues(prev => [...prev, {
+        id: maxId(prev), source: "Room Rent", amount: advance, date: today,
+        note: b.guest + " Rm " + roomNumber + " - extension advance (" + method + ")", bookingId: b.id,
+      }]);
+    }
+    void persistHotelBookingBundle(updated).catch(() => {});
+    notify(b.guest + " extended to " + newCheckout + (roomNumber !== b.room ? ", moved to Rm " + roomNumber : "") + (advance > 0 ? " · Advance ৳" + advance.toLocaleString() : ""), "success");
+    setExtendTarget(null);
+    setExpandedRow(null);
   }
 
   // Print invoice from Desk
@@ -894,7 +1063,7 @@ export default function Desk() {
                                   <span style={{ fontSize:11, color:"#4a2ea8", fontWeight:600, marginRight:4 }}>Actions:</span>
 
                                   {/* Extend Stay */}
-                                  <button onClick={e=>{e.stopPropagation();goToInvoiceTab(b);}}
+                                  <button onClick={e=>{e.stopPropagation();setExtendTarget(b);}}
                                     style={{ display:"inline-flex", alignItems:"center", gap:5, padding:"6px 13px", borderRadius:20, border:"none", cursor:"pointer", fontSize:12, fontWeight:600, background:"#4a2ea8", color:"#fff" }}>
                                     <i className="ti ti-calendar-plus" style={{ fontSize:14 }} /> Extend Stay
                                   </button>
@@ -1004,6 +1173,7 @@ export default function Desk() {
 
       {sel && <RoomModal room={sel} onClose={() => setSel(null)} onCheckout={chkOut} />}
       {checkoutTarget && <CheckoutModal b={checkoutTarget} onConfirm={doCheckout} onClose={() => setCheckoutTarget(null)} />}
+      {extendTarget && <ExtendStayModal booking={extendTarget} rooms={rooms} onClose={() => setExtendTarget(null)} onConfirm={(data) => handleExtendStay(extendTarget, data)} />}
       {checkinPreview && <CheckInPreviewModal booking={checkinPreview} rooms={rooms} onConfirm={() => { confirmCheckin(checkinPreview); setCheckinPreview(null); }} onEdit={() => setCheckinPreview(null)} onClose={() => setCheckinPreview(null)} />}
       {invoiceTarget && <DeskInvoiceModal booking={invoiceTarget} rooms={rooms} onClose={() => setInvoiceTarget(null)} onPrint={() => handlePrintInvoice(invoiceTarget)} />}
       {collectTarget && <DeskCollectPayModal booking={collectTarget} onClose={() => setCollectTarget(null)} onConfirm={(amt, mtd, txn, note) => { handleCollectPayment(collectTarget, amt, mtd, txn, note); setCollectTarget(null); }} />}
