@@ -136,18 +136,27 @@ export function AppProvider({ children }) {
           const localId = String(b.id ?? '');
           return !deletedIds.has(sbId) && !deletedIds.has(localId);
         });
-        // Preserve fields that may not be in Supabase schema (discount, baseAmount)
-        // by merging with the local version when Supabase returns 0/empty for them.
+        // Preserve fields not in Supabase schema by merging with local version.
         const localSnap = (() => { try { return JSON.parse(localStorage.getItem('ga_bookings') || '[]'); } catch { return []; } })();
         const merged = filtered.map(sb => {
           const loc = localSnap.find(l => l.id === sb.id);
           if (!loc) return sb;
           return {
             ...sb,
-            discAmt:    sb.discAmt    || loc.discAmt    || 0,
-            discType:   sb.discType   || loc.discType   || "",
-            discReason: sb.discReason || loc.discReason || "",
-            baseAmount: sb.baseAmount || loc.baseAmount || 0,
+            discAmt:          sb.discAmt        || loc.discAmt        || 0,
+            discType:         sb.discType       || loc.discType       || "",
+            discReason:       sb.discReason     || loc.discReason     || "",
+            baseAmount:       sb.baseAmount     || loc.baseAmount     || 0,
+            // No Supabase column — always restore from local
+            invoiceExtras:    loc.invoiceExtras?.length  ? loc.invoiceExtras  : (sb.invoiceExtras  || []),
+            extrasAdvance:    loc.extrasAdvance != null  ? loc.extrasAdvance  : (sb.extrasAdvance  || 0),
+            paymentHistory:   loc.paymentHistory?.length ? loc.paymentHistory : (sb.paymentHistory || []),
+            extraPersonCharge: loc.extraPersonCharge || sb.extraPersonCharge || null,
+            invoiceDate:      loc.invoiceDate    || sb.invoiceDate    || "",
+            tcPrinted:        loc.tcPrinted      || sb.tcPrinted      || false,
+            guestType:        loc.guestType      || sb.guestType      || "single",
+            spouseName:       loc.spouseName     || sb.spouseName     || "",
+            groupMembers:     loc.groupMembers?.length ? loc.groupMembers : (sb.groupMembers || []),
           };
         });
         setBookings(merged);

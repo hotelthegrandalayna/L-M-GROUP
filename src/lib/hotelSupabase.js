@@ -137,7 +137,11 @@ function buildBookingRow(booking, guestId) {
     is_reservation: (booking.status || "") === "confirmed",
     created_by: null,
     created_at: booking.createdAt || new Date().toISOString(),
-    extra_rooms: booking.extraRooms?.length ? JSON.stringify(booking.extraRooms) : JSON.stringify([]),
+    extra_rooms:       booking.extraRooms?.length     ? JSON.stringify(booking.extraRooms)     : JSON.stringify([]),
+    invoice_extras:    booking.invoiceExtras?.length   ? JSON.stringify(booking.invoiceExtras)   : JSON.stringify([]),
+    extras_advance:    toNum(booking.extrasAdvance, 0),
+    payment_history:   booking.paymentHistory?.length  ? JSON.stringify(booking.paymentHistory)  : JSON.stringify([]),
+    extra_person_charge: booking.extraPersonCharge     ? JSON.stringify(booking.extraPersonCharge) : null,
   };
 }
 
@@ -197,9 +201,11 @@ function fromDbBooking(row, guest) {
     createdAt: row.created_at || "",
     supabaseBookingId: row.id,
     by: row.created_by || "",
-    paymentHistory: [],
-    extraPersonCharge: null,
-    extraRooms: (() => { try { return row.extra_rooms ? JSON.parse(row.extra_rooms) : []; } catch { return []; } })(),
+    paymentHistory:    (() => { try { return row.payment_history    ? JSON.parse(row.payment_history)    : []; } catch { return []; } })(),
+    extraPersonCharge: (() => { try { return row.extra_person_charge ? JSON.parse(row.extra_person_charge) : null; } catch { return null; } })(),
+    extraRooms:        (() => { try { return row.extra_rooms        ? JSON.parse(row.extra_rooms)        : []; } catch { return []; } })(),
+    invoiceExtras:     (() => { try { return row.invoice_extras     ? JSON.parse(row.invoice_extras)     : []; } catch { return []; } })(),
+    extrasAdvance:     toNum(row.extras_advance, 0),
   };
 
   return booking;
