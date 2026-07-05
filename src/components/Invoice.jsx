@@ -265,7 +265,7 @@ export function buildInvoiceHTML(b, rooms, invExtras, mode) {
 }
 
 // ─── Terms & Conditions HTML ───────────────────────────────────────────────
-function buildTCHtml(b) {
+export function buildTCHtml(b) {
   const rows = TC_TERMS.map((t,i) =>
     '<tr><td style="padding:4px 8px 4px 2px;font-weight:800;color:#8B1A1A;font-size:12px;vertical-align:top;white-space:nowrap;">'+TC_BN[i]+'.</td>'
     + '<td style="padding:4px 2px;font-size:11.5px;color:#1a1a1a;line-height:1.65;">'+t+'</td></tr>'
@@ -295,7 +295,7 @@ function buildTCHtml(b) {
 }
 
 // ─── Print helper (same logic as original _hotelPrint) ────────────────────
-function hotelPrint(invHTML, tcHTML) {
+export function hotelPrint(invHTML, tcHTML) {
   const old = document.getElementById("_hpm");
   if (old) old.remove();
   const d = document.createElement("div");

@@ -279,7 +279,7 @@ function MarketingModal({ guests, onClose }) {
 
 // ─── Main CRM ─────────────────────────────────────────────────────────────────
 export default function CRM() {
-  const { bookings, guestProfiles, setGuests } = useApp();
+  const { bookings, guestProfiles, updateGuests } = useApp();
   const [seg,     setSeg]     = useState("all");
   const [search,  setSearch]  = useState("");
   const [selKey,  setSelKey]  = useState(null);
@@ -334,8 +334,7 @@ export default function CRM() {
 
   function saveProfile(key, data) {
     const next = { ...(guestProfiles || {}), [key]: { ...((guestProfiles || {})[key] || {}), ...data } };
-    setGuests(next);
-    localStorage.setItem("ga_guests", JSON.stringify(next));
+    updateGuests(next);
   }
 
   function exportCSV() {

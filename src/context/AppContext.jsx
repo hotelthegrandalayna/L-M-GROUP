@@ -88,6 +88,18 @@ export function AppProvider({ children }) {
     const val = typeof next === 'function' ? next(smsTemplates) : next;
     setSmsTemplatesRaw(val);
     localStorage.setItem('ga_sms_tpl', JSON.stringify(val));
+    if (hasHotelSupabaseConfig()) {
+      const { VITE_SUPABASE_URL, VITE_SUPABASE_PUBLISHABLE_KEY, VITE_SUPABASE_ANON_KEY } = import.meta.env || {};
+      const url = (VITE_SUPABASE_URL || '').trim();
+      const key = (VITE_SUPABASE_PUBLISHABLE_KEY || VITE_SUPABASE_ANON_KEY || '').trim();
+      if (url && key) {
+        fetch(url.replace(/\/$/, '') + '/rest/v1/app_config', {
+          method: 'POST',
+          headers: { apikey: key, Authorization: 'Bearer ' + key, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' },
+          body: JSON.stringify({ key: 'hotel_sms_tpl', value: val, updated_at: new Date().toISOString() }),
+        }).catch(() => {});
+      }
+    }
   }, [smsTemplates]);
 
   // Central Supabase sync function — called on mount, on tab focus, and every 60s
@@ -165,6 +177,30 @@ export function AppProvider({ children }) {
           localStorage.setItem('ga_expenses', JSON.stringify(exps));
         }).catch(() => {});
     }
+
+    // Sync guest profiles and SMS templates from app_config
+    const sbUrl = (import.meta.env?.VITE_SUPABASE_URL || '').trim();
+    const sbKey = ((import.meta.env?.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env?.VITE_SUPABASE_ANON_KEY) || '').trim();
+    if (sbUrl && sbKey) {
+      fetch(sbUrl.replace(/\/$/, '') + '/rest/v1/app_config?key=in.(hotel_guest_profiles,hotel_sms_tpl)', {
+        headers: { apikey: sbKey, Authorization: 'Bearer ' + sbKey },
+      })
+        .then(r => r.json())
+        .then(rows => {
+          if (!Array.isArray(rows)) return;
+          rows.forEach(row => {
+            if (row.key === 'hotel_guest_profiles' && row.value && typeof row.value === 'object') {
+              setGuests(row.value);
+              localStorage.setItem('ga_guests', JSON.stringify(row.value));
+            }
+            if (row.key === 'hotel_sms_tpl' && row.value && typeof row.value === 'object') {
+              setSmsTemplatesRaw(row.value);
+              localStorage.setItem('ga_sms_tpl', JSON.stringify(row.value));
+            }
+          });
+        })
+        .catch(() => {});
+    }
   }, []);
 
   useEffect(() => {
@@ -219,6 +255,21 @@ export function AppProvider({ children }) {
         .catch(() => onSynced && onSynced(false));
       return val;
     });
+  }, []);
+
+  const updateGuests = useCallback((next) => {
+    const val = typeof next === 'function' ? next(undefined) : next;
+    setGuests(val);
+    localStorage.setItem('ga_guests', JSON.stringify(val));
+    const sbUrl = (import.meta.env?.VITE_SUPABASE_URL || '').trim();
+    const sbKey = ((import.meta.env?.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env?.VITE_SUPABASE_ANON_KEY) || '').trim();
+    if (sbUrl && sbKey) {
+      fetch(sbUrl.replace(/\/$/, '') + '/rest/v1/app_config', {
+        method: 'POST',
+        headers: { apikey: sbKey, Authorization: 'Bearer ' + sbKey, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' },
+        body: JSON.stringify({ key: 'hotel_guest_profiles', value: val, updated_at: new Date().toISOString() }),
+      }).catch(() => {});
+    }
   }, []);
 
   const updateBookings = useCallback((next) => {
@@ -281,7 +332,7 @@ export function AppProvider({ children }) {
       expenses, updateExpenses,
       loyaltyData, setLoyalty,
       surveyData, setSurveys,
-      guestProfiles, setGuests,
+      guestProfiles, setGuests, updateGuests,
       pricingRules, setPricing,
       loyaltyRules, setLoyaltyRules,
       invItems, setInvItems,

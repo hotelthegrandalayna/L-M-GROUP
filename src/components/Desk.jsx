@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useApp } from "../context/AppContext";
 import { todayStr, money, bookingConflicts, getRoomDisplayStatus, maxId, formatDate } from "../utils/helpers";
+import { buildInvoiceHTML, buildTCHtml, hotelPrint } from "./Invoice";
 
 function addDaysIso(iso, days) {
   const d = new Date(iso + "T00:00:00");
@@ -395,12 +396,190 @@ function PostCheckoutModal({ booking, onSurvey, onClose }) {
   );
 }
 
+// ── Desk Invoice Preview Modal ─────────────────────────────────────────────
+function DeskInvoiceModal({ booking, rooms, onClose, onPrint }) {
+  const html = buildInvoiceHTML(booking, rooms, booking.invoiceExtras || [], "room");
+  return (
+    <div className="modal-overlay open" onClick={e => e.target===e.currentTarget && onClose()} style={{ zIndex:9999 }}>
+      <div style={{ background:"#fff", borderRadius:12, width:"96vw", maxWidth:820,
+        maxHeight:"92vh", display:"flex", flexDirection:"column", overflow:"hidden", boxShadow:"0 8px 40px rgba(0,0,0,.22)" }}>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
+          padding:"12px 18px", background:"var(--navy)", borderBottom:"1px solid rgba(255,255,255,.1)" }}>
+          <span style={{ color:"#fff", fontWeight:800, fontSize:14 }}>
+            <i className="ti ti-file-invoice" style={{ marginRight:7, color:"var(--gold)" }} />
+            Invoice — {booking.guest} · Rm {booking.room}
+          </span>
+          <div style={{ display:"flex", gap:8 }}>
+            <button onClick={onPrint} style={{ background:"var(--gold)", color:"var(--navy)", border:"none",
+              borderRadius:8, padding:"7px 18px", fontWeight:800, cursor:"pointer", fontSize:13, display:"flex", alignItems:"center", gap:6 }}>
+              <i className="ti ti-printer" /> Print
+            </button>
+            <button onClick={onClose} style={{ background:"rgba(255,255,255,.15)", color:"#fff",
+              border:"none", borderRadius:8, padding:"7px 12px", cursor:"pointer", fontSize:16 }}>
+              <i className="ti ti-x" />
+            </button>
+          </div>
+        </div>
+        <div style={{ overflowY:"auto", flex:1, padding:20 }} dangerouslySetInnerHTML={{ __html: html }} />
+      </div>
+    </div>
+  );
+}
+
+// ── Collect Payment Modal (from Desk) ─────────────────────────────────────
+function DeskCollectPayModal({ booking, onConfirm, onClose }) {
+  const [amt, setAmt] = useState("");
+  const [mtd, setMtd] = useState("Cash");
+  const [txn, setTxn] = useState("");
+  const [note, setNote] = useState("");
+  const due = getHotelDue(booking);
+  const needsTxn = ["bKash","Nagad"].includes(mtd);
+  return (
+    <div className="modal-overlay open" onClick={e => e.target===e.currentTarget && onClose()} style={{ zIndex:9999 }}>
+      <div className="modal-box" style={{ maxWidth:400 }}>
+        <div className="modal-header">
+          <div className="modal-title" style={{ color:"#c0392b" }}>
+            <i className="ti ti-currency-taka" /> Collect Payment — {booking.guest}
+          </div>
+          <button className="modal-close" onClick={onClose}><i className="ti ti-x" /></button>
+        </div>
+        <div style={{ background:"#fff5f5", border:"1.5px solid #f5c6c6", borderRadius:9, padding:"11px 14px", marginBottom:14 }}>
+          <div style={{ display:"flex", justifyContent:"space-between", fontSize:13, color:"var(--text2)", marginBottom:4 }}>
+            <span>Total invoice</span><span style={{ fontWeight:700 }}>{money(booking.invoiceTotal ?? booking.amount ?? 0)}</span>
+          </div>
+          <div style={{ display:"flex", justifyContent:"space-between", fontSize:13, color:"var(--green)" }}>
+            <span>Already paid</span><span style={{ fontWeight:700 }}>-{money((booking.advance||0)+(booking.restPayment||0)+(booking.extrasAdvance||0))}</span>
+          </div>
+          <div style={{ borderTop:"1px solid #f5c6c6", marginTop:8, paddingTop:8, display:"flex", justifyContent:"space-between", fontSize:15, fontWeight:800, color:"#c0392b" }}>
+            <span>Balance due</span><span>{money(due)}</span>
+          </div>
+        </div>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:10 }}>
+          <div className="form-group" style={{ marginBottom:0 }}>
+            <label>Amount (৳)</label>
+            <input type="number" value={amt} min={1} onChange={e=>setAmt(e.target.value)} placeholder={String(due)} autoFocus />
+          </div>
+          <div className="form-group" style={{ marginBottom:0 }}>
+            <label>Method</label>
+            <select value={mtd} onChange={e=>{setMtd(e.target.value);setTxn("");}}>
+              {["Cash","bKash","Nagad","Card","Bank Transfer"].map(m=><option key={m}>{m}</option>)}
+            </select>
+          </div>
+        </div>
+        {needsTxn && (
+          <div className="form-group" style={{ marginBottom:10 }}>
+            <label style={{ color:"#c0392b" }}>Transaction No. *</label>
+            <input value={txn} onChange={e=>setTxn(e.target.value)} placeholder="e.g. TrxID from bKash" />
+          </div>
+        )}
+        <div className="form-group" style={{ marginBottom:14 }}>
+          <label>Note (optional)</label>
+          <input value={note} onChange={e=>setNote(e.target.value)} placeholder="e.g. balance settled" />
+        </div>
+        <div className="modal-actions">
+          <button className="btn" onClick={onClose}>Cancel</button>
+          <button onClick={() => { if(needsTxn&&!txn.trim()){return;} onConfirm(parseFloat(amt)||0,mtd,txn,note); }}
+            style={{ padding:"9px 22px", borderRadius:8, border:"none", cursor:"pointer", fontWeight:800, fontSize:14, fontFamily:"inherit",
+              background:"#1a7040", color:"#fff" }}>
+            <i className="ti ti-check" /> Record Payment
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Add Service Modal (from Desk) ─────────────────────────────────────────
+function DeskServiceModal({ booking, onConfirm, onClose }) {
+  const [desc, setDesc] = useState("");
+  const [amt, setAmt]   = useState("");
+  const [date, setDate] = useState(todayStr());
+  return (
+    <div className="modal-overlay open" onClick={e => e.target===e.currentTarget && onClose()} style={{ zIndex:9999 }}>
+      <div className="modal-box" style={{ maxWidth:380 }}>
+        <div className="modal-header">
+          <div className="modal-title" style={{ color:"#b07800" }}>
+            <i className="ti ti-sparkles" /> Add Service Charge — {booking.guest}
+          </div>
+          <button className="modal-close" onClick={onClose}><i className="ti ti-x" /></button>
+        </div>
+        <div className="form-group"><label>Description *</label>
+          <input value={desc} onChange={e=>setDesc(e.target.value)} placeholder="e.g. Restaurant, Laundry, Room service" autoFocus />
+        </div>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+          <div className="form-group" style={{ marginBottom:0 }}><label>Amount (৳) *</label>
+            <input type="number" value={amt} min={1} onChange={e=>setAmt(e.target.value)} placeholder="0" />
+          </div>
+          <div className="form-group" style={{ marginBottom:0 }}><label>Date</label>
+            <input type="date" value={date} onChange={e=>setDate(e.target.value)} />
+          </div>
+        </div>
+        <div className="modal-actions" style={{ marginTop:16 }}>
+          <button className="btn" onClick={onClose}>Cancel</button>
+          <button onClick={() => { if(!desc.trim()||!(parseFloat(amt)>0)) return; onConfirm(desc.trim(),parseFloat(amt),date); }}
+            style={{ padding:"9px 22px", borderRadius:8, border:"none", cursor:"pointer", fontWeight:800, fontSize:14, fontFamily:"inherit",
+              background:"#b07800", color:"#fff" }}>
+            <i className="ti ti-plus" /> Add to Invoice
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Check-In Preview Modal (Option A flow) ────────────────────────────────
+function CheckInPreviewModal({ booking, rooms, onConfirm, onEdit, onClose }) {
+  const html = buildInvoiceHTML(booking, rooms, [], "room");
+  const tcEnabled = localStorage.getItem("ga_tc_enabled") !== "false";
+  const willPrintTC = tcEnabled && !booking.tcPrinted;
+  return (
+    <div className="modal-overlay open" onClick={e => e.target===e.currentTarget && onClose()} style={{ zIndex:9999 }}>
+      <div style={{ background:"#fff", borderRadius:14, width:"96vw", maxWidth:860,
+        maxHeight:"94vh", display:"flex", flexDirection:"column", overflow:"hidden", boxShadow:"0 10px 48px rgba(0,0,0,.28)" }}>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
+          padding:"14px 20px", background:"var(--navy)" }}>
+          <div>
+            <div style={{ color:"#fff", fontWeight:800, fontSize:15 }}>
+              <i className="ti ti-login" style={{ marginRight:8, color:"var(--gold)" }} />
+              Check-In Preview — {booking.guest} · Rm {booking.room}
+            </div>
+            <div style={{ color:"rgba(255,255,255,.6)", fontSize:12, marginTop:2 }}>
+              Review invoice before confirming check-in
+              {willPrintTC && <span style={{ marginLeft:8, background:"rgba(255,255,255,.15)", borderRadius:6, padding:"2px 8px", fontSize:11 }}>T&C will print on first check-in</span>}
+            </div>
+          </div>
+          <div style={{ display:"flex", gap:8 }}>
+            <button onClick={onEdit} style={{ background:"rgba(255,255,255,.15)", color:"#fff", border:"1.5px solid rgba(255,255,255,.3)",
+              borderRadius:8, padding:"7px 16px", fontWeight:700, cursor:"pointer", fontSize:13, display:"flex", alignItems:"center", gap:6 }}>
+              <i className="ti ti-edit" /> Edit / Go Back
+            </button>
+            <button onClick={onConfirm} style={{ background:"var(--gold)", color:"var(--navy)", border:"none",
+              borderRadius:8, padding:"8px 20px", fontWeight:800, cursor:"pointer", fontSize:13, display:"flex", alignItems:"center", gap:6 }}>
+              <i className="ti ti-login" /> Confirm Check-In & Print
+            </button>
+            <button onClick={onClose} style={{ background:"rgba(255,255,255,.15)", color:"#fff",
+              border:"none", borderRadius:8, padding:"7px 12px", cursor:"pointer", fontSize:16 }}>
+              <i className="ti ti-x" />
+            </button>
+          </div>
+        </div>
+        <div style={{ overflowY:"auto", flex:1, padding:20 }} dangerouslySetInnerHTML={{ __html: html }} />
+      </div>
+    </div>
+  );
+}
+
 export default function Desk() {
-  const { curRole, rooms, bookings, revenues, expenses, updateBookings, updateRevenues, notify } = useApp();
+  const { curRole, curUser, rooms, bookings, revenues, expenses, updateBookings, updateRevenues, notify, setActiveTab, setPendingInvoiceId } = useApp();
   const [sel, setSel] = useState(null);
-  const [checkoutTarget, setCheckoutTarget] = useState(null);   // booking pending checkout
-  const [postCheckout, setPostCheckout] = useState(null);       // booking shown in post-checkout options
-  const [surveyBooking, setSurveyBooking] = useState(null);     // booking for full-screen survey
+  const [checkoutTarget, setCheckoutTarget] = useState(null);
+  const [postCheckout, setPostCheckout] = useState(null);
+  const [surveyBooking, setSurveyBooking] = useState(null);
+  const [expandedRow, setExpandedRow] = useState(null);        // booking id of expanded in-house row
+  const [invoiceTarget, setInvoiceTarget] = useState(null);    // booking to show invoice for
+  const [collectTarget, setCollectTarget] = useState(null);    // booking to collect payment for
+  const [serviceTarget, setServiceTarget] = useState(null);    // booking to add service to
+  const [checkinPreview, setCheckinPreview] = useState(null);  // booking preview before check-in
   const today = todayStr();
 
   // Bangladesh Standard Time = UTC+6. Checkout alert fires after 12:00 PM BST.
@@ -431,6 +610,68 @@ export default function Desk() {
     const due = getHotelDue(b);
     return { ...b, due };
   }).filter(b => b.due > 0).sort((a,b) => b.due - a.due);
+
+  // Collect payment from Desk
+  function handleCollectPayment(b, amt, mtd, txn, note) {
+    if (amt <= 0) { notify("Enter a valid amount","error"); return; }
+    const entry = { ts:new Date().toISOString(), amount:amt, method:mtd, txnNumber:txn||"", note:note||"", type:"room", by:curUser||"staff" };
+    const updated = { ...b,
+      restPayment: (b.restPayment||0) + amt,
+      dueAmount: Math.max(0, getHotelDue(b) - amt),
+      paymentHistory: [...(b.paymentHistory||[]), entry],
+    };
+    updateBookings(prev => prev.map(x => x.id===b.id ? updated : x));
+    updateRevenues(prev => [...prev, { id:maxId(prev), source:"Room Rent", amount:amt, date:today, note:b.guest+" Rm "+b.room+" - payment ("+mtd+")", bookingId:b.id }]);
+    void persistHotelBookingBundle(updated).catch(()=>{});
+    notify("Payment of "+money(amt)+" recorded","success");
+    setCollectTarget(null);
+    setExpandedRow(null);
+  }
+
+  // Add service charge from Desk
+  function handleAddService(b, desc, amt, date) {
+    const newExtra = { desc, qty:1, rate:amt, date };
+    const extras = [...(b.invoiceExtras||[]), newExtra];
+    const newTotal = (b.invoiceTotal ?? b.amount ?? 0) + amt;
+    const updated = { ...b, invoiceExtras: extras, invoiceTotal: newTotal };
+    updateBookings(prev => prev.map(x => x.id===b.id ? updated : x));
+    void persistHotelBookingBundle(updated).catch(()=>{});
+    notify("Service charge added to invoice","success");
+    setServiceTarget(null);
+  }
+
+  // Print invoice from Desk
+  function handlePrintInvoice(b) {
+    const invHtml = buildInvoiceHTML(b, rooms, b.invoiceExtras||[], "room");
+    hotelPrint(invHtml, null);
+  }
+
+  // Check-in: show preview first (Option A)
+  function initiateCheckin(b) {
+    setCheckinPreview(b);
+    setSel(null);
+  }
+
+  // Confirm check-in after preview — sets status, prints invoice + T&C if first time
+  function confirmCheckin(b) {
+    const tcEnabled = localStorage.getItem("ga_tc_enabled") !== "false";
+    const willPrintTC = tcEnabled && !b.tcPrinted;
+    const updated = { ...b, status:"checked-in", tcPrinted: willPrintTC ? true : (b.tcPrinted || false) };
+    updateBookings(prev => prev.map(x => x.id===b.id ? updated : x));
+    void persistHotelBookingBundle(updated).catch(()=>{});
+    const invHtml = buildInvoiceHTML(updated, rooms, [], "room");
+    const tcHtml  = willPrintTC ? buildTCHtml(updated) : null;
+    hotelPrint(invHtml, tcHtml);
+    notify(b.guest+" checked in ✓"+(willPrintTC?" — T&C printed":""),"success");
+    setCheckinPreview(null);
+  }
+
+  // Navigate to Invoice tab for extend stay
+  function goToInvoiceTab(b) {
+    setPendingInvoiceId(b.id);
+    setActiveTab("invoice");
+    setExpandedRow(null);
+  }
 
   // Open the styled checkout confirmation modal instead of window.confirm
   function chkOut(bid) {
@@ -471,7 +712,7 @@ export default function Desk() {
           <div style={{ fontWeight:700, fontSize:12 }}>{b.guest}</div>
           <div style={{ fontSize:10, color:"var(--text3)" }}>{b.phone} · {b.nights}n</div>
         </div>
-        {showIn  && <button className="btn sm primary" style={{ fontSize:11, padding:"4px 10px" }} onClick={() => setSel(rooms.find(r => r.number === b.room))}><i className="ti ti-login" /> In</button>}
+        {showIn  && <button className="btn sm primary" style={{ fontSize:11, padding:"4px 10px" }} onClick={() => initiateCheckin(b)}><i className="ti ti-login" /> In</button>}
         {showOut && <button className="btn sm gold"    style={{ fontSize:11, padding:"4px 10px" }} onClick={() => chkOut(b.id)}><i className="ti ti-logout" /> Out</button>}
       </div>
     );
@@ -614,30 +855,80 @@ export default function Desk() {
             {inhouse.length === 0
               ? <div style={{ color:"var(--text3)", fontSize:13, textAlign:"center", padding:18 }}>No guests currently checked in</div>
               : (
-                <div style={{ overflowX:"auto" }}>
+                <div>
                   <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
                     <thead>
-                      <tr style={{ background:"var(--navy2)", color:"var(--gold)" }}>
-                        {["Room","Guest","Phone","Check-out","Balance Due",""].map(h=>(
-                          <th key={h} style={{ padding:"8px 12px", textAlign:"left", fontSize:10, textTransform:"uppercase", letterSpacing:.5 }}>{h}</th>
+                      <tr style={{ background:"#1a1a2e", color:"#C9A84C" }}>
+                        {["Room","Guest","Phone","Check-out","Balance",""].map(h=>(
+                          <th key={h} style={{ padding:"8px 12px", textAlign:"left", fontSize:10, textTransform:"uppercase", letterSpacing:.5, fontWeight:600 }}>{h}</th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
                       {inhouse.map((b,i) => {
                         const bal = getHotelDue(b);
-                        return (
-                          <tr key={b.id} style={{ borderBottom:"1px solid var(--border)", background:i%2===0?"":"var(--bg3)" }}>
-                            <td style={{ padding:"9px 12px" }}><strong style={{ color:"var(--navy)" }}>Rm {b.room}</strong></td>
+                        const isOpen = expandedRow === b.id;
+                        return (<>
+                          <tr key={b.id} onClick={() => setExpandedRow(isOpen ? null : b.id)}
+                            style={{ borderBottom: isOpen ? "none" : "1px solid var(--border)",
+                              background: isOpen ? "#f5f3ff" : i%2===0 ? "" : "var(--bg3)",
+                              cursor:"pointer", transition:"background .1s" }}>
+                            <td style={{ padding:"9px 12px" }}><strong style={{ color:"#4a2ea8" }}>Rm {b.room}</strong></td>
                             <td style={{ padding:"9px 12px" }}><strong>{b.guest}</strong></td>
                             <td style={{ padding:"9px 12px", color:"var(--text3)", fontSize:12 }}>{b.phone}</td>
-                            <td style={{ padding:"9px 12px" }}>{formatDate(b.checkout)}</td>
-                            <td style={{ padding:"9px 12px", fontWeight:800, color:bal>0?"var(--red2)":"var(--green)" }}>{money(bal)}</td>
+                            <td style={{ padding:"9px 12px", fontSize:12 }}>{formatDate(b.checkout)}</td>
                             <td style={{ padding:"9px 12px" }}>
-                              <button className="btn sm gold" onClick={() => chkOut(b.id)}><i className="ti ti-logout" /> Out</button>
+                              <span style={{ fontWeight:800, fontSize:12, padding:"3px 10px", borderRadius:20,
+                                background: bal>0 ? "#c0392b" : "#1a7040", color:"#fff" }}>
+                                {bal>0 ? `Due ${money(bal)}` : "Paid ✓"}
+                              </span>
+                            </td>
+                            <td style={{ padding:"9px 12px", textAlign:"right" }}>
+                              <i className={"ti " + (isOpen ? "ti-chevron-up" : "ti-chevron-down")} style={{ fontSize:14, color:"var(--text3)" }} />
                             </td>
                           </tr>
-                        );
+                          {isOpen && (
+                            <tr key={b.id+"_exp"} style={{ background:"#f5f3ff", borderBottom:"2px solid #c4b5f4" }}>
+                              <td colSpan={6} style={{ padding:"10px 12px" }}>
+                                <div style={{ display:"flex", alignItems:"center", gap:7, flexWrap:"wrap" }}>
+                                  <span style={{ fontSize:11, color:"#4a2ea8", fontWeight:600, marginRight:4 }}>Actions:</span>
+
+                                  {/* Extend Stay */}
+                                  <button onClick={e=>{e.stopPropagation();goToInvoiceTab(b);}}
+                                    style={{ display:"inline-flex", alignItems:"center", gap:5, padding:"6px 13px", borderRadius:20, border:"none", cursor:"pointer", fontSize:12, fontWeight:600, background:"#4a2ea8", color:"#fff" }}>
+                                    <i className="ti ti-calendar-plus" style={{ fontSize:14 }} /> Extend Stay
+                                  </button>
+
+                                  {/* Collect / Paid */}
+                                  <button onClick={e=>{e.stopPropagation(); if(bal>0) setCollectTarget(b);}}
+                                    style={{ display:"inline-flex", alignItems:"center", gap:5, padding:"6px 13px", borderRadius:20, border:"none", cursor: bal>0?"pointer":"default", fontSize:12, fontWeight:600,
+                                      background: bal>0 ? "#c0392b" : "#1a7040", color:"#fff" }}>
+                                    <i className={"ti " + (bal>0 ? "ti-alert-circle" : "ti-circle-check")} style={{ fontSize:14 }} />
+                                    {bal>0 ? `Collect ${money(bal)}` : "Fully Paid"}
+                                  </button>
+
+                                  {/* Add Service */}
+                                  <button onClick={e=>{e.stopPropagation();setServiceTarget(b);}}
+                                    style={{ display:"inline-flex", alignItems:"center", gap:5, padding:"6px 13px", borderRadius:20, border:"none", cursor:"pointer", fontSize:12, fontWeight:600, background:"#b07800", color:"#fff" }}>
+                                    <i className="ti ti-sparkles" style={{ fontSize:14 }} /> Add Service
+                                  </button>
+
+                                  {/* View Invoice */}
+                                  <button onClick={e=>{e.stopPropagation();setInvoiceTarget(b);}}
+                                    style={{ display:"inline-flex", alignItems:"center", gap:5, padding:"6px 13px", borderRadius:20, border:"none", cursor:"pointer", fontSize:12, fontWeight:600, background:"#1a5a8a", color:"#fff" }}>
+                                    <i className="ti ti-file-invoice" style={{ fontSize:14 }} /> Invoice
+                                  </button>
+
+                                  {/* Checkout */}
+                                  <button onClick={e=>{e.stopPropagation();chkOut(b.id);}}
+                                    style={{ display:"inline-flex", alignItems:"center", gap:5, padding:"6px 13px", borderRadius:20, border:"none", cursor:"pointer", fontSize:12, fontWeight:600, background:"#7a1a1a", color:"#fff" }}>
+                                    <i className="ti ti-logout" style={{ fontSize:14 }} /> Checkout
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </>);
                       })}
                     </tbody>
                   </table>
@@ -713,6 +1004,10 @@ export default function Desk() {
 
       {sel && <RoomModal room={sel} onClose={() => setSel(null)} onCheckout={chkOut} />}
       {checkoutTarget && <CheckoutModal b={checkoutTarget} onConfirm={doCheckout} onClose={() => setCheckoutTarget(null)} />}
+      {checkinPreview && <CheckInPreviewModal booking={checkinPreview} onConfirm={() => { confirmCheckin(checkinPreview); setCheckinPreview(null); }} onClose={() => setCheckinPreview(null)} />}
+      {invoiceTarget && <DeskInvoiceModal booking={invoiceTarget} onClose={() => setInvoiceTarget(null)} />}
+      {collectTarget && <DeskCollectPayModal booking={collectTarget} onClose={() => setCollectTarget(null)} onConfirm={(amt, mtd, txn, note) => { handleCollectPayment(collectTarget, amt, mtd, txn, note); setCollectTarget(null); }} />}
+      {serviceTarget && <DeskServiceModal booking={serviceTarget} onClose={() => setServiceTarget(null)} onConfirm={(desc, amt, date) => { handleAddService(serviceTarget, desc, amt, date); setServiceTarget(null); }} />}
       {postCheckout && !surveyBooking && (
         <PostCheckoutModal
           booking={postCheckout}
