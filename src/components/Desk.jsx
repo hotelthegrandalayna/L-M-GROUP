@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, Fragment } from "react";
 import { useApp } from "../context/AppContext";
 import { todayStr, money, bookingConflicts, getRoomDisplayStatus, maxId, formatDate } from "../utils/helpers";
 import { buildInvoiceHTML, buildTCHtml, hotelPrint } from "./Invoice";
@@ -868,8 +868,8 @@ export default function Desk() {
                       {inhouse.map((b,i) => {
                         const bal = getHotelDue(b);
                         const isOpen = expandedRow === b.id;
-                        return (<>
-                          <tr key={b.id} onClick={() => setExpandedRow(isOpen ? null : b.id)}
+                        return (<Fragment key={b.id}>
+                          <tr onClick={() => setExpandedRow(isOpen ? null : b.id)}
                             style={{ borderBottom: isOpen ? "none" : "1px solid var(--border)",
                               background: isOpen ? "#f5f3ff" : i%2===0 ? "" : "var(--bg3)",
                               cursor:"pointer", transition:"background .1s" }}>
@@ -888,7 +888,7 @@ export default function Desk() {
                             </td>
                           </tr>
                           {isOpen && (
-                            <tr key={b.id+"_exp"} style={{ background:"#f5f3ff", borderBottom:"2px solid #c4b5f4" }}>
+                            <tr style={{ background:"#f5f3ff", borderBottom:"2px solid #c4b5f4" }}>
                               <td colSpan={6} style={{ padding:"10px 12px" }}>
                                 <div style={{ display:"flex", alignItems:"center", gap:7, flexWrap:"wrap" }}>
                                   <span style={{ fontSize:11, color:"#4a2ea8", fontWeight:600, marginRight:4 }}>Actions:</span>
@@ -928,7 +928,7 @@ export default function Desk() {
                               </td>
                             </tr>
                           )}
-                        </>);
+                        </Fragment>);
                       })}
                     </tbody>
                   </table>
@@ -1004,8 +1004,8 @@ export default function Desk() {
 
       {sel && <RoomModal room={sel} onClose={() => setSel(null)} onCheckout={chkOut} />}
       {checkoutTarget && <CheckoutModal b={checkoutTarget} onConfirm={doCheckout} onClose={() => setCheckoutTarget(null)} />}
-      {checkinPreview && <CheckInPreviewModal booking={checkinPreview} onConfirm={() => { confirmCheckin(checkinPreview); setCheckinPreview(null); }} onClose={() => setCheckinPreview(null)} />}
-      {invoiceTarget && <DeskInvoiceModal booking={invoiceTarget} onClose={() => setInvoiceTarget(null)} />}
+      {checkinPreview && <CheckInPreviewModal booking={checkinPreview} rooms={rooms} onConfirm={() => { confirmCheckin(checkinPreview); setCheckinPreview(null); }} onClose={() => setCheckinPreview(null)} />}
+      {invoiceTarget && <DeskInvoiceModal booking={invoiceTarget} rooms={rooms} onClose={() => setInvoiceTarget(null)} />}
       {collectTarget && <DeskCollectPayModal booking={collectTarget} onClose={() => setCollectTarget(null)} onConfirm={(amt, mtd, txn, note) => { handleCollectPayment(collectTarget, amt, mtd, txn, note); setCollectTarget(null); }} />}
       {serviceTarget && <DeskServiceModal booking={serviceTarget} onClose={() => setServiceTarget(null)} onConfirm={(desc, amt, date) => { handleAddService(serviceTarget, desc, amt, date); setServiceTarget(null); }} />}
       {postCheckout && !surveyBooking && (
