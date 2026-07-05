@@ -215,7 +215,8 @@ export function buildInvoiceHTML(b, rooms, invExtras, mode) {
       + '<span style="font-size:11px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase;color:#C9A84C;">Total Amount (\u09F3)</span>'
       + '<span style="font-size:17px;font-weight:800;color:#C9A84C;font-family:Georgia,serif;">'+moneyH(grandTotal)+'</span>'
     + '</div>'
-    + (advance>0 ? '<div style="display:flex;justify-content:space-between;padding:5px 0;font-size:10px;border-bottom:1px solid #eee;color:#1a7040;margin-top:4px;"><span>✔ Room Advance</span><span style="font-weight:700;">-'+moneyH(advance)+'</span></div>' : "")
+    + (advance>0 ? '<div style="display:flex;justify-content:space-between;padding:5px 0;font-size:10px;border-bottom:1px solid #eee;color:#1a7040;margin-top:4px;"><span>✔ Advance Paid</span><span style="font-weight:700;">-'+moneyH(advance)+'</span></div>' : "")
+    + (restPayment>0 ? '<div style="display:flex;justify-content:space-between;padding:5px 0;font-size:10px;border-bottom:1px solid #eee;color:#1a7040;"><span>✔ Payments Received</span><span style="font-weight:700;">-'+moneyH(restPayment)+'</span></div>' : "")
     + (extAdv>0  ? '<div style="display:flex;justify-content:space-between;padding:5px 0;font-size:10px;border-bottom:1px solid #eee;color:#1a7040;"><span>✔ Service Advance</span><span style="font-weight:700;">-'+moneyH(extAdv)+'</span></div>' : "")
     + '<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 13px;border-radius:4px;margin-top:4px;'
       + (balanceDue>0 ? 'background:#fff0f0;border:1.5px solid #c0392b;' : 'background:#f0fff4;border:1.5px solid #1a7040;') + '">'

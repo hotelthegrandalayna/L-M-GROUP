@@ -23,12 +23,12 @@ const STATUS_STYLE = {
 };
 
 function getHotelDue(b) {
-  if (b?.dueAmount != null) return Math.max(0, parseFloat(b.dueAmount) || 0);
-  const total = b?.invoiceTotal != null ? b.invoiceTotal : b?.amount || 0;
-  const paid =
-    (parseFloat(b?.advance) || 0) +
-    (parseFloat(b?.restPayment) || 0) +
-    (parseFloat(b?.extrasAdvance) || 0);
+  if (!b) return 0;
+  // Always recalculate so desk and invoice always agree.
+  // Never use the stale dueAmount field directly.
+  const disc  = (b.discAmt || b.invoiceDiscount || 0);
+  const total = Math.max(0, (b.invoiceTotal ?? b.amount ?? 0) - disc);
+  const paid  = (parseFloat(b.advance)||0) + (parseFloat(b.restPayment)||0) + (parseFloat(b.extrasAdvance)||0);
   return Math.max(0, total - paid);
 }
 
@@ -811,15 +811,19 @@ export default function Desk() {
 
     let updated;
     if (!roomChanged) {
-      // Same room — just extend nights; invoice builder recalculates automatically
-      // primaryAmount = roomRate × nights, so NO invoiceExtras needed
+      // Same room — just extend nights; invoice builder recalculates automatically.
+      // Extension advance is room rent, not a service — goes to restPayment.
+      const extPayEntry = advance > 0 ? [{
+        ts: new Date().toISOString(), amount: advance, method, txnNumber: txn||"",
+        note: `Extend stay +${extraNights} night${extraNights>1?"s":""}`, type: "room", by: curUser||"staff",
+      }] : [];
       updated = {
         ...b,
         checkout: newCheckout,
         nights: totalNights,
         invoiceTotal: (b.invoiceTotal ?? b.amount ?? 0) + extTotal,
-        dueAmount: newDue,
-        extrasAdvance: (b.extrasAdvance || 0) + advance,
+        restPayment: (b.restPayment || 0) + advance,
+        paymentHistory: [...(b.paymentHistory||[]), ...extPayEntry],
       };
     } else {
       // Room change — keep original room nights as base; add extension in extras
