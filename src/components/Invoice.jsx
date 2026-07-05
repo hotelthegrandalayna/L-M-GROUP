@@ -54,7 +54,7 @@ export function buildInvoiceHTML(b, rooms, invExtras, mode) {
   const disc        = storedDisc || inferredDisc;
   const allRoomsTotal = primaryAmount + extraRoomsOnly;
   const roomTotal   = Math.max(0, allRoomsTotal - disc);
-  const grandTotal  = roomTotal + combinedExtras;
+  const grandTotal  = Math.max(roomTotal + combinedExtras, b.invoiceTotal ?? b.amount ?? 0);
   const advance     = b.advance || 0;
   const restPayment = b.restPayment || 0;
   const extAdv      = b.extrasAdvance || 0;
