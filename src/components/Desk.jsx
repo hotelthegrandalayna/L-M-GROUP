@@ -1113,7 +1113,7 @@ export default function Desk() {
                   <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
                     <thead>
                       <tr style={{ background:"#1a1a2e", color:"#C9A84C" }}>
-                        {["Room","Guest","Phone","Check-out","Balance",""].map(h=>(
+                        {["Room","Guest","Phone","Check-out","Balance","",""].map(h=>(
                           <th key={h} style={{ padding:"8px 12px", textAlign:"left", fontSize:10, textTransform:"uppercase", letterSpacing:.5, fontWeight:600 }}>{h}</th>
                         ))}
                       </tr>
@@ -1137,13 +1137,19 @@ export default function Desk() {
                                 {bal>0 ? `Due ${money(bal)}` : "Paid ✓"}
                               </span>
                             </td>
+                            <td style={{ padding:"9px 12px" }}>
+                              <button onClick={e=>{e.stopPropagation();chkOut(b.id);}}
+                                style={{ display:"inline-flex", alignItems:"center", gap:5, padding:"5px 12px", borderRadius:20, border:"none", cursor:"pointer", fontSize:11, fontWeight:700, background:"#7a1a1a", color:"#fff", whiteSpace:"nowrap" }}>
+                                <i className="ti ti-logout" style={{ fontSize:13 }} /> Checkout
+                              </button>
+                            </td>
                             <td style={{ padding:"9px 12px", textAlign:"right" }}>
                               <i className={"ti " + (isOpen ? "ti-chevron-up" : "ti-chevron-down")} style={{ fontSize:14, color:"var(--text3)" }} />
                             </td>
                           </tr>
                           {isOpen && (
                             <tr style={{ background:"#f5f3ff", borderBottom:"2px solid #c4b5f4" }}>
-                              <td colSpan={6} style={{ padding:"10px 12px" }}>
+                              <td colSpan={7} style={{ padding:"10px 12px" }}>
                                 <div style={{ display:"flex", alignItems:"center", gap:7, flexWrap:"wrap" }}>
                                   <span style={{ fontSize:11, color:"#4a2ea8", fontWeight:600, marginRight:4 }}>Actions:</span>
 
@@ -1173,11 +1179,6 @@ export default function Desk() {
                                     <i className="ti ti-file-invoice" style={{ fontSize:14 }} /> Invoice
                                   </button>
 
-                                  {/* Checkout */}
-                                  <button onClick={e=>{e.stopPropagation();chkOut(b.id);}}
-                                    style={{ display:"inline-flex", alignItems:"center", gap:5, padding:"6px 13px", borderRadius:20, border:"none", cursor:"pointer", fontSize:12, fontWeight:600, background:"#7a1a1a", color:"#fff" }}>
-                                    <i className="ti ti-logout" style={{ fontSize:14 }} /> Checkout
-                                  </button>
                                 </div>
                               </td>
                             </tr>
