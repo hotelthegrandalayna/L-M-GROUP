@@ -294,30 +294,26 @@ export function buildTCHtml(b) {
     + '</div></div>';
 }
 
-// ─── Print helper (same logic as original _hotelPrint) ────────────────────
+// ─── Print helper ─────────────────────────────────────────────────────────
 export function hotelPrint(invHTML, tcHTML) {
+  // Remove any previous print overlay
   const old = document.getElementById("_hpm");
   if (old) old.remove();
+  // Also always clear the body class in case it was stuck from a previous session
+  document.body.classList.remove("hotel-print-mode");
+
   const d = document.createElement("div");
   d.id = "_hpm";
   d.innerHTML = '<div style="font-family:DM Sans,sans-serif;padding:0;max-width:100%;margin:0;color:#1a1a2e;background:#fff;">' + invHTML + '</div>'
     + (tcHTML ? '<div id="_hpm_tc">' + tcHTML + '</div>' : "");
-  d.style.display = "none";
+  // Show as full-screen white overlay — covers the app without using body class
+  d.style.cssText = "position:fixed;top:0;left:0;width:100%;height:100%;background:#fff;z-index:2147483647;overflow-y:auto;padding:20px;box-sizing:border-box;";
   document.body.appendChild(d);
-  document.body.classList.add("hotel-print-mode");
-  let cleaned = false;
-  const cleanup = () => {
-    if (cleaned) return;
-    cleaned = true;
-    document.body.classList.remove("hotel-print-mode");
-    if (d.parentNode) d.remove();
-    window.removeEventListener("afterprint", cleanup);
-  };
-  window.addEventListener("afterprint", cleanup);
+
+  // Let browser paint the overlay, then print, then always remove overlay
   setTimeout(() => {
-    window.print();
-    // window.print() is synchronous on most desktop browsers — clean up right after
-    cleanup();
+    try { window.print(); } catch (e) { /* print not available */ }
+    if (d.parentNode) d.remove();
   }, 300);
 }
 

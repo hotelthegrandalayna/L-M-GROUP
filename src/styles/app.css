@@ -1,4 +1,4 @@
-﻿
+
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:\'DM Sans\',sans-serif;min-height:100vh;-webkit-font-smoothing:antialiased}
 input{outline:none;}
@@ -531,12 +531,10 @@ input[readonly]{color:#7B1212;font-weight:700;cursor:default;background:#fdf5ec;
    HOTEL APP RESPONSIVE (scoped to #hotelApp)
 â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 
-/* â”€â”€ Hotel invoice print â€” same approach as hall â”€â”€ */
-body.hotel-print-mode > *{display:none!important;}
-body.hotel-print-mode #_hpm{display:block!important;}
+/* -- Hotel invoice print -- overlay approach (no body class needed) -- */
 @media print{
-  body.hotel-print-mode > *{display:none!important;}
-  body.hotel-print-mode #_hpm{
+  body > #root{display:none!important;}
+  body > #_hpm{
     display:block!important;position:static!important;
     background:#fff!important;
     padding:8mm 10mm!important;
@@ -544,20 +542,17 @@ body.hotel-print-mode #_hpm{display:block!important;}
     width:100%!important;box-sizing:border-box!important;
     min-height:100vh!important;
   }
-  body.hotel-print-mode #_hpm > div{
+  body > #_hpm > div{
     min-height:0!important;border-radius:0!important;
     box-shadow:none!important;width:100%!important;
     max-width:100%!important;padding:0!important;margin:0!important;
   }
-  body.hotel-print-mode .invoice-preview{max-width:100%!important;width:100%!important;}
-  body.hotel-print-mode .inv-table th{background:#0A1628!important;color:#E8C96A!important;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
-  body.hotel-print-mode .paid-stamp,body.hotel-print-mode .unpaid-stamp{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
-  /* Zero @page margin â€” padding on #_hpm handles all spacing, no double-stacking */
+  #_hpm .invoice-preview{max-width:100%!important;width:100%!important;}
+  #_hpm .inv-table th{background:#0A1628!important;color:#E8C96A!important;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  #_hpm .paid-stamp,#_hpm .unpaid-stamp{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
   @page{margin:0;size:A4;}
   *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;}
-  /* T&C page â€” forces page 2 (back of paper with duplex) */
   #_hpm_tc{page-break-before:always!important;break-before:page!important;padding:6mm 0 0;}
-  /* Hide screen-only duplex notice when printing */
   #_hpm_duplex_notice{display:none!important;}
 }
 
