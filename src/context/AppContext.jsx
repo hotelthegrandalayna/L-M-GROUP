@@ -179,8 +179,8 @@ export function AppProvider({ children }) {
     };
     document.addEventListener('visibilitychange', onVisibility);
 
-    // Poll every 45 seconds — tab focus catches most changes anyway
-    const interval = setInterval(() => syncFromSupabase(), 45_000);
+    // Poll every 5 minutes — tab focus (visibilitychange) catches most real-time needs
+    const interval = setInterval(() => syncFromSupabase(), 300_000);
 
     return () => {
       document.removeEventListener('visibilitychange', onVisibility);

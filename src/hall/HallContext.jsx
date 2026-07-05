@@ -156,8 +156,8 @@ export function HallProvider({ children }) {
     };
     document.addEventListener('visibilitychange', onVisibility);
 
-    // Poll every 2 minutes — tab focus catches most changes anyway
-    const interval = setInterval(() => syncHallFromSupabase(), 120_000);
+    // Poll every 5 minutes — tab focus catches most changes anyway
+    const interval = setInterval(() => syncHallFromSupabase(), 300_000);
 
     return () => {
       document.removeEventListener('visibilitychange', onVisibility);
