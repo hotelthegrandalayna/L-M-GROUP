@@ -224,6 +224,13 @@ export function AppProvider({ children }) {
     };
   }, [syncFromSupabase]);
 
+  // Safety: remove stuck hotel-print-mode class whenever tab becomes visible
+  useEffect(() => {
+    const clearPrintMode = () => document.body.classList.remove('hotel-print-mode');
+    document.addEventListener('visibilitychange', clearPrintMode);
+    return () => document.removeEventListener('visibilitychange', clearPrintMode);
+  }, []);
+
   // UI
   const [activeTab,      setActiveTab]      = useState('desk');
   const [adminTab,       setAdminTab]       = useState('finance');

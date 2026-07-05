@@ -1004,8 +1004,8 @@ export default function Desk() {
 
       {sel && <RoomModal room={sel} onClose={() => setSel(null)} onCheckout={chkOut} />}
       {checkoutTarget && <CheckoutModal b={checkoutTarget} onConfirm={doCheckout} onClose={() => setCheckoutTarget(null)} />}
-      {checkinPreview && <CheckInPreviewModal booking={checkinPreview} rooms={rooms} onConfirm={() => { confirmCheckin(checkinPreview); setCheckinPreview(null); }} onClose={() => setCheckinPreview(null)} />}
-      {invoiceTarget && <DeskInvoiceModal booking={invoiceTarget} rooms={rooms} onClose={() => setInvoiceTarget(null)} />}
+      {checkinPreview && <CheckInPreviewModal booking={checkinPreview} rooms={rooms} onConfirm={() => { confirmCheckin(checkinPreview); setCheckinPreview(null); }} onEdit={() => setCheckinPreview(null)} onClose={() => setCheckinPreview(null)} />}
+      {invoiceTarget && <DeskInvoiceModal booking={invoiceTarget} rooms={rooms} onClose={() => setInvoiceTarget(null)} onPrint={() => handlePrintInvoice(invoiceTarget)} />}
       {collectTarget && <DeskCollectPayModal booking={collectTarget} onClose={() => setCollectTarget(null)} onConfirm={(amt, mtd, txn, note) => { handleCollectPayment(collectTarget, amt, mtd, txn, note); setCollectTarget(null); }} />}
       {serviceTarget && <DeskServiceModal booking={serviceTarget} onClose={() => setServiceTarget(null)} onConfirm={(desc, amt, date) => { handleAddService(serviceTarget, desc, amt, date); setServiceTarget(null); }} />}
       {postCheckout && !surveyBooking && (
