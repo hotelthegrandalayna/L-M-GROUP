@@ -31,9 +31,15 @@ function moneyH(n) { return "\u09F3" + (n||0).toLocaleString("en-IN"); }
 // ─── Invoice HTML builder (mirrors original renderInvoice) ─────────────────
 export function buildInvoiceHTML(b, rooms, invExtras, mode) {
   if (!b) return "";
-  const disc    = b.discAmt || b.invoiceDiscount || 0;
-  // Primary room amount = roomRate × nights (never combinedBase which includes all rooms)
-  // Fallback for old bookings without roomRate: derive from amount minus extra rooms
+  // Discount: use stored discAmt first. If 0 but baseAmount > amount, the discount was baked
+  // into amount at booking creation — infer it so the invoice displays correctly.
+  // Formula: discAmt = baseAmount - amount + epCharge  (since amount = baseAmount - disc + epCharge)
+  const storedDisc  = b.discAmt || b.invoiceDiscount || 0;
+  const epAmt0      = (b.extraPersonCharge?.total || 0);
+  const inferredDisc = storedDisc === 0 && b.baseAmount && b.amount
+    ? Math.max(0, Math.round(b.baseAmount - b.amount + epAmt0))
+    : 0;
+  const disc = storedDisc || inferredDisc;
   const extraRoomsOnly = (b.extraRooms || []).reduce((s,r) => s + (r.amount||0), 0);
   const primaryRate   = b.roomRate || Math.max(0, Math.round(((b.baseAmount || b.amount || 0) - extraRoomsOnly) / (b.nights || 1)));
   const primaryAmount = primaryRate * (b.nights || 1);
