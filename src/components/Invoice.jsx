@@ -51,8 +51,7 @@ export function buildInvoiceHTML(b, rooms, invExtras, mode) {
   const totalAdv    = advance + restPayment + extAdv;
   const balanceDue  = Math.max(0, grandTotal - totalAdv);
 
-  const roomStatus    = Math.max(0, grandTotal - advance - restPayment) <= 0 && roomTotal > 0 ? "paid" : totalAdv > 0 ? "partial" : "unpaid";
-  const extrasStatus  = combinedExtras === 0 ? "unpaid" : extAdv >= combinedExtras ? "paid" : extAdv > 0 ? "partial" : "unpaid";
+  const overallStatus = balanceDue <= 0 && grandTotal > 0 ? "paid" : totalAdv > 0 ? "partial" : "unpaid";
   const invNum = "GA-" + String(b.id).padStart(4,"0");
   const invDate = b.invoiceDate || todayStr();
 
@@ -225,9 +224,7 @@ export function buildInvoiceHTML(b, rooms, invExtras, mode) {
     + '</div></div>';
 
   const mid = '<div style="padding:0 24px 12px;display:grid;grid-template-columns:1fr 1fr;gap:16px;">'
-    + (validExtras.length > 0
-      ? '<div style="display:flex;flex-direction:column;gap:8px;">'+statusBox(roomStatus)+statusBox(extrasStatus)+'</div>'
-      : '<div>'+statusBox(roomStatus)+'</div>')
+    + '<div>'+statusBox(overallStatus)+'</div>'
     + '<div>'+totals+'</div>'
     + '</div>';
 

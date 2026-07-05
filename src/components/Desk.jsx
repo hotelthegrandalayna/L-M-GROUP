@@ -494,14 +494,33 @@ function DeskServiceModal({ booking, onConfirm, onClose }) {
   const [desc, setDesc] = useState("");
   const [amt, setAmt]   = useState("");
   const [date, setDate] = useState(todayStr());
+  const currentDue = getHotelDue(booking);
+  const newCharge  = parseFloat(amt) > 0 ? parseFloat(amt) : 0;
+  const totalPaid  = (booking.advance||0) + (booking.restPayment||0) + (booking.extrasAdvance||0);
   return (
     <div className="modal-overlay open" onClick={e => e.target===e.currentTarget && onClose()} style={{ zIndex:9999 }}>
-      <div className="modal-box" style={{ maxWidth:380 }}>
+      <div className="modal-box" style={{ maxWidth:400 }}>
         <div className="modal-header">
           <div className="modal-title" style={{ color:"#b07800" }}>
             <i className="ti ti-sparkles" /> Add Service Charge — {booking.guest}
           </div>
           <button className="modal-close" onClick={onClose}><i className="ti ti-x" /></button>
+        </div>
+        <div style={{ background:"#fffbf0", border:"1.5px solid #e8c96a", borderRadius:9, padding:"11px 14px", marginBottom:14, fontSize:12 }}>
+          <div style={{ display:"flex", justifyContent:"space-between", color:"var(--text2)", marginBottom:3 }}>
+            <span>Room invoice total</span><span style={{ fontWeight:700 }}>{money(booking.invoiceTotal ?? booking.amount ?? 0)}</span>
+          </div>
+          <div style={{ display:"flex", justifyContent:"space-between", color:"var(--green)", marginBottom:3 }}>
+            <span>Already paid</span><span style={{ fontWeight:700 }}>-{money(totalPaid)}</span>
+          </div>
+          <div style={{ display:"flex", justifyContent:"space-between", color:"#b07800", borderTop:"1px solid #e8c96a", paddingTop:6, marginTop:4 }}>
+            <span>Current balance due</span><span style={{ fontWeight:800 }}>{money(currentDue)}</span>
+          </div>
+          {newCharge > 0 && (
+            <div style={{ display:"flex", justifyContent:"space-between", color:"#c0392b", borderTop:"1px solid #e8c96a", paddingTop:6, marginTop:4, fontWeight:800 }}>
+              <span>After this charge</span><span>{money(currentDue + newCharge)}</span>
+            </div>
+          )}
         </div>
         <div className="form-group"><label>Description *</label>
           <input value={desc} onChange={e=>setDesc(e.target.value)} placeholder="e.g. Restaurant, Laundry, Room service" autoFocus />
@@ -773,7 +792,8 @@ export default function Desk() {
     const newExtra = { desc, qty:1, rate:amt, date };
     const extras = [...(b.invoiceExtras||[]), newExtra];
     const newTotal = (b.invoiceTotal ?? b.amount ?? 0) + amt;
-    const updated = { ...b, invoiceExtras: extras, invoiceTotal: newTotal };
+    const newDue = getHotelDue(b) + amt;
+    const updated = { ...b, invoiceExtras: extras, invoiceTotal: newTotal, dueAmount: newDue };
     updateBookings(prev => prev.map(x => x.id===b.id ? updated : x));
     void persistHotelBookingBundle(updated).catch(()=>{});
     notify("Service charge added to invoice","success");
