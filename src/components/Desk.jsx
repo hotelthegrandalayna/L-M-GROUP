@@ -783,19 +783,44 @@ export default function Desk() {
   // Extend stay from Desk popup
   function handleExtendStay(b, { newCheckout, roomNumber, extTotal, discAmt, advance, method, txn }) {
     const extraNights = Math.round((new Date(newCheckout) - new Date(b.checkout)) / 86400000);
-    const updated = {
-      ...b,
-      checkout: newCheckout,
-      room: roomNumber,
-      nights: (b.nights || 0) + extraNights,
-      invoiceTotal: (b.invoiceTotal ?? b.amount ?? 0) + extTotal,
-      dueAmount: Math.max(0, getHotelDue(b) + extTotal - advance),
-      extrasAdvance: (b.extrasAdvance || 0) + advance,
-      invoiceExtras: [
-        ...(b.invoiceExtras || []),
-        { desc: `Extension: +${extraNights} night${extraNights > 1 ? "s" : ""}${roomNumber !== b.room ? " (Rm " + roomNumber + ")" : ""}${discAmt > 0 ? " (disc ৳" + discAmt + ")" : ""}`, qty: extraNights, rate: extTotal / (extraNights || 1), date: newCheckout },
-      ],
-    };
+    const totalNights = (b.nights || 0) + extraNights;
+    const roomChanged = roomNumber !== b.room;
+    const newRoom = rooms.find(r => r.number === roomNumber);
+    const newRate = newRoom ? (newRoom.acRate || newRoom.rate || 0) : (b.roomRate || 0);
+    const newDue = Math.max(0, getHotelDue(b) + extTotal - advance);
+
+    let updated;
+    if (!roomChanged) {
+      // Same room — just extend nights; invoice builder recalculates automatically
+      // primaryAmount = roomRate × nights, so NO invoiceExtras needed
+      updated = {
+        ...b,
+        checkout: newCheckout,
+        nights: totalNights,
+        invoiceTotal: (b.invoiceTotal ?? b.amount ?? 0) + extTotal,
+        dueAmount: newDue,
+        extrasAdvance: (b.extrasAdvance || 0) + advance,
+      };
+    } else {
+      // Room change — keep original room nights as base; add extension in extras
+      // so both rooms are clearly shown on the invoice
+      const extDesc = `Rm ${roomNumber}${newRoom?.name ? " — " + newRoom.name : ""}: +${extraNights} night${extraNights > 1 ? "s" : ""}${discAmt > 0 ? " (disc ৳" + discAmt.toLocaleString() + ")" : ""}`;
+      updated = {
+        ...b,
+        checkout: newCheckout,
+        room: roomNumber,       // primary room is now the new room
+        roomRate: newRate,
+        nights: totalNights,
+        invoiceTotal: (b.invoiceTotal ?? b.amount ?? 0) + extTotal,
+        dueAmount: newDue,
+        extrasAdvance: (b.extrasAdvance || 0) + advance,
+        invoiceExtras: [
+          ...(b.invoiceExtras || []),
+          { desc: extDesc, qty: extraNights, rate: extTotal / (extraNights || 1), date: newCheckout },
+        ],
+      };
+    }
+
     updateBookings(prev => prev.map(x => x.id === b.id ? updated : x));
     if (advance > 0) {
       updateRevenues(prev => [...prev, {
@@ -804,7 +829,7 @@ export default function Desk() {
       }]);
     }
     void persistHotelBookingBundle(updated).catch(() => {});
-    notify(b.guest + " extended to " + newCheckout + (roomNumber !== b.room ? ", moved to Rm " + roomNumber : "") + (advance > 0 ? " · Advance ৳" + advance.toLocaleString() : ""), "success");
+    notify(b.guest + " extended to " + newCheckout + (roomChanged ? ", moved to Rm " + roomNumber : "") + (advance > 0 ? " · Advance ৳" + advance.toLocaleString() : ""), "success");
     setExtendTarget(null);
     setExpandedRow(null);
   }
