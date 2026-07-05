@@ -305,16 +305,19 @@ export function hotelPrint(invHTML, tcHTML) {
   d.style.display = "none";
   document.body.appendChild(d);
   document.body.classList.add("hotel-print-mode");
+  let cleaned = false;
+  const cleanup = () => {
+    if (cleaned) return;
+    cleaned = true;
+    document.body.classList.remove("hotel-print-mode");
+    if (d.parentNode) d.remove();
+    window.removeEventListener("afterprint", cleanup);
+  };
+  window.addEventListener("afterprint", cleanup);
   setTimeout(() => {
-    const cleanup = () => {
-      document.body.classList.remove("hotel-print-mode");
-      if (d.parentNode) d.remove();
-      window.removeEventListener("afterprint", cleanup);
-    };
-    window.addEventListener("afterprint", cleanup);
     window.print();
-    // Fallback: restore app after 4 seconds in case afterprint never fires
-    setTimeout(cleanup, 4000);
+    // window.print() is synchronous on most desktop browsers — clean up right after
+    cleanup();
   }, 300);
 }
 

@@ -258,18 +258,20 @@ export function AppProvider({ children }) {
   }, []);
 
   const updateGuests = useCallback((next) => {
-    const val = typeof next === 'function' ? next(undefined) : next;
-    setGuests(val);
-    localStorage.setItem('ga_guests', JSON.stringify(val));
-    const sbUrl = (import.meta.env?.VITE_SUPABASE_URL || '').trim();
-    const sbKey = ((import.meta.env?.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env?.VITE_SUPABASE_ANON_KEY) || '').trim();
-    if (sbUrl && sbKey) {
-      fetch(sbUrl.replace(/\/$/, '') + '/rest/v1/app_config', {
-        method: 'POST',
-        headers: { apikey: sbKey, Authorization: 'Bearer ' + sbKey, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' },
-        body: JSON.stringify({ key: 'hotel_guest_profiles', value: val, updated_at: new Date().toISOString() }),
-      }).catch(() => {});
-    }
+    setGuests(prev => {
+      const val = typeof next === 'function' ? next(prev) : next;
+      localStorage.setItem('ga_guests', JSON.stringify(val));
+      const gSbUrl = (import.meta.env?.VITE_SUPABASE_URL || '').trim();
+      const gSbKey = ((import.meta.env?.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env?.VITE_SUPABASE_ANON_KEY) || '').trim();
+      if (gSbUrl && gSbKey) {
+        fetch(gSbUrl.replace(/\/$/, '') + '/rest/v1/app_config', {
+          method: 'POST',
+          headers: { apikey: gSbKey, Authorization: 'Bearer ' + gSbKey, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' },
+          body: JSON.stringify({ key: 'hotel_guest_profiles', value: val, updated_at: new Date().toISOString() }),
+        }).catch(() => {});
+      }
+      return val;
+    });
   }, []);
 
   const updateBookings = useCallback((next) => {
