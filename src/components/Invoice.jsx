@@ -313,6 +313,8 @@ export function hotelPrint(invHTML, tcHTML) {
     };
     window.addEventListener("afterprint", cleanup);
     window.print();
+    // Fallback: restore app after 4 seconds in case afterprint never fires
+    setTimeout(cleanup, 4000);
   }, 300);
 }
 
