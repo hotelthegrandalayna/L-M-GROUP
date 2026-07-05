@@ -31,25 +31,29 @@ function moneyH(n) { return "\u09F3" + (n||0).toLocaleString("en-IN"); }
 // ─── Invoice HTML builder (mirrors original renderInvoice) ─────────────────
 export function buildInvoiceHTML(b, rooms, invExtras, mode) {
   if (!b) return "";
-  // Discount: use stored discAmt first. If 0 but baseAmount > amount, the discount was baked
-  // into amount at booking creation — infer it so the invoice displays correctly.
-  // Formula: discAmt = baseAmount - amount + epCharge  (since amount = baseAmount - disc + epCharge)
-  const storedDisc  = b.discAmt || b.invoiceDiscount || 0;
-  const epAmt0      = (b.extraPersonCharge?.total || 0);
-  const inferredDisc = storedDisc === 0 && b.baseAmount && b.amount
-    ? Math.max(0, Math.round(b.baseAmount - b.amount + epAmt0))
+
+  // ── Calculate extras first (needed for discount inference) ─────────────────
+  const extraRoomsOnly  = (b.extraRooms || []).reduce((s,r) => s + (r.amount||0), 0);
+  const primaryRate     = b.roomRate || Math.max(0, Math.round(((b.baseAmount || b.amount || 0) - extraRoomsOnly) / (b.nights || 1)));
+  const primaryAmount   = primaryRate * (b.nights || 1);
+  const validExtras     = (invExtras || []).filter(x => x.desc && x.rate > 0);
+  const extrasTotal     = validExtras.reduce((s,x) => s + x.qty * x.rate, 0);
+  const epCharge        = (b.extraPersonCharge?.total || 0);
+  const combinedExtras  = extrasTotal + epCharge;
+
+  // ── Discount inference ─────────────────────────────────────────────────────
+  // invoiceTotal = discounted room + extension amounts + service charges + extra rooms
+  // netPrimaryRoom = invoiceTotal − services − extra rooms = discounted primary room
+  // disc = primaryAmount (full rate × nights) − netPrimaryRoom
+  // This works correctly even after extend stay and service charges.
+  const storedDisc     = b.discAmt || b.invoiceDiscount || 0;
+  const netPrimaryRoom = (b.invoiceTotal ?? b.amount ?? 0) - combinedExtras - extraRoomsOnly;
+  const inferredDisc   = storedDisc === 0 && netPrimaryRoom > 0 && primaryAmount > netPrimaryRoom
+    ? Math.max(0, Math.round(primaryAmount - netPrimaryRoom))
     : 0;
-  const disc = storedDisc || inferredDisc;
-  const extraRoomsOnly = (b.extraRooms || []).reduce((s,r) => s + (r.amount||0), 0);
-  const primaryRate   = b.roomRate || Math.max(0, Math.round(((b.baseAmount || b.amount || 0) - extraRoomsOnly) / (b.nights || 1)));
-  const primaryAmount = primaryRate * (b.nights || 1);
-  const extraRoomsInvoiceTotal = extraRoomsOnly;
-  const allRoomsTotal = primaryAmount + extraRoomsInvoiceTotal;
-  const roomTotal = Math.max(0, allRoomsTotal - disc);
-  const validExtras = (invExtras || []).filter(x => x.desc && x.rate > 0);
-  const extrasTotal = validExtras.reduce((s,x) => s + x.qty * x.rate, 0);
-  const epCharge    = (b.extraPersonCharge && b.extraPersonCharge.total) || 0;
-  const combinedExtras = extrasTotal + epCharge;
+  const disc        = storedDisc || inferredDisc;
+  const allRoomsTotal = primaryAmount + extraRoomsOnly;
+  const roomTotal   = Math.max(0, allRoomsTotal - disc);
   const grandTotal  = roomTotal + combinedExtras;
   const advance     = b.advance || 0;
   const restPayment = b.restPayment || 0;
@@ -200,13 +204,6 @@ export function buildInvoiceHTML(b, rooms, invExtras, mode) {
         + '<td style="'+pTD+'text-align:right;color:#1a7040;font-weight:700;">-'+moneyH(h.amount)+'</td>'
         + '</tr>';
     });
-    const balRow = Math.max(0, grandTotal - totalAdv);
-    const balClr = balRow > 0 ? "#c0392b" : "#1a7040";
-    const balBg  = balRow > 0 ? "#fff0f0" : "#f0fff4";
-    tableBody += '<tr style="background:'+balBg+';border-top:2px solid '+balClr+';">'
-      + '<td colspan="4" style="padding:9px 10px;font-size:9.5px;font-weight:800;letter-spacing:.8px;text-transform:uppercase;text-align:right;color:'+balClr+';">'+(balRow>0?"Balance Due":"✔ Fully Paid")+'</td>'
-      + '<td style="padding:9px 10px;font-size:13px;font-weight:800;text-align:right;color:'+balClr+';">'+moneyH(balRow)+'</td>'
-      + '</tr>';
   }
 
   const table = '<div style="padding:12px 24px;"><table style="width:100%;border-collapse:collapse;">'
@@ -221,9 +218,15 @@ export function buildInvoiceHTML(b, rooms, invExtras, mode) {
       + '<span style="font-size:11px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase;color:#C9A84C;">Total Amount (\u09F3)</span>'
       + '<span style="font-size:17px;font-weight:800;color:#C9A84C;font-family:Georgia,serif;">'+moneyH(grandTotal)+'</span>'
     + '</div>'
-    + (advance>0 ? '<div style="display:flex;justify-content:space-between;padding:5px 0;font-size:10px;border-bottom:1px solid #eee;color:#1a7040;margin-top:4px;"><span>✔ Advance Paid</span><span style="font-weight:700;">-'+moneyH(advance)+'</span></div>' : "")
-    + (restPayment>0 ? '<div style="display:flex;justify-content:space-between;padding:5px 0;font-size:10px;border-bottom:1px solid #eee;color:#1a7040;"><span>✔ Payments Received</span><span style="font-weight:700;">-'+moneyH(restPayment)+'</span></div>' : "")
-    + (extAdv>0  ? '<div style="display:flex;justify-content:space-between;padding:5px 0;font-size:10px;border-bottom:1px solid #eee;color:#1a7040;"><span>✔ Service Advance</span><span style="font-weight:700;">-'+moneyH(extAdv)+'</span></div>' : "")
+    + (totalAdv > 0
+        ? (payHist.length > 0
+            // paymentHistory table already shows each payment — just show the total here
+            ? '<div style="display:flex;justify-content:space-between;padding:5px 0;font-size:10px;border-bottom:1px solid #eee;color:#1a7040;margin-top:4px;"><span>✔ Total Paid</span><span style="font-weight:700;">-'+moneyH(totalAdv)+'</span></div>'
+            // No paymentHistory — show breakdown
+            : (advance>0 ? '<div style="display:flex;justify-content:space-between;padding:5px 0;font-size:10px;border-bottom:1px solid #eee;color:#1a7040;margin-top:4px;"><span>✔ Advance Paid</span><span style="font-weight:700;">-'+moneyH(advance)+'</span></div>' : "")
+              + (restPayment>0 ? '<div style="display:flex;justify-content:space-between;padding:5px 0;font-size:10px;border-bottom:1px solid #eee;color:#1a7040;"><span>✔ Payments Received</span><span style="font-weight:700;">-'+moneyH(restPayment)+'</span></div>' : "")
+              + (extAdv>0 ? '<div style="display:flex;justify-content:space-between;padding:5px 0;font-size:10px;border-bottom:1px solid #eee;color:#1a7040;"><span>✔ Service Advance</span><span style="font-weight:700;">-'+moneyH(extAdv)+'</span></div>' : ""))
+        : "")
     + '<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 13px;border-radius:4px;margin-top:4px;'
       + (balanceDue>0 ? 'background:#fff0f0;border:1.5px solid #c0392b;' : 'background:#f0fff4;border:1.5px solid #1a7040;') + '">'
       + '<span style="font-size:8.5px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:'+(balanceDue>0?"#c0392b":"#1a7040")+'">'+(balanceDue>0?"Balance Due (\u09F3)":"Fully Paid ✔")+'</span>'
@@ -300,25 +303,45 @@ export function buildTCHtml(b) {
 
 // ─── Print helper ─────────────────────────────────────────────────────────
 export function hotelPrint(invHTML, tcHTML) {
-  // Remove any previous print overlay
-  const old = document.getElementById("_hpm");
-  if (old) old.remove();
-  // Also always clear the body class in case it was stuck from a previous session
-  document.body.classList.remove("hotel-print-mode");
+  const w = window.open("", "_blank");
+  if (!w) return;
 
-  const d = document.createElement("div");
-  d.id = "_hpm";
-  d.innerHTML = '<div style="font-family:DM Sans,sans-serif;padding:0;max-width:100%;margin:0;color:#1a1a2e;background:#fff;">' + invHTML + '</div>'
-    + (tcHTML ? '<div id="_hpm_tc">' + tcHTML + '</div>' : "");
-  // Show as full-screen white overlay — covers the app without using body class
-  d.style.cssText = "position:fixed;top:0;left:0;width:100%;height:100%;background:#fff;z-index:2147483647;overflow-y:auto;padding:20px;box-sizing:border-box;";
-  document.body.appendChild(d);
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+* { box-sizing: border-box; }
+body { margin: 0; padding: 0; font-family: 'DM Sans', sans-serif; background: #fff; }
+@media print {
+  @page { size: A4 portrait; margin: 5mm; }
+  .tc-break { page-break-before: always; }
+}
+</style>
+</head>
+<body>
+<div id="inv">${invHTML}</div>
+${tcHTML ? `<div class="tc-break">${tcHTML}</div>` : ""}
+<script>
+window.onload = function() {
+  var inv = document.getElementById("inv");
+  if (inv) {
+    var h = inv.offsetHeight;
+    var limit = 1050;
+    if (h > limit) {
+      var z = Math.max(0.5, limit / h);
+      inv.style.zoom = z;
+    }
+  }
+  setTimeout(function() { window.print(); window.close(); }, 400);
+};
+</script>
+</body>
+</html>`;
 
-  // Let browser paint the overlay, then print, then always remove overlay
-  setTimeout(() => {
-    try { window.print(); } catch (e) { /* print not available */ }
-    if (d.parentNode) d.remove();
-  }, 300);
+  w.document.open();
+  w.document.write(html);
+  w.document.close();
 }
 
 // ─── Main Invoice Component ────────────────────────────────────────────────

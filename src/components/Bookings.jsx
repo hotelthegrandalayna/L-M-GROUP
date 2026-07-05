@@ -21,7 +21,7 @@ import { sendWhatsAppAlert, buildHotelWaMessage } from "../utils/whatsapp";
 import { sendNtfyAlert } from "../utils/ntfy";
 import { logEvent } from "../utils/auditLog";
 import { persistHotelBookingBundle } from "../lib/hotelSupabase";
-import { buildInvoiceHTML } from "./Invoice";
+import { buildInvoiceHTML, buildTCHtml, hotelPrint } from "./Invoice";
 
 function InvoicePreviewModal({ booking, rooms, onClose }) {
   const html = buildInvoiceHTML(booking, rooms, booking.extras || [], "room");
@@ -353,7 +353,7 @@ const FILTERS = ["all","confirmed","checked-in","checked-out","cancelled"];
 
 // ─── New Booking Modal (full original form) ────────────────────────────────
 function SMSSendModal({ booking, refName, refPhone, status, onClose }) {
-  const { smsTemplates, setActiveTab, setPendingInvoiceId } = useApp();
+  const { smsTemplates } = useApp();
   const [copied, setCopied] = useState("");
 
   const isCheckin = status === "checked-in";
@@ -450,18 +450,7 @@ function SMSSendModal({ booking, refName, refPhone, status, onClose }) {
         )}
 
         <div className="modal-actions">
-          {isCheckin ? (
-            <>
-              <button className="btn" onClick={onClose}><i className="ti ti-check" /> Done</button>
-              <button className="btn primary" onClick={() => {
-                setPendingInvoiceId(booking.id);
-                setActiveTab("invoice");
-                onClose();
-              }}><i className="ti ti-file-invoice" /> Go to Invoice</button>
-            </>
-          ) : (
-            <button className="btn primary" onClick={onClose}><i className="ti ti-check" /> Done</button>
-          )}
+          <button className="btn primary" onClick={onClose}><i className="ti ti-check" /> Done</button>
         </div>
       </div>
     </div>
@@ -469,7 +458,7 @@ function SMSSendModal({ booking, refName, refPhone, status, onClose }) {
 }
 
 function NewBookingModal({ onClose, prefill }) {
-  const { curUser, rooms, bookings, updateBookings, revenues, updateRevenues, notify, extraPersonRules, setPendingInvoiceId, setActiveTab } = useApp();
+  const { curUser, rooms, bookings, updateBookings, revenues, updateRevenues, notify, extraPersonRules } = useApp();
   const today = todayStr();
   const yesterday = addDaysIso(today, -1);
   const tmr   = addDaysIso(today, 1);
@@ -508,7 +497,7 @@ function NewBookingModal({ onClose, prefill }) {
   const [spouseName,  setSpouseName]  = useState("");
   const [groupMembers, setGroupMembers] = useState([""]);
   const [smsData,     setSmsData]     = useState(null); // { booking, refName, refPhone }
-  const pendingCheckinId = useRef(null);
+  const [previewBkObj, setPreviewBkObj] = useState(null);
 
   const needsTxn = ["bKash","Nagad"].includes(method);
   const epThreshold = (extraPersonRules?.threshold) || 3;
@@ -589,18 +578,18 @@ function NewBookingModal({ onClose, prefill }) {
     setPersons(prev => prev.filter((_, i) => i !== idx));
   }
 
-  function doSave(status) {
-    if (!name.trim())  { notify("Guest name required", "error"); return; }
-    if (!phone.trim()) { notify("Phone required", "error"); return; }
-    if (!selRoom)      { notify("Select a room", "error"); return; }
-    if (!nights)       { notify("Check-out must be after check-in", "error"); return; }
-    if ((parseFloat(advance) || 0) <= 0 && !payLater) { notify("Enter payment amount or select Pay Later", "error"); return; }
+  function buildAndValidate() {
+    if (!name.trim())  { notify("Guest name required", "error"); return null; }
+    if (!phone.trim()) { notify("Phone required", "error"); return null; }
+    if (!selRoom)      { notify("Select a room", "error"); return null; }
+    if (!nights)       { notify("Check-out must be after check-in", "error"); return null; }
+    if ((parseFloat(advance) || 0) <= 0 && !payLater) { notify("Enter payment amount or select Pay Later", "error"); return null; }
     if (bookingConflicts(selRoom.number, ci, co, null, bookings)) {
-      notify(`Room ${selRoom.number} is already booked for those dates`, "error"); return;
+      notify(`Room ${selRoom.number} is already booked for those dates`, "error"); return null;
     }
     for (const er of extraRoomsData) {
       if (bookingConflicts(er.number, ci, co, null, bookings)) {
-        notify(`Room ${er.number} is already booked for those dates`, "error"); return;
+        notify(`Room ${er.number} is already booked for those dates`, "error"); return null;
       }
     }
     const id  = maxId(bookings);
@@ -608,7 +597,7 @@ function NewBookingModal({ onClose, prefill }) {
     const rph = refPhone.trim();
     const a   = adv;
     const t   = needsTxn ? txnNum.trim() : "";
-    const bkObj = {
+    return {
       id, guest: name.trim(), phone: phone.trim(), email: "",
       room: selRoom.number, type: selRoom.type,
       checkin: ci, checkout: co, nights,
@@ -619,8 +608,8 @@ function NewBookingModal({ onClose, prefill }) {
         number: r.number, type: r.room.type, name: r.room.name,
         acChoice: r.acChoice, rate: r.rate, amount: r.amount, isDual: r.isDual,
       })),
-      discType: discType, discAmt: discAmt, discReason: discReason.trim(),
-      status, notes: notes.trim(),
+      discType, discAmt, discReason: discReason.trim(),
+      notes: notes.trim(),
       source: src, referredByName: rn, referredByPhone: rph, referredBy: rn || rph,
       nationality: nat.trim(),
       idType: persons[0]?.idType || "",
@@ -635,31 +624,27 @@ function NewBookingModal({ onClose, prefill }) {
       guestType: guestType || "single",
       spouseName: guestType === "couple" ? spouseName.trim() : "",
       groupMembers: guestType === "group" ? groupMembers.map(m=>m.trim()).filter(Boolean) : [],
-      createdAt: new Date().toISOString(), by: curUser || "staff" };
-    updateBookings([...bookings, bkObj]);
-    void persistHotelBookingBundle(bkObj)
+      createdAt: new Date().toISOString(), by: curUser || "staff",
+    };
+  }
+
+  function performSave(bkObj, status) {
+    const finalBk = { ...bkObj, status };
+    updateBookings([...bookings, finalBk]);
+    void persistHotelBookingBundle(finalBk)
       .then(({ guest, booking }) => {
         if (!booking) return;
         updateBookings((prev) =>
           prev.map((x) =>
-            x.id === bkObj.id
+            x.id === finalBk.id
               ? {
                   ...x,
                   guest_id: guest?.id ?? x.guest_id,
-                  supabaseBookingId:
-                    booking.id ?? x.supabaseBookingId ?? x.dbBookingId ?? null,
+                  supabaseBookingId: booking.id ?? x.supabaseBookingId ?? x.dbBookingId ?? null,
                   restPayment: booking.rest_payment ?? x.restPayment ?? 0,
                   dueAmount: booking.due_amount ?? x.dueAmount ?? 0,
-                  transactionNumber:
-                    booking.transaction_number ??
-                    x.transactionNumber ??
-                    x.txnNumber ??
-                    "",
-                  txnNumber:
-                    booking.transaction_number ??
-                    x.txnNumber ??
-                    x.transactionNumber ??
-                    "",
+                  transactionNumber: booking.transaction_number ?? x.transactionNumber ?? x.txnNumber ?? "",
+                  txnNumber: booking.transaction_number ?? x.txnNumber ?? x.transactionNumber ?? "",
                 }
               : x,
           ),
@@ -669,20 +654,35 @@ function NewBookingModal({ onClose, prefill }) {
         console.error("Failed to sync hotel booking to Supabase:", err);
         notify("Booking saved locally, but Supabase sync failed", "error");
       });
-    sendWhatsAppAlert(buildHotelWaMessage(bkObj)).catch(() => {});
+    sendWhatsAppAlert(buildHotelWaMessage(finalBk)).catch(() => {});
     sendNtfyAlert(
-      `🏨 New Hotel Booking — ${bkObj.guest}`,
-      `Room: ${bkObj.room}\nCheck-in: ${bkObj.checkin}\nCheck-out: ${bkObj.checkout}\nNights: ${bkObj.nights}\nTotal: ৳${(bkObj.amount||0).toLocaleString()}\nAdvance: ৳${(bkObj.advance||0).toLocaleString()}`
+      `🏨 New Hotel Booking — ${finalBk.guest}`,
+      `Room: ${finalBk.room}\nCheck-in: ${finalBk.checkin}\nCheck-out: ${finalBk.checkout}\nNights: ${finalBk.nights}\nTotal: ৳${(finalBk.amount||0).toLocaleString()}\nAdvance: ৳${(finalBk.advance||0).toLocaleString()}`
     ).catch(() => {});
-    if (a > 0) updateRevenues(prev => [...prev, {
-      id: maxId(prev), source: "Room Rent", amount: a, date: today,
-      note: name.trim() + " Rm " + selRoom.number + (status === "confirmed" ? " — reservation deposit" : " — advance payment") + " (" + method + ")",
-      bookingId: id }]);
-    notify(name.trim() + (status === "checked-in" ? " checked in ✓" : " booking saved") + (discAmt > 0 ? " · Discount " + money(discAmt) : ""), "success");
+    if (finalBk.advance > 0) updateRevenues(prev => [...prev, {
+      id: maxId(prev), source: "Room Rent", amount: finalBk.advance, date: today,
+      note: finalBk.guest + " Rm " + finalBk.room + (status === "confirmed" ? " — reservation deposit" : " — advance payment") + " (" + finalBk.paymentMethod + ")",
+      bookingId: finalBk.id }]);
+    notify(finalBk.guest + (status === "checked-in" ? " checked in ✓" : " booking saved") + (discAmt > 0 ? " · Discount " + money(discAmt) : ""), "success");
     logEvent("hotel", status === "checked-in" ? "booking_checked_in" : "booking_created",
-      { num:String(id), guest:bkObj.guest, amount:roomTotal, note:`Rm ${selRoom.number}${discAmt>0?` · Discount ৳${discAmt}`:""}` }, curUser);
-    if (status === "checked-in") pendingCheckinId.current = id;
-    setSmsData({ booking: bkObj, refName: refName.trim(), refPhone: refPhone.trim(), status });
+      { num: String(finalBk.id), guest: finalBk.guest, amount: roomTotal, note: `Rm ${finalBk.room}${discAmt > 0 ? ` · Discount ৳${discAmt}` : ""}` }, curUser);
+    if (status === "checked-in") {
+      const tcEnabled = localStorage.getItem("ga_tc_enabled") !== "false";
+      const willPrintTC = tcEnabled && !finalBk.tcPrinted;
+      if (willPrintTC) {
+        updateBookings(prev => prev.map(x => x.id === finalBk.id ? { ...x, tcPrinted: true } : x));
+      }
+      const invHtml = buildInvoiceHTML(finalBk, rooms, [], "room");
+      const tcHtml  = willPrintTC ? buildTCHtml(finalBk) : null;
+      hotelPrint(invHtml, tcHtml);
+    }
+    setSmsData({ booking: finalBk, refName: refName.trim(), refPhone: refPhone.trim(), status });
+  }
+
+  function doSave(status) {
+    const bkObj = buildAndValidate();
+    if (!bkObj) return;
+    performSave(bkObj, status);
   }
 
   const SOURCES     = ["Walk-in","Phone","Website","WhatsApp","OTA","Referral"];
@@ -1071,7 +1071,10 @@ function NewBookingModal({ onClose, prefill }) {
           )}
           <button className="btn" onClick={()=>doSave("confirmed")}><i className="ti ti-calendar" /> Save Reservation</button>
           {ci <= today ? (
-            <button className="btn primary" onClick={()=>doSave("checked-in")}><i className="ti ti-login" /> Check In Now</button>
+            <button className="btn primary" onClick={() => {
+              const bk = buildAndValidate();
+              if (bk) setPreviewBkObj(bk);
+            }}><i className="ti ti-eye" /> Preview & Check In</button>
           ) : (
             <div style={{ display:"flex", alignItems:"center", gap:8, background:"#fff8e1", border:"1.5px solid #f0c040", borderRadius:9, padding:"8px 14px", fontSize:12, color:"#7a5c00", fontWeight:600 }}>
               <i className="ti ti-info-circle" style={{ fontSize:16, color:"#f0a000" }} />
@@ -1081,6 +1084,32 @@ function NewBookingModal({ onClose, prefill }) {
         </div>
       </div>
     </div>
+    {previewBkObj && (
+      <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && setPreviewBkObj(null)} style={{ zIndex:10001 }}>
+        <div className="modal-box" style={{ maxWidth:860, padding:0, overflow:"hidden" }}>
+          <div style={{ background:"#1a1a2e", padding:"14px 20px", display:"flex", justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:8 }}>
+            <div>
+              <div style={{ color:"#C9A84C", fontWeight:800, fontSize:16 }}>
+                <i className="ti ti-file-invoice" /> Invoice Preview — {previewBkObj.guest} · Rm {previewBkObj.room}
+              </div>
+              <div style={{ color:"rgba(255,255,255,.6)", fontSize:12, marginTop:2 }}>Review the invoice before confirming check-in</div>
+            </div>
+            <div style={{ display:"flex", gap:8 }}>
+              <button className="btn" onClick={() => setPreviewBkObj(null)} style={{ fontSize:13 }}>
+                <i className="ti ti-edit" /> Edit
+              </button>
+              <button className="btn primary" onClick={() => { performSave(previewBkObj, "checked-in"); setPreviewBkObj(null); }} style={{ fontSize:13, background:"#1a7040", border:"none" }}>
+                <i className="ti ti-login" /> Confirm Check In
+              </button>
+            </div>
+          </div>
+          <div style={{ maxHeight:"75vh", overflowY:"auto", background:"#fafaf8" }}>
+            <div dangerouslySetInnerHTML={{ __html: buildInvoiceHTML(previewBkObj, rooms, [], "room") }} />
+          </div>
+        </div>
+      </div>
+    )}
+
     {smsData && (
       <SMSSendModal
         booking={smsData.booking}
@@ -1089,11 +1118,6 @@ function NewBookingModal({ onClose, prefill }) {
         status={smsData.status}
         onClose={() => {
           setSmsData(null);
-          if (pendingCheckinId.current !== null) {
-            setPendingInvoiceId(pendingCheckinId.current);
-            setActiveTab("invoice");
-            pendingCheckinId.current = null;
-          }
           onClose();
         }}
       />
@@ -1105,7 +1129,7 @@ function NewBookingModal({ onClose, prefill }) {
 
 
 export default function Bookings() {
-  const { bookings, rooms, updateBookings, updateRevenues, revenues, setPendingInvoiceId, setActiveTab } = useApp();
+  const { bookings, rooms, updateBookings, updateRevenues, revenues } = useApp();
   const today = todayStr();
 
   // Bangladesh time past 12pm check

@@ -6,7 +6,6 @@ import Notification from "./components/Notification";
 import Desk         from "./components/Desk";
 import Bookings     from "./components/Bookings";
 import Expenses     from "./components/Expenses";
-import Invoice      from "./components/Invoice";
 import CRM          from "./components/CRM";
 import Insights     from "./components/Insights";
 import Marketing    from "./components/Marketing";
@@ -27,7 +26,6 @@ function HotelInner({ onSwitchApp }) {
           {activeTab === "desk"      && <Desk      />}
           {activeTab === "bookings"  && <Bookings  />}
           {activeTab === "expenses"  && <Expenses  />}
-          {activeTab === "invoice"   && <Invoice   />}
           {activeTab === "crm"       && <CRM       />}
           {activeTab === "insights"  && <Insights  />}
           {activeTab === "marketing" && <Marketing />}

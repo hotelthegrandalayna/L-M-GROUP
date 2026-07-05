@@ -1,4 +1,4 @@
-import { useState, useRef, Fragment } from "react";
+import { useState, useRef, useEffect, Fragment } from "react";
 import { useApp } from "../context/AppContext";
 import { todayStr, money, bookingConflicts, getRoomDisplayStatus, maxId, formatDate } from "../utils/helpers";
 import { buildInvoiceHTML, buildTCHtml, hotelPrint } from "./Invoice";
@@ -11,6 +11,30 @@ function addDaysIso(iso, days) {
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
 }
+// Custom date input: shows DD/MM/YYYY, opens native calendar on click
+function DateDMY({ value, onChange, min, style }) {
+  const ref = useRef();
+  const display = value
+    ? value.slice(8,10) + '/' + value.slice(5,7) + '/' + value.slice(0,4)
+    : 'DD/MM/YYYY';
+  return (
+    <div style={{ position:'relative', ...style }}>
+      <div
+        onClick={() => { try { ref.current?.showPicker(); } catch { ref.current?.click(); } }}
+        style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:8,
+          background:'var(--bg2)', border:'1.5px solid var(--border)', borderRadius:8,
+          padding:'8px 10px', cursor:'pointer', fontSize:14, fontWeight:600,
+          color: value ? 'var(--text1)' : 'var(--text3)' }}>
+        <span>{display}</span>
+        <i className="ti ti-calendar" style={{ fontSize:16, color:'var(--text3)' }} />
+      </div>
+      <input ref={ref} type="date" value={value} min={min}
+        onChange={e => onChange(e.target.value)}
+        style={{ position:'absolute', opacity:0, top:0, left:0, width:'100%', height:'100%', pointerEvents:'none' }} />
+    </div>
+  );
+}
+
 import GuestSurveyOverlay from "./GuestSurveyOverlay";
 import { persistHotelBookingBundle } from "../lib/hotelSupabase";
 
@@ -180,8 +204,8 @@ function RoomModal({ room, onClose, onCheckout }) {
           </div>
         </div>
         <div className="form-row">
-          <div className="form-group"><label>Check-in *</label><input type="date" value={ci} min={today} onChange={e=>{ setCi(e.target.value); setCo(addDaysIso(e.target.value,1)); }} /></div>
-          <div className="form-group"><label>Check-out *</label><input type="date" value={co} min={ci ? addDaysIso(ci,1) : addDaysIso(today,1)} onChange={e=>setCo(e.target.value)} /></div>
+          <div className="form-group"><label>Check-in *</label><input type="date" lang="en-GB" value={ci} min={today} onChange={e=>{ setCi(e.target.value); setCo(addDaysIso(e.target.value,1)); }} /></div>
+          <div className="form-group"><label>Check-out *</label><input type="date" lang="en-GB" value={co} min={ci ? addDaysIso(ci,1) : addDaysIso(today,1)} onChange={e=>setCo(e.target.value)} /></div>
         </div>
         <div style={{ background:"var(--navy)", color:"#fff", borderRadius:8, padding:"11px 14px", textAlign:"center", fontSize:13, marginBottom:12, minHeight:48, display:"flex", alignItems:"center", justifyContent:"center" }}>
           {p ? (
@@ -396,7 +420,7 @@ function PostCheckoutModal({ booking, onSurvey, onClose }) {
 }
 
 // ── Desk Invoice Preview Modal ─────────────────────────────────────────────
-function DeskInvoiceModal({ booking, rooms, onClose, onPrint }) {
+function DeskInvoiceModal({ booking, rooms, onClose, onPrint, onPrintTC }) {
   const html = buildInvoiceHTML(booking, rooms, booking.invoiceExtras || [], "room");
   return (
     <div className="modal-overlay open" onClick={e => e.target===e.currentTarget && onClose()} style={{ zIndex:9999 }}>
@@ -412,6 +436,10 @@ function DeskInvoiceModal({ booking, rooms, onClose, onPrint }) {
             <button onClick={onPrint} style={{ background:"var(--gold)", color:"var(--navy)", border:"none",
               borderRadius:8, padding:"7px 18px", fontWeight:800, cursor:"pointer", fontSize:13, display:"flex", alignItems:"center", gap:6 }}>
               <i className="ti ti-printer" /> Print
+            </button>
+            <button onClick={onPrintTC} style={{ background:"rgba(255,255,255,.15)", color:"#fff", border:"1px solid rgba(255,255,255,.3)",
+              borderRadius:8, padding:"7px 14px", fontWeight:700, cursor:"pointer", fontSize:12, display:"flex", alignItems:"center", gap:6 }}>
+              <i className="ti ti-printer" /> Print + T&amp;C
             </button>
             <button onClick={onClose} style={{ background:"rgba(255,255,255,.15)", color:"#fff",
               border:"none", borderRadius:8, padding:"7px 12px", cursor:"pointer", fontSize:16 }}>
@@ -529,7 +557,7 @@ function DeskServiceModal({ booking, onConfirm, onClose }) {
             <input type="number" value={amt} min={1} onChange={e=>setAmt(e.target.value)} placeholder="0" />
           </div>
           <div className="form-group" style={{ marginBottom:0 }}><label>Date</label>
-            <input type="date" value={date} onChange={e=>setDate(e.target.value)} />
+            <DateDMY value={date} onChange={v => setDate(v)} />
           </div>
         </div>
         <div className="modal-actions" style={{ marginTop:16 }}>
@@ -547,16 +575,16 @@ function DeskServiceModal({ booking, onConfirm, onClose }) {
 
 // ── Extend Stay Modal ─────────────────────────────────────────────────────
 function ExtendStayModal({ booking, rooms, onConfirm, onClose }) {
-  const today = todayStr();
   const [newCheckout, setNewCheckout] = useState(() => addDaysIso(booking.checkout, 1));
-  const [roomNumber, setRoomNumber]   = useState(booking.room);
   const [discType,   setDiscType]     = useState("none");
   const [discVal,    setDiscVal]      = useState("");
   const [advance,    setAdvance]      = useState("");
   const [method,     setMethod]       = useState("Cash");
   const [txn,        setTxn]          = useState("");
+  const [showPreview, setShowPreview] = useState(false);
 
-  const selectedRoom = rooms.find(r => r.number === roomNumber) || rooms.find(r => r.number === booking.room);
+  const roomNumber = booking.room;
+  const selectedRoom = rooms.find(r => r.number === roomNumber);
   const rate = selectedRoom ? (selectedRoom.acRate || selectedRoom.rate || 0) : (booking.roomRate || booking.amount / (booking.nights || 1));
 
   const extraNights = (() => {
@@ -570,8 +598,51 @@ function ExtendStayModal({ booking, rooms, onConfirm, onClose }) {
   const extTotal  = Math.max(0, subtotal - discAmt);
   const adv       = parseFloat(advance) || 0;
   const needsTxn  = ["bKash","Nagad"].includes(method);
+  const canPreview = extraNights > 0 && !(needsTxn && adv > 0 && !txn.trim());
 
-  const canConfirm = extraNights > 0;
+  // Build what the booking will look like after extension — for preview only
+  const previewBooking = {
+    ...booking,
+    checkout: newCheckout,
+    nights: (booking.nights || 0) + extraNights,
+    invoiceTotal: (booking.invoiceTotal ?? booking.amount ?? 0) + extTotal,
+    restPayment: (booking.restPayment || 0) + adv,
+    paymentHistory: adv > 0
+      ? [...(booking.paymentHistory || []), { ts: new Date().toISOString(), amount: adv, method, txnNumber: txn || "", note: `Extend stay +${extraNights} night${extraNights > 1 ? "s" : ""}`, type: "room" }]
+      : (booking.paymentHistory || []),
+  };
+
+  if (showPreview) {
+    const previewHTML = buildInvoiceHTML(previewBooking, rooms, booking.invoiceExtras || [], "room");
+    return (
+      <div className="modal-overlay open" style={{ zIndex:10000 }}>
+        <div className="modal-box" style={{ maxWidth:860, padding:0, overflow:"hidden" }}>
+          <div style={{ background:"#1a1a2e", padding:"14px 20px", display:"flex", justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:8 }}>
+            <div>
+              <div style={{ color:"#C9A84C", fontWeight:800, fontSize:16 }}>
+                <i className="ti ti-file-invoice" /> Invoice Preview — {booking.guest} · Rm {booking.room}
+              </div>
+              <div style={{ color:"rgba(255,255,255,.6)", fontSize:12, marginTop:2 }}>
+                Extended to {newCheckout} · +{extraNights} night{extraNights > 1 ? "s" : ""} · ৳{extTotal.toLocaleString()}
+              </div>
+            </div>
+            <div style={{ display:"flex", gap:8 }}>
+              <button className="btn" onClick={() => setShowPreview(false)} style={{ fontSize:13 }}>
+                <i className="ti ti-edit" /> Edit
+              </button>
+              <button onClick={() => onConfirm({ newCheckout, extTotal, discAmt, advance: adv, method, txn })}
+                style={{ padding:"9px 20px", borderRadius:8, border:"none", cursor:"pointer", fontWeight:800, fontSize:13, fontFamily:"inherit", background:"#4a2ea8", color:"#fff", display:"flex", alignItems:"center", gap:6 }}>
+                <i className="ti ti-calendar-plus" /> Confirm Extension
+              </button>
+            </div>
+          </div>
+          <div style={{ maxHeight:"75vh", overflowY:"auto", background:"#fafaf8" }}>
+            <div dangerouslySetInnerHTML={{ __html: previewHTML }} />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="modal-overlay open" onClick={e => e.target===e.currentTarget && onClose()} style={{ zIndex:9999 }}>
@@ -586,24 +657,12 @@ function ExtendStayModal({ booking, rooms, onConfirm, onClose }) {
           <button className="modal-close" onClick={onClose}><i className="ti ti-x" /></button>
         </div>
 
-        {/* Room selection */}
-        <div className="form-group">
-          <label>Room <span style={{ fontSize:11, color:"var(--text3)", fontWeight:400 }}>(change if moving rooms)</span></label>
-          <select value={roomNumber} onChange={e => setRoomNumber(e.target.value)}>
-            {rooms.map(r => (
-              <option key={r.number} value={r.number}>
-                Rm {r.number} — {r.name || r.type} · ৳{(r.acRate || r.rate || 0).toLocaleString()}/night
-              </option>
-            ))}
-          </select>
-        </div>
-
         {/* New checkout */}
         <div className="form-row">
           <div className="form-group">
             <label>New Check-out Date *</label>
-            <input type="date" value={newCheckout} min={addDaysIso(booking.checkout, 1)}
-              onChange={e => setNewCheckout(e.target.value)} />
+            <DateDMY value={newCheckout} min={addDaysIso(booking.checkout, 1)}
+              onChange={v => setNewCheckout(v)} />
           </div>
           <div className="form-group">
             <label>Additional Nights</label>
@@ -671,12 +730,12 @@ function ExtendStayModal({ booking, rooms, onConfirm, onClose }) {
         <div className="modal-actions" style={{ marginTop:16 }}>
           <button className="btn" onClick={onClose}>Cancel</button>
           <button
-            disabled={!canConfirm || (needsTxn && adv > 0 && !txn.trim())}
-            onClick={() => canConfirm && onConfirm({ newCheckout, roomNumber, extTotal, discAmt, advance: adv, method, txn })}
-            style={{ padding:"9px 22px", borderRadius:8, border:"none", cursor: canConfirm ? "pointer" : "not-allowed",
+            disabled={!canPreview}
+            onClick={() => canPreview && setShowPreview(true)}
+            style={{ padding:"9px 22px", borderRadius:8, border:"none", cursor: canPreview ? "pointer" : "not-allowed",
               fontWeight:800, fontSize:14, fontFamily:"inherit",
-              background: canConfirm ? "#4a2ea8" : "#ccc", color:"#fff" }}>
-            <i className="ti ti-calendar-plus" /> Confirm Extension
+              background: canPreview ? "#4a2ea8" : "#ccc", color:"#fff" }}>
+            <i className="ti ti-eye" /> Preview & Confirm
           </button>
         </div>
       </div>
@@ -800,59 +859,32 @@ export default function Desk() {
   }
 
   // Extend stay from Desk popup
-  function handleExtendStay(b, { newCheckout, roomNumber, extTotal, discAmt, advance, method, txn }) {
+  function handleExtendStay(b, { newCheckout, extTotal, advance, method, txn }) {
     const extraNights = Math.round((new Date(newCheckout) - new Date(b.checkout)) / 86400000);
     const totalNights = (b.nights || 0) + extraNights;
-    const roomChanged = roomNumber !== b.room;
-    const newRoom = rooms.find(r => r.number === roomNumber);
-    const newRate = newRoom ? (newRoom.acRate || newRoom.rate || 0) : (b.roomRate || 0);
-    const newDue = Math.max(0, getHotelDue(b) + extTotal - advance);
 
-    let updated;
-    if (!roomChanged) {
-      // Same room — just extend nights; invoice builder recalculates automatically.
-      // Extension advance is room rent, not a service — goes to restPayment.
-      const extPayEntry = advance > 0 ? [{
-        ts: new Date().toISOString(), amount: advance, method, txnNumber: txn||"",
-        note: `Extend stay +${extraNights} night${extraNights>1?"s":""}`, type: "room", by: curUser||"staff",
-      }] : [];
-      updated = {
-        ...b,
-        checkout: newCheckout,
-        nights: totalNights,
-        invoiceTotal: (b.invoiceTotal ?? b.amount ?? 0) + extTotal,
-        restPayment: (b.restPayment || 0) + advance,
-        paymentHistory: [...(b.paymentHistory||[]), ...extPayEntry],
-      };
-    } else {
-      // Room change — keep original room nights as base; add extension in extras
-      // so both rooms are clearly shown on the invoice
-      const extDesc = `Rm ${roomNumber}${newRoom?.name ? " — " + newRoom.name : ""}: +${extraNights} night${extraNights > 1 ? "s" : ""}${discAmt > 0 ? " (disc ৳" + discAmt.toLocaleString() + ")" : ""}`;
-      updated = {
-        ...b,
-        checkout: newCheckout,
-        room: roomNumber,       // primary room is now the new room
-        roomRate: newRate,
-        nights: totalNights,
-        invoiceTotal: (b.invoiceTotal ?? b.amount ?? 0) + extTotal,
-        dueAmount: newDue,
-        extrasAdvance: (b.extrasAdvance || 0) + advance,
-        invoiceExtras: [
-          ...(b.invoiceExtras || []),
-          { desc: extDesc, qty: extraNights, rate: extTotal / (extraNights || 1), date: newCheckout },
-        ],
-      };
-    }
+    const extPayEntry = advance > 0 ? [{
+      ts: new Date().toISOString(), amount: advance, method, txnNumber: txn||"",
+      note: `Extend stay +${extraNights} night${extraNights>1?"s":""}`, type: "room", by: curUser||"staff",
+    }] : [];
+    const updated = {
+      ...b,
+      checkout: newCheckout,
+      nights: totalNights,
+      invoiceTotal: (b.invoiceTotal ?? b.amount ?? 0) + extTotal,
+      restPayment: (b.restPayment || 0) + advance,
+      paymentHistory: [...(b.paymentHistory||[]), ...extPayEntry],
+    };
 
     updateBookings(prev => prev.map(x => x.id === b.id ? updated : x));
     if (advance > 0) {
       updateRevenues(prev => [...prev, {
         id: maxId(prev), source: "Room Rent", amount: advance, date: today,
-        note: b.guest + " Rm " + roomNumber + " - extension advance (" + method + ")", bookingId: b.id,
+        note: b.guest + " Rm " + b.room + " - extension advance (" + method + ")", bookingId: b.id,
       }]);
     }
     void persistHotelBookingBundle(updated).catch(() => {});
-    notify(b.guest + " extended to " + newCheckout + (roomChanged ? ", moved to Rm " + roomNumber : "") + (advance > 0 ? " · Advance ৳" + advance.toLocaleString() : ""), "success");
+    notify(b.guest + " extended to " + newCheckout + (advance > 0 ? " · Advance ৳" + advance.toLocaleString() : ""), "success");
     setExtendTarget(null);
     setExpandedRow(null);
   }
@@ -861,6 +893,12 @@ export default function Desk() {
   function handlePrintInvoice(b) {
     const invHtml = buildInvoiceHTML(b, rooms, b.invoiceExtras||[], "room");
     hotelPrint(invHtml, null);
+  }
+
+  // Print invoice + T&C (force reprint T&C regardless of tcPrinted flag)
+  function handlePrintWithTC(b) {
+    const invHtml = buildInvoiceHTML(b, rooms, b.invoiceExtras||[], "room");
+    hotelPrint(invHtml, buildTCHtml(b));
   }
 
   // Check-in: show preview first (Option A)
@@ -1223,7 +1261,7 @@ export default function Desk() {
       {checkoutTarget && <CheckoutModal b={checkoutTarget} onConfirm={doCheckout} onClose={() => setCheckoutTarget(null)} />}
       {extendTarget && <ExtendStayModal booking={extendTarget} rooms={rooms} onClose={() => setExtendTarget(null)} onConfirm={(data) => handleExtendStay(extendTarget, data)} />}
       {checkinPreview && <CheckInPreviewModal booking={checkinPreview} rooms={rooms} onConfirm={() => { confirmCheckin(checkinPreview); setCheckinPreview(null); }} onEdit={() => setCheckinPreview(null)} onClose={() => setCheckinPreview(null)} />}
-      {invoiceTarget && <DeskInvoiceModal booking={invoiceTarget} rooms={rooms} onClose={() => setInvoiceTarget(null)} onPrint={() => handlePrintInvoice(invoiceTarget)} />}
+      {invoiceTarget && <DeskInvoiceModal booking={invoiceTarget} rooms={rooms} onClose={() => setInvoiceTarget(null)} onPrint={() => handlePrintInvoice(invoiceTarget)} onPrintTC={() => handlePrintWithTC(invoiceTarget)} />}
       {collectTarget && <DeskCollectPayModal booking={collectTarget} onClose={() => setCollectTarget(null)} onConfirm={(amt, mtd, txn, note) => { handleCollectPayment(collectTarget, amt, mtd, txn, note); setCollectTarget(null); }} />}
       {serviceTarget && <DeskServiceModal booking={serviceTarget} onClose={() => setServiceTarget(null)} onConfirm={(desc, amt, date) => { handleAddService(serviceTarget, desc, amt, date); setServiceTarget(null); }} />}
       {postCheckout && !surveyBooking && (

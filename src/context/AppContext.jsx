@@ -136,10 +136,24 @@ export function AppProvider({ children }) {
           const localId = String(b.id ?? '');
           return !deletedIds.has(sbId) && !deletedIds.has(localId);
         });
-        setBookings(filtered);
+        // Preserve fields that may not be in Supabase schema (discount, baseAmount)
+        // by merging with the local version when Supabase returns 0/empty for them.
+        const localSnap = (() => { try { return JSON.parse(localStorage.getItem('ga_bookings') || '[]'); } catch { return []; } })();
+        const merged = filtered.map(sb => {
+          const loc = localSnap.find(l => l.id === sb.id);
+          if (!loc) return sb;
+          return {
+            ...sb,
+            discAmt:    sb.discAmt    || loc.discAmt    || 0,
+            discType:   sb.discType   || loc.discType   || "",
+            discReason: sb.discReason || loc.discReason || "",
+            baseAmount: sb.baseAmount || loc.baseAmount || 0,
+          };
+        });
+        setBookings(merged);
         const cutoff2 = new Date(); cutoff2.setMonth(cutoff2.getMonth() - 6);
         const cutoffStr2 = cutoff2.toISOString().slice(0, 10);
-        const trimmed2 = filtered.filter(b => ['confirmed','checked-in'].includes(b.status) || (b.checkout && b.checkout >= cutoffStr2));
+        const trimmed2 = merged.filter(b => ['confirmed','checked-in'].includes(b.status) || (b.checkout && b.checkout >= cutoffStr2));
         try { localStorage.setItem('ga_bookings', JSON.stringify(trimmed2)); } catch { /* quota full */ }
       })
       .catch((err) => {
