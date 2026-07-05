@@ -137,7 +137,10 @@ export function AppProvider({ children }) {
           return !deletedIds.has(sbId) && !deletedIds.has(localId);
         });
         setBookings(filtered);
-        localStorage.setItem('ga_bookings', JSON.stringify(filtered));
+        const cutoff2 = new Date(); cutoff2.setMonth(cutoff2.getMonth() - 6);
+        const cutoffStr2 = cutoff2.toISOString().slice(0, 10);
+        const trimmed2 = filtered.filter(b => ['confirmed','checked-in'].includes(b.status) || (b.checkout && b.checkout >= cutoffStr2));
+        try { localStorage.setItem('ga_bookings', JSON.stringify(trimmed2)); } catch { /* quota full */ }
       })
       .catch((err) => {
         console.error("Failed to load hotel bookings from Supabase:", err);
@@ -284,15 +287,22 @@ export function AppProvider({ children }) {
   const updateBookings = useCallback((next) => {
     setBookings(prev => {
       const val = typeof next === 'function' ? next(prev) : next;
-      localStorage.setItem('ga_bookings', JSON.stringify(val));
-      return val;
+      // Keep only last 6 months + active bookings to avoid localStorage quota exceeded
+      const cutoff = new Date(); cutoff.setMonth(cutoff.getMonth() - 6);
+      const cutoffStr = cutoff.toISOString().slice(0, 10);
+      const trimmed = val.filter(b =>
+        ['confirmed','checked-in'].includes(b.status) ||
+        (b.checkout && b.checkout >= cutoffStr)
+      );
+      try { localStorage.setItem('ga_bookings', JSON.stringify(trimmed)); } catch { /* quota full */ }
+      return val; // React state always has full data
     });
   }, []);
 
   const updateRevenues = useCallback((next) => {
     setRevenues(prev => {
       const val = typeof next === 'function' ? next(prev) : next;
-      localStorage.setItem('ga_revenues', JSON.stringify(val));
+      try { localStorage.setItem('ga_revenues', JSON.stringify(val)); } catch { /* quota full */ }
       if (hasSupabase()) {
         const rows = val.map(r => ({ id: String(r.id), date: r.date, source: r.source, amount: r.amount || 0, note: r.note || "", by: r.by || "", booking_id: r.bookingId || null }));
         upsertRows("revenues", rows).catch(() => {});
@@ -304,7 +314,7 @@ export function AppProvider({ children }) {
   const updateExpenses = useCallback((next) => {
     setExpenses(prev => {
       const val = typeof next === 'function' ? next(prev) : next;
-      localStorage.setItem('ga_expenses', JSON.stringify(val));
+      try { localStorage.setItem('ga_expenses', JSON.stringify(val)); } catch { /* quota full */ }
       if (hasSupabase()) {
         const rows = val.map(e => ({ id: String(e.id), date: e.date, category: e.category, amount: e.amount || 0, note: e.note || "", by: e.by || "" }));
         upsertRows("expenses", rows).catch(() => {});
