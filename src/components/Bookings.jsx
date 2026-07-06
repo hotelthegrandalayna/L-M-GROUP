@@ -282,7 +282,7 @@ function BookingModal({ booking, onClose }) {
             )}
 
             <div style={{ display:"flex", gap:8, marginTop:14, justifyContent:"flex-end" }}>
-              {b.status === "confirmed" && (
+              {b.status === "confirmed" && curRole === "admin" && (
                 <button className="btn danger" style={{ marginRight:"auto", fontSize:12 }} onClick={cancelBooking}>
                   <i className="ti ti-calendar-x" /> Cancel
                 </button>

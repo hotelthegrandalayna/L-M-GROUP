@@ -56,7 +56,7 @@ function getHotelDue(b) {
 }
 
 function RoomModal({ room, onClose, onCheckout }) {
-  const { curUser, bookings, updateBookings, revenues, updateRevenues, notify } = useApp();
+  const { curUser, curRole, bookings, updateBookings, revenues, updateRevenues, notify } = useApp();
   const today = todayStr();
   const tmr = new Date(today + "T00:00:00");
   tmr.setDate(tmr.getDate() + 1);
@@ -163,7 +163,7 @@ function RoomModal({ room, onClose, onCheckout }) {
           <div style={{ fontSize:12, fontWeight:700 }}>{b.guest}</div>
           <div style={{ fontSize:11, color:"var(--text3)" }}>{formatDate(b.checkin)} to {formatDate(b.checkout)} | {b.nights}n | {money(b.amount)}</div>
         </div>
-        <button className="btn sm danger" style={{ fontSize:10, padding:"4px 8px" }} onClick={() => cancelRes(b.id)}><i className="ti ti-x" /></button>
+        {curRole === "admin" && <button className="btn sm danger" style={{ fontSize:10, padding:"4px 8px" }} onClick={() => cancelRes(b.id)}><i className="ti ti-x" /></button>}
       </div>
     );
   }
@@ -296,7 +296,7 @@ function RoomModal({ room, onClose, onCheckout }) {
           <div style={{ fontSize:11, fontWeight:800, color:"var(--text3)", textTransform:"uppercase", marginBottom:12 }}>Add Another Reservation</div>
           {qrForm()}
           <div className="modal-actions">
-            <button className="btn danger" style={{ marginRight:"auto" }} onClick={() => cancelRes(bRes.id)}><i className="ti ti-calendar-x" /> Cancel Current</button>
+            {curRole === "admin" && <button className="btn danger" style={{ marginRight:"auto" }} onClick={() => cancelRes(bRes.id)}><i className="ti ti-calendar-x" /> Cancel Current</button>}
             <button className="btn" onClick={onClose}>Close</button>
             <button className="btn primary" onClick={doRes}><i className="ti ti-calendar-check" /> Reserve</button>
           </div>
