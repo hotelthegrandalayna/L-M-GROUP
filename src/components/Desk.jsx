@@ -796,6 +796,7 @@ export default function Desk() {
   const [serviceTarget, setServiceTarget] = useState(null);    // booking to add service to
   const [checkinPreview, setCheckinPreview] = useState(null);  // booking preview before check-in
   const [extendTarget, setExtendTarget] = useState(null);      // booking to extend stay for
+  const [showRevDetail, setShowRevDetail] = useState(false);
   const today = todayStr();
 
   // Bangladesh Standard Time = UTC+6. Checkout alert fires after 12:00 PM BST.
@@ -1031,16 +1032,17 @@ export default function Desk() {
           { label:"In-House",     value:inhouse.length,       sub:"guests staying",                  icon:"ti-users",         color:"#5b3fa0" },
           { label:"Arrivals",     value:arrivals.length,      sub:"today",                           icon:"ti-login",         color:"var(--green)" },
           { label:"Departures",   value:departures.length,    sub:"today",                           icon:"ti-logout",        color:"var(--red2)" },
-          { label:"Today Revenue",value:money(dRev),          sub:"expenses: "+money(dExp),          icon:"ti-currency-taka", color:"var(--gold2)" },
+          { label:"Today Revenue",value:money(dRev),          sub:"tap to see breakdown",             icon:"ti-currency-taka", color:"var(--gold2)", onClick:()=>setShowRevDetail(true) },
           curRole==="admin"
             ? { label:"All-time Profit", value:money(tRev-tExp), sub:"total",                       icon:"ti-trending-up",   color:(tRev-tExp)>=0?"var(--green)":"var(--red2)" }
             : { label:"Pending Balance", value:pendingBal.length, sub:"guests with balance due",    icon:"ti-alert-circle",  color:pendingBal.length>0?"var(--red2)":"var(--green)" },
         ].map(s => (
-          <div key={s.label} style={{ background:"var(--bg2)", border:"1.5px solid var(--border)", borderRadius:10, padding:"9px 12px", display:"flex", alignItems:"center", gap:9 }}>
+          <div key={s.label} onClick={s.onClick} style={{ background:"var(--bg2)", border:"1.5px solid var(--border)", borderRadius:10, padding:"9px 12px", display:"flex", alignItems:"center", gap:9, cursor:s.onClick?"pointer":"default" }}>
             <i className={"ti "+s.icon} style={{ fontSize:19, color:s.color, flexShrink:0 }} />
             <div>
               <div style={{ fontSize:14, fontWeight:800, color:s.color, lineHeight:1.1 }}>{s.value}</div>
               <div style={{ fontSize:9, color:"var(--text3)", fontWeight:600, textTransform:"uppercase", letterSpacing:.5, marginTop:2 }}>{s.label}</div>
+              <div style={{ fontSize:8, color:"var(--text3)", marginTop:1 }}>{s.sub}</div>
             </div>
           </div>
         ))}
@@ -1257,6 +1259,54 @@ export default function Desk() {
         </div>
       </div>
 
+      {showRevDetail && (
+        <div className="modal-overlay open" onClick={e => e.target===e.currentTarget && setShowRevDetail(false)} style={{ zIndex:9999 }}>
+          <div style={{ background:"#fff", borderRadius:14, width:"96vw", maxWidth:560, maxHeight:"85vh", display:"flex", flexDirection:"column", overflow:"hidden", boxShadow:"0 10px 48px rgba(0,0,0,.28)" }}>
+            <div style={{ background:"var(--navy)", padding:"14px 20px", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+              <div>
+                <div style={{ color:"#fff", fontWeight:800, fontSize:15 }}>
+                  <i className="ti ti-currency-taka" style={{ marginRight:8, color:"var(--gold)" }} />
+                  Today's Revenue Breakdown
+                </div>
+                <div style={{ color:"rgba(255,255,255,.55)", fontSize:11, marginTop:2 }}>{today}</div>
+              </div>
+              <button onClick={() => setShowRevDetail(false)} style={{ background:"rgba(255,255,255,.1)", border:"none", borderRadius:7, color:"#fff", cursor:"pointer", padding:"6px 10px", fontSize:13 }}>✕</button>
+            </div>
+            <div style={{ overflowY:"auto", padding:"16px 20px", flex:1 }}>
+              {(() => {
+                const todayEntries = revenues.filter(r => r.date === today);
+                if (todayEntries.length === 0) return (
+                  <div style={{ textAlign:"center", color:"var(--text3)", padding:30, fontSize:13 }}>No revenue recorded today.</div>
+                );
+                return (
+                  <>
+                    {todayEntries.map((r, i) => {
+                      const bk = bookings.find(b => b.id === r.bookingId);
+                      return (
+                        <div key={r.id ?? i} style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 0", borderBottom:"1px solid var(--border)" }}>
+                          <div style={{ width:36, height:36, borderRadius:9, background:"#ede8ff", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                            <i className="ti ti-currency-taka" style={{ fontSize:16, color:"#5b3fa0" }} />
+                          </div>
+                          <div style={{ flex:1, minWidth:0 }}>
+                            <div style={{ fontWeight:700, fontSize:13 }}>{r.note || r.source}</div>
+                            {bk && <div style={{ fontSize:11, color:"#4a2ea8", marginTop:1 }}>Invoice GA-{String(bk.id).padStart(4,"0")} · Rm {bk.room}</div>}
+                            <div style={{ fontSize:10, color:"var(--text3)", marginTop:1 }}>{r.source}</div>
+                          </div>
+                          <div style={{ fontWeight:800, fontSize:14, color:"#1a7040", flexShrink:0 }}>{money(r.amount)}</div>
+                        </div>
+                      );
+                    })}
+                    <div style={{ display:"flex", justifyContent:"space-between", padding:"12px 0 4px", borderTop:"2px solid var(--border)", marginTop:4 }}>
+                      <span style={{ fontWeight:800, fontSize:14 }}>Total</span>
+                      <span style={{ fontWeight:900, fontSize:16, color:"var(--gold2)" }}>{money(dRev)}</span>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
       {sel && <RoomModal room={sel} onClose={() => setSel(null)} onCheckout={chkOut} />}
       {checkoutTarget && <CheckoutModal b={checkoutTarget} onConfirm={doCheckout} onClose={() => setCheckoutTarget(null)} />}
       {extendTarget && <ExtendStayModal booking={extendTarget} rooms={rooms} onClose={() => setExtendTarget(null)} onConfirm={(data) => handleExtendStay(extendTarget, data)} />}
