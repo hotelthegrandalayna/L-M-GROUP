@@ -824,11 +824,11 @@ export default function Desk() {
       if (history.length > 0) {
         history.forEach(p => {
           const date = p.ts ? p.ts.split("T")[0] : b.checkin;
-          entries.push({ date, amount: parseFloat(p.amount) || 0, bookingId: b.id });
+          entries.push({ date, amount: parseFloat(p.amount) || 0, bookingId: b.id, note: `${p.note||p.type||"payment"} (${p.method||"Cash"})` });
         });
       } else {
         const totalPaid = (parseFloat(b.advance)||0) + (parseFloat(b.restPayment)||0) + (parseFloat(b.extrasAdvance)||0);
-        if (totalPaid > 0) entries.push({ date: b.checkin, amount: totalPaid, bookingId: b.id });
+        if (totalPaid > 0) entries.push({ date: b.checkin, amount: totalPaid, bookingId: b.id, note: `advance payment (${b.paymentMethod||"Cash"})` });
       }
     });
     return entries;
@@ -1314,11 +1314,12 @@ export default function Desk() {
                             <i className={"ti " + (cancelled||orphaned ? "ti-alert-triangle" : "ti-currency-taka")} style={{ fontSize:16, color: cancelled||orphaned ? "#c0392b" : "#5b3fa0" }} />
                           </div>
                           <div style={{ flex:1, minWidth:0 }}>
-                            <div style={{ fontWeight:700, fontSize:13 }}>{r.note || r.source}</div>
-                            {bk && !cancelled && <div style={{ fontSize:11, color:"#4a2ea8", marginTop:1 }}>Invoice GA-{String(bk.id).padStart(4,"0")} · Rm {bk.room}</div>}
+                            <div style={{ fontWeight:700, fontSize:13 }}>
+                              {bk ? `${bk.guest} — Rm ${bk.room}` : (r.note || r.source)}
+                            </div>
+                            {bk && !cancelled && <div style={{ fontSize:11, color:"#4a2ea8", marginTop:1 }}>Invoice GA-{String(bk.id).padStart(4,"0")} · {r.note?.match(/\(([^)]+)\)/)?.[1] || "Cash"}</div>}
                             {cancelled && <div style={{ fontSize:11, color:"#c0392b", marginTop:1 }}>⚠ Booking was cancelled — revenue not valid</div>}
                             {orphaned  && <div style={{ fontSize:11, color:"#c0392b", marginTop:1 }}>⚠ Booking not found — may have been deleted</div>}
-                            <div style={{ fontSize:10, color:"var(--text3)", marginTop:1 }}>{r.source}</div>
                           </div>
                           <div style={{ fontWeight:800, fontSize:14, color: cancelled||orphaned ? "#c0392b" : "#1a7040", flexShrink:0 }}>{money(r.amount)}</div>
                         </div>
