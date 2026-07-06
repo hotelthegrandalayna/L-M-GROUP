@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, Fragment } from "react";
+import { useState, useRef, useEffect, Fragment, useMemo } from "react";
 import { useApp } from "../context/AppContext";
 import { todayStr, money, bookingConflicts, getRoomDisplayStatus, maxId, formatDate } from "../utils/helpers";
 import { buildInvoiceHTML, buildTCHtml, hotelPrint } from "./Invoice";
@@ -815,9 +815,30 @@ export default function Desk() {
     isPast12pmBST
   );
 
-  const dRev  = revenues.filter(r => r.date === today).reduce((s,r) => s+r.amount, 0);
+  // Derive revenue from booking paymentHistory (same as Admin Finance) — avoids test/orphan entries
+  const bookingRevEntries = useMemo(() => {
+    const entries = [];
+    bookings.forEach(b => {
+      if (b.status === "cancelled") return;
+      const history = b.paymentHistory || [];
+      if (history.length > 0) {
+        history.forEach(p => {
+          const date = p.ts ? p.ts.split("T")[0] : b.checkin;
+          entries.push({ date, amount: parseFloat(p.amount) || 0, bookingId: b.id });
+        });
+      } else {
+        const totalPaid = (parseFloat(b.advance)||0) + (parseFloat(b.restPayment)||0) + (parseFloat(b.extrasAdvance)||0);
+        if (totalPaid > 0) entries.push({ date: b.checkin, amount: totalPaid, bookingId: b.id });
+      }
+    });
+    return entries;
+  }, [bookings]);
+  const manualRevEntries = revenues.filter(r => !r.bookingId && !r.fromBooking);
+  const allRevEntries = [...bookingRevEntries, ...manualRevEntries];
+
+  const dRev  = allRevEntries.filter(r => r.date === today).reduce((s,r) => s+r.amount, 0);
   const dExp  = expenses.filter(e => e.date === today).reduce((s,e) => s+e.amount, 0);
-  const tRev  = revenues.reduce((s,r) => s+r.amount, 0);
+  const tRev  = allRevEntries.reduce((s,r) => s+r.amount, 0);
   const tExp  = expenses.reduce((s,e) => s+e.amount, 0);
   const inhouse    = bookings.filter(b => b.status === "checked-in");
   const arrivals   = bookings.filter(b => b.checkin === today && (b.status === "confirmed" || b.status === "checked-in"));
@@ -1276,7 +1297,7 @@ export default function Desk() {
             </div>
             <div style={{ overflowY:"auto", padding:"16px 20px", flex:1 }}>
               {(() => {
-                const todayEntries = revenues.filter(r => r.date === today);
+                const todayEntries = allRevEntries.filter(r => r.date === today);
                 if (todayEntries.length === 0) return (
                   <div style={{ textAlign:"center", color:"var(--text3)", padding:30, fontSize:13 }}>No revenue recorded today.</div>
                 );
