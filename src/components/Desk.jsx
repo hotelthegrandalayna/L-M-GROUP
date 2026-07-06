@@ -146,7 +146,8 @@ function RoomModal({ room, onClose, onCheckout }) {
   function cancelRes(bid) {
     if (!window.confirm("Cancel this reservation?")) return;
     updateBookings(bookings.map(b => b.id === bid ? { ...b, status: "cancelled" } : b));
-    notify("Reservation cancelled", "success"); onClose();
+    updateRevenues(prev => prev.filter(r => r.bookingId !== bid));
+    notify("Reservation cancelled and revenue reversed", "success"); onClose();
   }
 
   function chkOut(bid) {
@@ -1282,17 +1283,21 @@ export default function Desk() {
                   <>
                     {todayEntries.map((r, i) => {
                       const bk = bookings.find(b => b.id === r.bookingId);
+                      const cancelled = bk?.status === "cancelled";
+                      const orphaned = !bk;
                       return (
-                        <div key={r.id ?? i} style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 0", borderBottom:"1px solid var(--border)" }}>
-                          <div style={{ width:36, height:36, borderRadius:9, background:"#ede8ff", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-                            <i className="ti ti-currency-taka" style={{ fontSize:16, color:"#5b3fa0" }} />
+                        <div key={r.id ?? i} style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 0", borderBottom:"1px solid var(--border)", opacity: cancelled||orphaned ? .6 : 1 }}>
+                          <div style={{ width:36, height:36, borderRadius:9, background: cancelled||orphaned ? "#fff0f0" : "#ede8ff", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                            <i className={"ti " + (cancelled||orphaned ? "ti-alert-triangle" : "ti-currency-taka")} style={{ fontSize:16, color: cancelled||orphaned ? "#c0392b" : "#5b3fa0" }} />
                           </div>
                           <div style={{ flex:1, minWidth:0 }}>
                             <div style={{ fontWeight:700, fontSize:13 }}>{r.note || r.source}</div>
-                            {bk && <div style={{ fontSize:11, color:"#4a2ea8", marginTop:1 }}>Invoice GA-{String(bk.id).padStart(4,"0")} · Rm {bk.room}</div>}
+                            {bk && !cancelled && <div style={{ fontSize:11, color:"#4a2ea8", marginTop:1 }}>Invoice GA-{String(bk.id).padStart(4,"0")} · Rm {bk.room}</div>}
+                            {cancelled && <div style={{ fontSize:11, color:"#c0392b", marginTop:1 }}>⚠ Booking was cancelled — revenue not valid</div>}
+                            {orphaned  && <div style={{ fontSize:11, color:"#c0392b", marginTop:1 }}>⚠ Booking not found — may have been deleted</div>}
                             <div style={{ fontSize:10, color:"var(--text3)", marginTop:1 }}>{r.source}</div>
                           </div>
-                          <div style={{ fontWeight:800, fontSize:14, color:"#1a7040", flexShrink:0 }}>{money(r.amount)}</div>
+                          <div style={{ fontWeight:800, fontSize:14, color: cancelled||orphaned ? "#c0392b" : "#1a7040", flexShrink:0 }}>{money(r.amount)}</div>
                         </div>
                       );
                     })}
