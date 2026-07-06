@@ -173,7 +173,7 @@ function BookingModal({ booking, onClose }) {
     if (!window.confirm("Cancel this booking? This cannot be undone.")) return;
     const updated = { ...b, status: "cancelled" };
     updateBookings(prev => prev.map(x => x.id === b.id ? updated : x));
-    updateRevenues(prev => prev.filter(r => r.bookingId !== b.id));
+    updateRevenues(prev => prev.filter(r => r.bookingId !== b.id && !(r.note && r.note.includes(b.guest) && r.note.includes("Rm "+b.room))));
     void persistHotelBookingBundle(updated).catch(err => console.error("Supabase cancel sync failed:", err));
     notify("Booking cancelled and revenue reversed", "success");
     logEvent("hotel", "booking_cancelled", { num:String(b.id), guest:b.guest, amount:invoiceTotal, note:`Rm ${b.room}` }, curUser);

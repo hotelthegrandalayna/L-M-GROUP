@@ -146,7 +146,8 @@ function RoomModal({ room, onClose, onCheckout }) {
   function cancelRes(bid) {
     if (!window.confirm("Cancel this reservation?")) return;
     updateBookings(bookings.map(b => b.id === bid ? { ...b, status: "cancelled" } : b));
-    updateRevenues(prev => prev.filter(r => r.bookingId !== bid));
+    const b = bookings.find(x => x.id === bid);
+    updateRevenues(prev => prev.filter(r => r.bookingId !== bid && !(b && r.note && r.note.includes(b.guest) && r.note.includes("Rm "+b.room))));
     notify("Reservation cancelled and revenue reversed", "success"); onClose();
   }
 
@@ -1282,7 +1283,8 @@ export default function Desk() {
                 return (
                   <>
                     {todayEntries.map((r, i) => {
-                      const bk = bookings.find(b => b.id === r.bookingId);
+                      const bk = bookings.find(b => b.id === r.bookingId)
+                        || (r.note ? bookings.find(b => r.note.includes(b.guest) && r.note.includes("Rm "+b.room)) : null);
                       const cancelled = bk?.status === "cancelled";
                       const orphaned = !bk;
                       return (
