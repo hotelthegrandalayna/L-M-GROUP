@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, Fragment } from "react";
 import { useApp } from "../context/AppContext";
 
 function DateInput({ value, onChange, min, style, className }) {
@@ -479,7 +479,8 @@ function NewBookingModal({ onClose, prefill }) {
   const [ci,       setCi]       = useState(prefill?.ci || today);
   const [co,       setCo]       = useState(prefill?.co || tmr);
   // Extra rooms (multi-room booking)
-  const [extraRooms, setExtraRooms] = useState([]); // [{ number, acChoice }]
+  const [extraRooms, setExtraRooms] = useState([]); // [{ number, acChoice, discAmt }]
+  const [primaryDiscAmt, setPrimaryDiscAmt] = useState(0); // per-room discount for primary room in multi-room mode
   const [adults,   setAdults]   = useState(2);
   const [children, setChildren] = useState(0);
   // Extra person
@@ -513,28 +514,36 @@ function NewBookingModal({ onClose, prefill }) {
     ? Math.max(1, Math.round((new Date(co) - new Date(ci)) / 86400000)) : 0;
   const base     = selRoom && nights ? nights * roomRate : 0;
 
-  // Extra rooms computed
+  const isMultiRoom = extraRooms.length > 0;
+
+  // Extra rooms computed — each with its own per-room discount in multi-room mode
   const extraRoomsData = extraRooms.map(er => {
     const r = rooms.find(x => String(x.number) === String(er.number));
     if (!r) return null;
     const dual = !!(r.acRate && r.nonAcRate);
     const rate = dual ? (er.acChoice === "AC" ? r.acRate : r.nonAcRate) : r.rate || 0;
-    const amt  = nights ? nights * rate : 0;
-    return { ...er, room: r, rate, amount: amt, isDual: dual };
+    const grossAmt = nights ? nights * rate : 0;
+    const erDisc   = isMultiRoom ? Math.min(parseFloat(er.discAmt) || 0, grossAmt) : 0;
+    const amt      = Math.max(0, grossAmt - erDisc);
+    return { ...er, room: r, rate, grossAmt, discAmt: erDisc, amount: amt, isDual: dual };
   }).filter(Boolean);
   const extraRoomsTotal = extraRoomsData.reduce((s, r) => s + r.amount, 0);
 
-  // Discount applies to combined base (all rooms)
-  const combinedBase = base + extraRoomsTotal;
+  // In multi-room mode: each room has its own discount; combined discount is for single-room only
+  const primaryDisc  = isMultiRoom ? Math.min(parseFloat(primaryDiscAmt) || 0, base) : 0;
+  const primaryNet   = isMultiRoom ? Math.max(0, base - primaryDisc) : base;
+  const combinedBase = isMultiRoom ? primaryNet + extraRoomsTotal : base + extraRoomsData.reduce((s,r)=>s+r.grossAmt,0);
+
   function calcDiscount(b) {
+    if (isMultiRoom) return 0; // single combined discount disabled in multi-room mode
     const dv = parseFloat(discVal) || 0;
     if (discType === "percent")     return Math.round(b * dv / 100);
     if (discType === "flat")        return Math.min(dv, b);
     if (discType === "fixed-rate" && dv > 0) return Math.max(0, b - nights * dv * (1 + extraRoomsData.length));
     return 0;
   }
-  const discAmt   = calcDiscount(combinedBase);
-  const roomTotal = Math.max(0, combinedBase - discAmt);
+  const discAmt   = isMultiRoom ? (primaryDisc + extraRoomsData.reduce((s,r)=>s+r.discAmt,0)) : calcDiscount(combinedBase);
+  const roomTotal = isMultiRoom ? (primaryNet + extraRoomsTotal) : Math.max(0, combinedBase - discAmt);
   const epAmt     = epAccepted ? epCharge : 0;
   const grand     = roomTotal + epAmt;
   const adv       = Math.min(parseFloat(advance) || 0, grand);
@@ -607,9 +616,12 @@ function NewBookingModal({ onClose, prefill }) {
       acChoice: isDual ? acChoice : undefined, roomRate,
       extraRooms: extraRoomsData.map(r => ({
         number: r.number, type: r.room.type, name: r.room.name,
-        acChoice: r.acChoice, rate: r.rate, amount: r.amount, isDual: r.isDual,
+        acChoice: r.acChoice, rate: r.rate, grossAmt: r.grossAmt,
+        discAmt: r.discAmt, amount: r.amount, isDual: r.isDual,
       })),
-      discType, discAmt, discReason: discReason.trim(),
+      discType: isMultiRoom ? "flat" : discType,
+      discAmt, discReason: discReason.trim(),
+      primaryDiscAmt: isMultiRoom ? primaryDisc : 0,
       notes: notes.trim(),
       source: src, referredByName: rn, referredByPhone: rph, referredBy: rn || rph,
       nationality: nat.trim(),
@@ -769,24 +781,52 @@ function NewBookingModal({ onClose, prefill }) {
                   </div>
                 </div>
               )}
+              {/* Multi-room: primary room discount */}
+              {isMultiRoom && selRoom && (
+                <div style={{ background:"#f0f7ff", border:"1.5px solid #a8c8f0", borderRadius:9, padding:"10px 14px", marginBottom:8 }}>
+                  <div style={{ fontSize:11, fontWeight:800, color:"#1a5a8a", marginBottom:8, textTransform:"uppercase", letterSpacing:.5 }}>Primary Room — Rm {selRoom.number}</div>
+                  <div style={{ display:"flex", alignItems:"center", gap:10, fontSize:13 }}>
+                    <span style={{ fontWeight:700, flex:1 }}>{selRoom.name || selRoom.type} · ৳{base.toLocaleString()}</span>
+                    <label style={{ fontSize:11, color:"#555", whiteSpace:"nowrap" }}>Discount ৳</label>
+                    <input type="number" min="0" max={base} value={primaryDiscAmt||""} placeholder="0"
+                      onWheel={e=>e.target.blur()}
+                      onChange={e=>setPrimaryDiscAmt(e.target.value)}
+                      style={{ width:90, padding:"4px 8px", borderRadius:6, border:"1.5px solid #a8c8f0", fontSize:13, fontWeight:700, textAlign:"right" }} />
+                    {primaryDisc > 0 && <span style={{ color:"#1a7040", fontWeight:800, fontSize:12 }}>= ৳{primaryNet.toLocaleString()}</span>}
+                  </div>
+                </div>
+              )}
+
               {/* Extra Rooms */}
               {extraRoomsData.length > 0 && (
                 <div style={{ background:"#f8f4ff", border:"1.5px solid #c4a8f0", borderRadius:9, padding:"10px 14px", marginBottom:8 }}>
                   <div style={{ fontSize:11, fontWeight:800, color:"#5a2ea8", marginBottom:8, textTransform:"uppercase", letterSpacing:.5 }}>Additional Rooms</div>
                   {extraRoomsData.map((er, i) => (
-                    <div key={i} style={{ display:"flex", alignItems:"center", gap:8, marginBottom:6, fontSize:13 }}>
-                      <span style={{ fontWeight:700 }}>Rm {er.number}</span>
-                      <span style={{ color:"#666" }}>— {er.room.name || er.room.type}</span>
-                      {er.isDual && (
-                        <select value={er.acChoice} onChange={e => setExtraRooms(prev => prev.map((x,j) => j===i ? {...x, acChoice: e.target.value} : x))}
-                          style={{ fontSize:11, padding:"2px 6px", borderRadius:6, border:"1px solid #ccc" }}>
-                          <option value="AC">AC ৳{er.room.acRate?.toLocaleString()}</option>
-                          <option value="Non-AC">Non-AC ৳{er.room.nonAcRate?.toLocaleString()}</option>
-                        </select>
-                      )}
-                      <span style={{ marginLeft:"auto", fontWeight:700, color:"#5a2ea8" }}>৳{er.amount.toLocaleString()}</span>
-                      <button type="button" onClick={() => setExtraRooms(prev => prev.filter((_,j) => j!==i))}
-                        style={{ background:"none", border:"none", cursor:"pointer", color:"#c0392b", fontSize:16, padding:"0 4px" }}>✕</button>
+                    <div key={i} style={{ marginBottom: i < extraRoomsData.length-1 ? 10 : 0 }}>
+                      <div style={{ display:"flex", alignItems:"center", gap:8, fontSize:13 }}>
+                        <span style={{ fontWeight:700 }}>Rm {er.number}</span>
+                        <span style={{ color:"#666" }}>— {er.room.name || er.room.type}</span>
+                        {er.isDual && (
+                          <select value={er.acChoice} onChange={e => setExtraRooms(prev => prev.map((x,j) => j===i ? {...x, acChoice: e.target.value} : x))}
+                            style={{ fontSize:11, padding:"2px 6px", borderRadius:6, border:"1px solid #ccc" }}>
+                            <option value="AC">AC ৳{er.room.acRate?.toLocaleString()}</option>
+                            <option value="Non-AC">Non-AC ৳{er.room.nonAcRate?.toLocaleString()}</option>
+                          </select>
+                        )}
+                        <span style={{ marginLeft:"auto", fontWeight:700, color:"#5a2ea8" }}>৳{er.grossAmt.toLocaleString()}</span>
+                        <button type="button" onClick={() => { setExtraRooms(prev => prev.filter((_,j) => j!==i)); }}
+                          style={{ background:"none", border:"none", cursor:"pointer", color:"#c0392b", fontSize:16, padding:"0 4px" }}>✕</button>
+                      </div>
+                      <div style={{ display:"flex", alignItems:"center", gap:8, marginTop:5, paddingLeft:4 }}>
+                        <label style={{ fontSize:11, color:"#555" }}>Discount ৳</label>
+                        <input type="number" min="0" max={er.grossAmt} value={er.discAmt||""} placeholder="0"
+                          onWheel={e=>e.target.blur()}
+                          onChange={e => setExtraRooms(prev => prev.map((x,j) => j===i ? {...x, discAmt: e.target.value} : x))}
+                          style={{ width:90, padding:"4px 8px", borderRadius:6, border:"1.5px solid #c4a8f0", fontSize:13, fontWeight:700, textAlign:"right" }} />
+                        {(parseFloat(er.discAmt)||0) > 0 && (
+                          <span style={{ fontSize:12, color:"#1a7040", fontWeight:800 }}>= ৳{er.amount.toLocaleString()} after discount</span>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -945,34 +985,34 @@ function NewBookingModal({ onClose, prefill }) {
           <div className="form-section" style={{ border:"1.5px solid var(--border)", borderRadius:12, padding:"16px 18px", marginBottom:12 }}>
             <div style={{ color:"var(--text3)", fontSize:10, fontWeight:800, letterSpacing:2, textTransform:"uppercase", marginBottom:10 }}>Step 5 — Pricing & Discount</div>
             {selRoom ? (<>
-              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12, marginBottom:12 }}>
-                <div className="form-group" style={{ marginBottom:0 }}><label>Discount Type</label>
-                  <select value={discType} onChange={e=>{ setDiscType(e.target.value); setDiscVal(0); }}>
-                    <option value="none">No Discount</option>
-                    <option value="percent">Percentage (%)</option>
-                    <option value="flat">Fixed Amount (৳)</option>
-                    <option value="fixed-rate">Fixed Rate/Night</option>
-                  </select>
+              {/* Combined discount — only shown for single room */}
+              {!isMultiRoom && (
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12, marginBottom:12 }}>
+                  <div className="form-group" style={{ marginBottom:0 }}><label>Discount Type</label>
+                    <select value={discType} onChange={e=>{ setDiscType(e.target.value); setDiscVal(0); }}>
+                      <option value="none">No Discount</option>
+                      <option value="percent">Percentage (%)</option>
+                      <option value="flat">Fixed Amount (৳)</option>
+                      <option value="fixed-rate">Fixed Rate/Night</option>
+                    </select>
+                  </div>
+                  <div className="form-group" style={{ marginBottom:0 }}><label>Value</label>
+                    <input type="number" value={discVal} min={0} onWheel={e=>e.target.blur()} onChange={e=>setDiscVal(e.target.value)} disabled={discType==="none"} />
+                  </div>
+                  <div className="form-group" style={{ marginBottom:0 }}><label>Reason</label>
+                    <select value={["Regular guest","Returning customer","Corporate client","Long stay","Staff discount","Special occasion","Agent referral","Other"].includes(discReason) ? discReason : discReason ? "Other" : ""}
+                      onChange={e => { if (e.target.value !== "Other") setDiscReason(e.target.value); else setDiscReason(""); }} style={{ marginBottom:6 }}>
+                      <option value="">— Select —</option>
+                      <option>Regular guest</option><option>Returning customer</option>
+                      <option>Corporate client</option><option>Long stay</option>
+                      <option>Staff discount</option><option>Special occasion</option>
+                      <option>Agent referral</option>
+                      <option value="Other">Other (type below)</option>
+                    </select>
+                    <input value={discReason} onChange={e=>setDiscReason(e.target.value)} placeholder="Or type custom reason..." />
+                  </div>
                 </div>
-                <div className="form-group" style={{ marginBottom:0 }}><label>Value</label>
-                  <input type="number" value={discVal} min={0} onChange={e=>setDiscVal(e.target.value)} disabled={discType==="none"} />
-                </div>
-                <div className="form-group" style={{ marginBottom:0 }}><label>Reason</label>
-                  <select value={["Regular guest","Returning customer","Corporate client","Long stay","Staff discount","Special occasion","Agent referral","Other"].includes(discReason) ? discReason : discReason ? "Other" : ""}
-                    onChange={e => { if (e.target.value !== "Other") setDiscReason(e.target.value); else setDiscReason(""); }} style={{ marginBottom:6 }}>
-                    <option value="">— Select —</option>
-                    <option>Regular guest</option>
-                    <option>Returning customer</option>
-                    <option>Corporate client</option>
-                    <option>Long stay</option>
-                    <option>Staff discount</option>
-                    <option>Special occasion</option>
-                    <option>Agent referral</option>
-                    <option value="Other">Other (type below)</option>
-                  </select>
-                  <input value={discReason} onChange={e=>setDiscReason(e.target.value)} placeholder="Or type custom reason..." />
-                </div>
-              </div>
+              )}
               {/* Price summary */}
               <div style={{ background:"var(--navy)", color:"#fff", borderRadius:10, padding:"14px 16px" }}>
                 <div style={{ fontSize:10, opacity:.6, marginBottom:8, textTransform:"uppercase", letterSpacing:.5 }}>Price Summary</div>
@@ -981,13 +1021,23 @@ function NewBookingModal({ onClose, prefill }) {
                     <span>Rm {selRoom.number} — {nights}n × ৳{roomRate.toLocaleString()}</span>
                     <span>৳{base.toLocaleString()}</span>
                   </div>
-                  {extraRoomsData.map((er,i) => (
-                    <div key={i} style={{ display:"flex", justifyContent:"space-between", fontSize:12 }}>
-                      <span>Rm {er.number} — {nights}n × ৳{er.rate.toLocaleString()}</span>
-                      <span>৳{er.amount.toLocaleString()}</span>
+                  {isMultiRoom && primaryDisc > 0 && (
+                    <div style={{ display:"flex", justifyContent:"space-between", fontSize:12, color:"#fcd34d" }}>
+                      <span>Rm {selRoom.number} Discount</span><span>−৳{primaryDisc.toLocaleString()}</span>
                     </div>
-                  ))}
-                  {discAmt > 0 && <div style={{ display:"flex", justifyContent:"space-between", fontSize:12, color:"#fcd34d" }}><span>Discount</span><span>−৳{discAmt.toLocaleString()}</span></div>}
+                  )}
+                  {extraRoomsData.map((er,i) => (<Fragment key={i}>
+                    <div style={{ display:"flex", justifyContent:"space-between", fontSize:12 }}>
+                      <span>Rm {er.number} — {nights}n × ৳{er.rate.toLocaleString()}</span>
+                      <span>৳{er.grossAmt.toLocaleString()}</span>
+                    </div>
+                    {er.discAmt > 0 && (
+                      <div style={{ display:"flex", justifyContent:"space-between", fontSize:12, color:"#fcd34d" }}>
+                        <span>Rm {er.number} Discount</span><span>−৳{er.discAmt.toLocaleString()}</span>
+                      </div>
+                    )}
+                  </Fragment>))}
+                  {!isMultiRoom && discAmt > 0 && <div style={{ display:"flex", justifyContent:"space-between", fontSize:12, color:"#fcd34d" }}><span>Discount</span><span>−৳{discAmt.toLocaleString()}</span></div>}
                   {epAmt > 0 && <div style={{ display:"flex", justifyContent:"space-between", fontSize:12, color:"#fbbf24" }}><span>Extra Persons</span><span>+৳{epAmt.toLocaleString()}</span></div>}
                   <div style={{ display:"flex", justifyContent:"space-between", fontSize:20, fontWeight:900, color:"#c9a84c", borderTop:"1px solid rgba(255,255,255,.2)", paddingTop:8, marginTop:4 }}>
                     <span>Total</span><span>৳{grand.toLocaleString()}</span>
