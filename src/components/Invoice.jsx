@@ -109,15 +109,28 @@ export function buildInvoiceHTML(b, rooms, invExtras, mode) {
       + '</div>'
       + '<div style="padding-left:18px;border-left:1px solid #e8e4dc;">'
         + '<div style="font-size:10px;font-weight:800;letter-spacing:2px;text-transform:uppercase;color:#1a1a2e;margin-bottom:6px;">Stay Details</div>'
-        + mr("Room","Room "+b.room+rName)
-        + (rType ? mr("Room Type",rType) : "")
-        + (b.acChoice ? mr("AC / Non-AC", b.acChoice==="AC" ? "❄️  AC" : "🌬️  Non-AC") : "")
-        + mr("Check-In",fmtDate(b.checkin))
-        + mr("Check-Out",fmtDate(b.checkout))
-        + mr("Nights",b.nights+" Night"+(b.nights>1?"s":""))
-        + (function(){ const a=b.adults||b.adult||0;const c=b.children||0; if(!a&&!c)return "";
-            const g=(a?a+" Adult"+(a>1?"s":""):"")+(a&&c?", ":"")+(c?c+" Child"+(c>1?"ren":""):"");
-            return mr("Guests",g); })()
+        + (b.isMultiRoomBooking && b.multiRooms?.length ? (
+            mr("Check-In", fmtDate(b.checkin))
+            + b.multiRooms.map(rm => {
+                const rmN = rm.name ? " — " + rm.name : "";
+                const rmAC = rm.acChoice ? " [" + rm.acChoice + "]" : "";
+                const rmNights = rm.nights || 1;
+                return mr("Room " + rm.number + rmN, rmNights + " Night" + (rmNights > 1 ? "s" : "") + rmAC + " · Check-out: " + fmtDate(rm.checkout || b.checkout));
+              }).join("")
+            + (function(){ const a = b.adults||0; const c = b.children||0; if(!a&&!c) return "";
+                const g=(a?a+" Adult"+(a>1?"s":""):"")+(a&&c?", ":"")+(c?c+" Child"+(c>1?"ren":""):"");
+                return mr("Total Guests", g); })()
+          ) : (
+            mr("Room","Room "+b.room+rName)
+            + (rType ? mr("Room Type",rType) : "")
+            + (b.acChoice ? mr("AC / Non-AC", b.acChoice==="AC" ? "❄️  AC" : "🌬️  Non-AC") : "")
+            + mr("Check-In",fmtDate(b.checkin))
+            + mr("Check-Out",fmtDate(b.checkout))
+            + mr("Nights",b.nights+" Night"+(b.nights>1?"s":""))
+            + (function(){ const a=b.adults||b.adult||0;const c=b.children||0; if(!a&&!c)return "";
+                const g=(a?a+" Adult"+(a>1?"s":""):"")+(a&&c?", ":"")+(c?c+" Child"+(c>1?"ren":""):"");
+                return mr("Guests",g); })()
+          ))
       + '</div>'
     + '</div>'
     + '</div>';
@@ -184,10 +197,41 @@ export function buildInvoiceHTML(b, rooms, invExtras, mode) {
 
   const hasExtras = validExtras.length > 0 || epCharge > 0;
   const hasMultiRooms = extraRoomsList.length > 0;
-  let tableBody = (hasExtras || hasMultiRooms)
-    ? secHdr("Accommodation Charges") + roomRow + extraRoomRows + dRow + subTot("Accommodation Sub-total", roomTotal)
-      + (hasExtras ? secHdr("Additional Charges") + epRow + eRows + subTot("Additional Charges Sub-total", combinedExtras) : "")
-    : roomRow + extraRoomRows + dRow;
+
+  // ── Multi-room booking line items ──────────────────────────────────────────
+  const isMultiRoomInv = b.isMultiRoomBooking && (b.multiRooms || []).length > 0;
+  const multiRoomLineRows = isMultiRoomInv ? (b.multiRooms || []).map(rm => {
+    const rmName = rm.name ? " — " + rm.name : "";
+    const rmAC   = rm.acChoice ? " [" + rm.acChoice + "]" : "";
+    const rmN    = rm.nights || 1;
+    const rmGross = rm.grossAmt != null ? rm.grossAmt : (rm.rate * rmN);
+    const rmDisc  = rm.discAmt || 0;
+    const rmNet   = rm.amount != null ? rm.amount : (rmGross - rmDisc);
+    const rmAdults = rm.adults ? rm.adults + " Adult" + (rm.adults > 1 ? "s" : "") : "";
+    const rmChild  = rm.children ? rm.children + " Child" + (rm.children > 1 ? "ren" : "") : "";
+    const rmGuests = [rmAdults, rmChild].filter(Boolean).join(", ");
+    const row = '<tr>'
+      + '<td style="padding:9px 10px;border-bottom:1px solid #eee;color:#555;font-size:11px;">'+fmtDate(rm.checkin || b.checkin)+'</td>'
+      + '<td style="padding:9px 10px;border-bottom:1px solid #eee;color:#111;font-size:11px;font-weight:500;">Room '+rm.number+rmName+' — Accommodation ('+rmN+' Night'+(rmN>1?'s':'')+')'+ rmAC + (rmGuests ? ' · ' + rmGuests : '') + '</td>'
+      + '<td style="padding:9px 10px;border-bottom:1px solid #eee;text-align:center;color:#333;font-size:11px;">'+rmN+'</td>'
+      + '<td style="padding:9px 10px;border-bottom:1px solid #ddd;text-align:right;color:#333;font-size:11px;">'+moneyH(rm.rate)+'</td>'
+      + '<td style="padding:9px 10px;border-bottom:1px solid #ddd;text-align:right;color:#000;font-weight:700;font-size:12px;">'+moneyH(rmGross)+'</td>'
+      + '</tr>';
+    const discRow = rmDisc > 0
+      ? '<tr style="background:#fffbf5;"><td style="padding:7px 10px;border-bottom:1px solid #eee;color:#B7770D;font-size:10px;">—</td><td style="padding:7px 10px;border-bottom:1px solid #eee;color:#B7770D;font-size:10px;">Discount — Rm '+rm.number+'</td><td colspan="2" style="border-bottom:1px solid #eee;"></td><td style="padding:7px 10px;border-bottom:1px solid #eee;text-align:right;color:#B7770D;font-weight:700;font-size:10px;">-'+moneyH(rmDisc)+'</td></tr>'
+      : "";
+    return row + discRow;
+  }).join("") : "";
+
+  let tableBody;
+  if (isMultiRoomInv) {
+    tableBody = secHdr("Accommodation Charges") + multiRoomLineRows + subTot("Total Accommodation", grandTotal);
+  } else if (hasExtras || hasMultiRooms) {
+    tableBody = secHdr("Accommodation Charges") + roomRow + extraRoomRows + dRow + subTot("Accommodation Sub-total", roomTotal)
+      + (hasExtras ? secHdr("Additional Charges") + epRow + eRows + subTot("Additional Charges Sub-total", combinedExtras) : "");
+  } else {
+    tableBody = roomRow + extraRoomRows + dRow;
+  }
 
   const payHist = b.paymentHistory || [];
   if (payHist.length) {

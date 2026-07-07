@@ -25,25 +25,43 @@ export function bookingConflicts(roomNum, ci, co, excludeId, bookings) {
   return bookings.some(b => {
     if (excludeId !== null && b.id === excludeId) return false;
     if (b.status === 'cancelled' || b.status === 'checked-out') return false;
-    // Check primary room AND all extra rooms
+    // New multi-room bookings: each room has its own dates
+    if (b.multiRooms && b.multiRooms.length) {
+      return b.multiRooms.some(mr => {
+        if (String(mr.number) !== String(roomNum)) return false;
+        const mrCi = new Date(mr.checkin || b.checkin);
+        const mrCo = new Date(mr.checkout || b.checkout);
+        return ciD < mrCo && coD > mrCi;
+      });
+    }
+    // Single room + old extraRooms: use booking-level dates
     const allRooms = [b.room, ...(b.extraRooms || []).map(r => r.number)];
-    if (!allRooms.includes(roomNum)) return false;
+    if (!allRooms.map(String).includes(String(roomNum))) return false;
     const bci = new Date(b.checkin), bco = new Date(b.checkout);
     return ciD < bco && coD > bci;
   });
 }
 
 export function getRoomDisplayStatus(room, bookings, today) {
-  const num = room.number;
-  // Occupied: status is checked-in AND checkout hasn't passed yet (or is today)
+  const num = String(room.number);
   const active = bookings.find(b => {
-    const allRooms = [b.room, ...(b.extraRooms || []).map(r => r.number)];
-    return allRooms.includes(num) && b.status === 'checked-in' && b.checkout >= today;
+    if (b.status !== 'checked-in') return false;
+    // New multi-room: check per-room checkout
+    if (b.multiRooms && b.multiRooms.length) {
+      return b.multiRooms.some(mr => String(mr.number) === num && (mr.checkout || b.checkout) >= today);
+    }
+    const allRooms = [b.room, ...(b.extraRooms || []).map(r => r.number)].map(String);
+    return allRooms.includes(num) && b.checkout >= today;
   });
   if (active) return 'occupied';
   const reserved = bookings.find(b => {
-    const allRooms = [b.room, ...(b.extraRooms || []).map(r => r.number)];
-    return allRooms.includes(num) && b.status === 'confirmed' && b.checkout > today;
+    if (b.status !== 'confirmed') return false;
+    // New multi-room: check per-room checkout
+    if (b.multiRooms && b.multiRooms.length) {
+      return b.multiRooms.some(mr => String(mr.number) === num && (mr.checkout || b.checkout) > today);
+    }
+    const allRooms = [b.room, ...(b.extraRooms || []).map(r => r.number)].map(String);
+    return allRooms.includes(num) && b.checkout > today;
   });
   if (reserved) return 'reserved';
   return 'vacant';

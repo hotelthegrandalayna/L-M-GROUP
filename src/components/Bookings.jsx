@@ -481,6 +481,9 @@ function NewBookingModal({ onClose, prefill }) {
   // Extra rooms (multi-room booking)
   const [extraRooms, setExtraRooms] = useState([]); // [{ number, acChoice, discAmt }]
   const [primaryDiscAmt, setPrimaryDiscAmt] = useState(0); // per-room discount for primary room in multi-room mode
+  // Multi-room mode
+  const [bookingMode, setBookingMode] = useState("single"); // "single" | "multi"
+  const [multiRoomCards, setMultiRoomCards] = useState([{ id:1, number:"", acChoice:"AC", ci:today, co:tmr, adults:2, children:0, discAmt:"" }]);
   const [adults,   setAdults]   = useState(2);
   const [children, setChildren] = useState(0);
   // Extra person
@@ -528,6 +531,24 @@ function NewBookingModal({ onClose, prefill }) {
     return { ...er, room: r, rate, grossAmt, discAmt: erDisc, amount: amt, isDual: dual };
   }).filter(Boolean);
   const extraRoomsTotal = extraRoomsData.reduce((s, r) => s + r.amount, 0);
+
+  // ── Multi-room card computed data ──
+  const multiRoomData = multiRoomCards.map(card => {
+    const r = rooms.find(x => String(x.number) === String(card.number));
+    if (!r) return { ...card, room: null, rate: 0, nights: 0, gross: 0, disc: 0, net: 0, isDual: false };
+    const dual = !!(r.acRate && r.nonAcRate);
+    const rate = dual ? (card.acChoice === "AC" ? r.acRate : r.nonAcRate) : r.rate || 0;
+    const cardCi = card.ci || ci || today;
+    const cardNights = cardCi && card.co && new Date(card.co) > new Date(cardCi)
+      ? Math.round((new Date(card.co) - new Date(cardCi)) / 86400000) : 0;
+    const gross = cardNights * rate;
+    const disc = Math.min(parseFloat(card.discAmt) || 0, gross);
+    const net = Math.max(0, gross - disc);
+    return { ...card, ci: cardCi, room: r, isDual: dual, rate, nights: cardNights, gross, disc, net };
+  });
+  const multiTotal = multiRoomData.reduce((s, c) => s + c.net, 0);
+  const multiAdv = Math.min(parseFloat(advance) || 0, multiTotal);
+  const multiBalance = Math.max(0, multiTotal - multiAdv);
 
   // In multi-room mode: each room has its own discount; combined discount is for single-room only
   const primaryDisc  = isMultiRoom ? Math.min(parseFloat(primaryDiscAmt) || 0, base) : 0;
@@ -641,6 +662,60 @@ function NewBookingModal({ onClose, prefill }) {
     };
   }
 
+  function buildAndValidateMulti() {
+    if (!name.trim())  { notify("Guest name required", "error"); return null; }
+    if (!phone.trim()) { notify("Phone required", "error"); return null; }
+    if (multiRoomData.length === 0) { notify("Add at least one room", "error"); return null; }
+    for (const c of multiRoomData) {
+      if (!c.room) { notify("Select a room for each card", "error"); return null; }
+      if (!c.nights) { notify("Check-out must be after check-in for each room", "error"); return null; }
+      if (bookingConflicts(c.number, c.ci, c.co, null, bookings)) {
+        notify(`Room ${c.number} is already booked for those dates`, "error"); return null;
+      }
+    }
+    // Check for duplicate room numbers within the booking
+    const nums = multiRoomData.map(c => String(c.number));
+    if (new Set(nums).size !== nums.length) { notify("Each room can only be added once", "error"); return null; }
+    if ((parseFloat(advance) || 0) <= 0 && !payLater) { notify("Enter payment amount or select Pay Later", "error"); return null; }
+
+    const id = maxId(bookings);
+    const a  = multiAdv;
+    const t  = needsTxn ? txnNum.trim() : "";
+    const minCi = multiRoomData.reduce((mn, c) => c.ci < mn ? c.ci : mn, multiRoomData[0].ci);
+    const maxCo = multiRoomData.reduce((mx, c) => c.co > mx ? c.co : mx, "");
+    const maxNights = multiRoomData.reduce((mx, c) => c.nights > mx ? c.nights : mx, 0);
+    const totalDisc = multiRoomData.reduce((s, c) => s + c.disc, 0);
+    return {
+      id, guest: name.trim(), phone: phone.trim(), email: "",
+      room: multiRoomData[0].number,
+      type: multiRoomData[0].room?.type || "",
+      checkin: minCi, checkout: maxCo, nights: maxNights,
+      amount: multiTotal, baseAmount: multiTotal, invoiceTotal: multiTotal,
+      isMultiRoomBooking: true,
+      multiRooms: multiRoomData.map(c => ({
+        number: c.number, type: c.room.type, name: c.room.name,
+        acChoice: c.isDual ? c.acChoice : undefined,
+        rate: c.rate, nights: c.nights, checkin: c.ci, checkout: c.co,
+        grossAmt: c.gross, discAmt: c.disc, amount: c.net,
+        adults: parseInt(c.adults) || 0, children: parseInt(c.children) || 0,
+        isDual: c.isDual,
+      })),
+      discType: "flat", discAmt: totalDisc, discReason: "",
+      primaryDiscAmt: 0, extraRooms: [],
+      notes: notes.trim(), source: src,
+      referredByName: refName.trim(), referredByPhone: refPhone.trim(), referredBy: refName.trim() || refPhone.trim(),
+      nationality: nat.trim(),
+      idType: "", idNum: "", idFront: "", idBack: "", idDocs: [],
+      adults: multiRoomData.reduce((s, c) => s + (parseInt(c.adults) || 0), 0),
+      children: multiRoomData.reduce((s, c) => s + (parseInt(c.children) || 0), 0),
+      advance: a, paymentMethod: method, txnNumber: t, transactionNumber: t,
+      restPayment: 0, dueAmount: Math.max(0, multiTotal - a),
+      paymentHistory: a > 0 ? [{ ts: new Date().toISOString(), amount: a, method, txnNumber: t, note: "Advance paid", type: "room", by: curUser || "staff" }] : [],
+      guestType: "single", spouseName: "", groupMembers: [],
+      createdAt: new Date().toISOString(), by: curUser || "staff",
+    };
+  }
+
   function performSave(bkObj, status) {
     const finalBk = { ...bkObj, status };
     updateBookings([...bookings, finalBk]);
@@ -676,9 +751,11 @@ function NewBookingModal({ onClose, prefill }) {
       id: maxId(prev), source: "Room Rent", amount: finalBk.advance, date: today,
       note: finalBk.guest + " Rm " + finalBk.room + (status === "confirmed" ? " — reservation deposit" : " — advance payment") + " (" + finalBk.paymentMethod + ")",
       bookingId: finalBk.id }]);
-    notify(finalBk.guest + (status === "checked-in" ? " checked in ✓" : " booking saved") + (discAmt > 0 ? " · Discount " + money(discAmt) : ""), "success");
+    const _disc = finalBk.isMultiRoomBooking ? (finalBk.multiRooms||[]).reduce((s,r)=>s+(r.discAmt||0),0) : (finalBk.discAmt ?? discAmt);
+    const _total = finalBk.isMultiRoomBooking ? (finalBk.invoiceTotal ?? finalBk.amount ?? 0) : (finalBk.invoiceTotal ?? roomTotal);
+    notify(finalBk.guest + (status === "checked-in" ? " checked in ✓" : " booking saved") + (_disc > 0 ? " · Discount " + money(_disc) : ""), "success");
     logEvent("hotel", status === "checked-in" ? "booking_checked_in" : "booking_created",
-      { num: String(finalBk.id), guest: finalBk.guest, amount: roomTotal, note: `Rm ${finalBk.room}${discAmt > 0 ? ` · Discount ৳${discAmt}` : ""}` }, curUser);
+      { num: String(finalBk.id), guest: finalBk.guest, amount: _total, note: `Rm ${finalBk.room}${_disc > 0 ? ` · Discount ৳${_disc}` : ""}` }, curUser);
     if (status === "checked-in") {
       const tcEnabled = localStorage.getItem("ga_tc_enabled") !== "false";
       const willPrintTC = tcEnabled && !finalBk.tcPrinted;
@@ -713,11 +790,22 @@ function NewBookingModal({ onClose, prefill }) {
           <button className="modal-close" onClick={onClose}><i className="ti ti-x" /></button>
         </div>
 
-        {/* ── SINGLE COLUMN SMART LAYOUT ── */}
+        {/* ── BOOKING MODE TOGGLE ── */}
+        <div style={{ display:"flex", gap:0, marginBottom:14, borderRadius:10, overflow:"hidden", border:"2px solid var(--navy)" }}>
+          {[["single","🛏  Single Room"],["multi","🛏🛏  Multiple Rooms"]].map(([mode,label]) => (
+            <button key={mode} type="button" onClick={() => setBookingMode(mode)} style={{
+              flex:1, padding:"12px 0", border:"none", cursor:"pointer",
+              fontWeight:800, fontSize:13, fontFamily:"inherit", transition:"all .15s",
+              background: bookingMode===mode ? "var(--navy)" : "var(--bg3)",
+              color: bookingMode===mode ? "#fff" : "var(--text2)",
+            }}>{label}</button>
+          ))}
+        </div>
+
         <div style={{ display:"flex", flexDirection:"column", gap:0 }}>
 
-          {/* STEP 1 — DATES */}
-          <div className="form-section" style={{ background:"linear-gradient(135deg,#2D1B69,#4a2ea8)", borderRadius:12, padding:"16px 18px", marginBottom:12 }}>
+          {/* STEP 1 — DATES (single room only) */}
+          {bookingMode === "single" && <div className="form-section" style={{ background:"linear-gradient(135deg,#2D1B69,#4a2ea8)", borderRadius:12, padding:"16px 18px", marginBottom:12 }}>
             <div style={{ color:"#c9a84c", fontSize:10, fontWeight:800, letterSpacing:2, textTransform:"uppercase", marginBottom:10 }}>Step 1 — When?</div>
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12, alignItems:"end" }}>
               <div className="form-group" style={{ marginBottom:0 }}>
@@ -739,12 +827,14 @@ function NewBookingModal({ onClose, prefill }) {
                 <div style={{ color:"#c9a84c", fontSize:24, fontWeight:900, lineHeight:1.1 }}>{nights || "—"}</div>
               </div>
             </div>
-          </div>
+          </div>}
 
           {/* STEP 2 — ROOM */}
           <div className="form-section" style={{ border:"2px solid var(--navy)", borderRadius:12, padding:"16px 18px", marginBottom:12 }}>
             <div style={{ color:"var(--navy)", fontSize:10, fontWeight:800, letterSpacing:2, textTransform:"uppercase", marginBottom:10 }}>Step 2 — Which Room?</div>
-            {!ci || !co || !nights ? (
+            {bookingMode === "multi" ? (<>
+              {/* Multi-room: room cards shown directly — no date pre-check needed */}
+            </>) : (!ci || !co || !nights) ? (
               <div style={{ color:"var(--text3)", fontSize:13, padding:"12px 0", textAlign:"center", opacity:.6 }}>
                 <i className="ti ti-calendar" style={{ marginRight:6 }} />Set check-in and check-out dates first
               </div>
@@ -846,6 +936,105 @@ function NewBookingModal({ onClose, prefill }) {
                   ))}
                 </select>
               )}
+            </>)}
+            {bookingMode === "multi" && (<>
+              {/* ── MULTI-ROOM CARDS ── */}
+              {multiRoomData.map((card, idx) => {
+                const cardAvail = rooms.filter(r => {
+                  const num = String(r.number);
+                  if (num === String(card.number)) return true;
+                  if (multiRoomCards.some((c,j) => j!==idx && String(c.number)===num)) return false;
+                  if (!card.ci || !card.co) return true;
+                  return !bookingConflicts(r.number, card.ci, card.co, null, bookings);
+                });
+                return (
+                <div key={card.id} style={{ border:"2px solid var(--navy)", borderRadius:12, padding:"14px 16px", marginBottom:10, background:"var(--bg4)" }}>
+                  <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10 }}>
+                    <span style={{ fontSize:12, fontWeight:800, color:"var(--navy)", textTransform:"uppercase", letterSpacing:1 }}>Room {idx+1}</span>
+                    {multiRoomCards.length > 1 && (
+                      <button type="button" onClick={() => setMultiRoomCards(prev => prev.filter((_,j) => j!==idx))}
+                        style={{ background:"#fff0f0", border:"1.5px solid #fca5a5", borderRadius:7, padding:"3px 10px", color:"#c0392b", fontSize:12, fontWeight:700, cursor:"pointer" }}>
+                        ✕ Remove
+                      </button>
+                    )}
+                  </div>
+                  {/* Check-in / Check-out / Room select row */}
+                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 2fr", gap:10, marginBottom:10 }}>
+                    <div className="form-group" style={{ marginBottom:0 }}>
+                      <label style={{ fontSize:11 }}>Check-in *</label>
+                      <DateInput value={card.ci} min={yesterday}
+                        onChange={e => setMultiRoomCards(prev => prev.map((c,j) => j===idx ? {...c, ci:e.target.value, co: c.co <= e.target.value ? addDaysIso(e.target.value,1) : c.co} : c))} />
+                      {card.ci && <div style={{ fontSize:10, color:"var(--text3)", marginTop:2 }}>{new Date(card.ci+"T00:00:00").toLocaleDateString("en-GB",{weekday:"short"})}</div>}
+                    </div>
+                    <div className="form-group" style={{ marginBottom:0 }}>
+                      <label style={{ fontSize:11 }}>Check-out *</label>
+                      <DateInput value={card.co} min={card.ci ? addDaysIso(card.ci,1) : addDaysIso(today,1)}
+                        onChange={e => setMultiRoomCards(prev => prev.map((c,j) => j===idx ? {...c, co:e.target.value} : c))} />
+                      {card.nights > 0 && <div style={{ fontSize:10, color:"var(--text3)", marginTop:2 }}>{card.nights} night{card.nights!==1?"s":""}</div>}
+                    </div>
+                    <div className="form-group" style={{ marginBottom:0 }}>
+                      <label style={{ fontSize:11 }}>Select Room *</label>
+                      <select value={card.number} onChange={e => setMultiRoomCards(prev => prev.map((c,j) => j===idx ? {...c, number:e.target.value, acChoice:"AC"} : c))} style={{ fontWeight:700 }}>
+                        <option value="">Choose a room...</option>
+                        {cardAvail.map(r => (
+                          <option key={r.number} value={r.number}>
+                            Rm {r.number}{r.name?" — "+r.name:""} · {r.type}{r.acRate&&r.nonAcRate?` · AC ৳${r.acRate}/Non-AC ৳${r.nonAcRate}`:`· ৳${r.rate?.toLocaleString()}/n`}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  {card.isDual && card.room && (
+                    <div style={{ display:"flex", gap:8, marginBottom:10 }}>
+                      {["AC","Non-AC"].map(opt => (
+                        <button key={opt} type="button"
+                          onClick={() => setMultiRoomCards(prev => prev.map((c,j) => j===idx ? {...c, acChoice:opt} : c))}
+                          style={{ flex:1, padding:"9px 0", borderRadius:8, border:"2px solid", cursor:"pointer",
+                            fontWeight:800, fontSize:12, fontFamily:"inherit", transition:"all .15s",
+                            background: card.acChoice===opt ? "var(--navy)" : "var(--bg3)",
+                            color:      card.acChoice===opt ? "#fff" : "var(--text2)",
+                            borderColor: card.acChoice===opt ? "var(--navy)" : "var(--border)" }}>
+                          {opt==="AC" ? "❄️ AC" : "🌬️ Non-AC"}
+                          <div style={{ fontSize:10, fontWeight:600, opacity:.8, marginTop:2 }}>
+                            ৳{opt==="AC" ? card.room.acRate?.toLocaleString() : card.room.nonAcRate?.toLocaleString()}/night
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10, marginBottom:8 }}>
+                    <div className="form-group" style={{ marginBottom:0 }}>
+                      <label style={{ fontSize:11 }}>Adults</label>
+                      <input type="number" min={1} max={20} value={card.adults} onWheel={e=>e.target.blur()}
+                        onChange={e => setMultiRoomCards(prev => prev.map((c,j) => j===idx ? {...c, adults:e.target.value} : c))}
+                        style={{ textAlign:"center", fontWeight:800 }} />
+                    </div>
+                    <div className="form-group" style={{ marginBottom:0 }}>
+                      <label style={{ fontSize:11 }}>Children</label>
+                      <input type="number" min={0} max={15} value={card.children} onWheel={e=>e.target.blur()}
+                        onChange={e => setMultiRoomCards(prev => prev.map((c,j) => j===idx ? {...c, children:e.target.value} : c))}
+                        style={{ textAlign:"center" }} />
+                    </div>
+                    <div className="form-group" style={{ marginBottom:0 }}>
+                      <label style={{ fontSize:11 }}>Discount (৳)</label>
+                      <input type="number" min={0} value={card.discAmt||""} placeholder="0" onWheel={e=>e.target.blur()}
+                        onChange={e => setMultiRoomCards(prev => prev.map((c,j) => j===idx ? {...c, discAmt:e.target.value} : c))}
+                        style={{ textAlign:"right", fontWeight:700 }} />
+                    </div>
+                  </div>
+                  {card.room && card.nights > 0 && (
+                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"8px 12px", background:"var(--navy)", color:"#fff", borderRadius:8, fontSize:13 }}>
+                      <span style={{ opacity:.7 }}>{card.nights}n × ৳{card.rate.toLocaleString()}{card.disc>0 ? ` − ৳${card.disc.toLocaleString()} disc` : ""}</span>
+                      <span style={{ fontWeight:900, fontSize:16, color:"#c9a84c" }}>৳{card.net.toLocaleString()}</span>
+                    </div>
+                  )}
+                </div>
+                );
+              })}
+              <button type="button" onClick={() => setMultiRoomCards(prev => [...prev, { id:Date.now(), number:"", acChoice:"AC", ci:today, co:addDaysIso(today,1), adults:2, children:0, discAmt:"" }])}
+                style={{ width:"100%", padding:"11px 0", border:"2px dashed #c4a8f0", borderRadius:10, background:"#f8f4ff", color:"#5a2ea8", fontWeight:800, fontSize:13, cursor:"pointer", fontFamily:"inherit" }}>
+                + Add Another Room
+              </button>
             </>)}
           </div>
 
@@ -983,8 +1172,36 @@ function NewBookingModal({ onClose, prefill }) {
 
           {/* STEP 5 — PRICING & DISCOUNT */}
           <div className="form-section" style={{ border:"1.5px solid var(--border)", borderRadius:12, padding:"16px 18px", marginBottom:12 }}>
-            <div style={{ color:"var(--text3)", fontSize:10, fontWeight:800, letterSpacing:2, textTransform:"uppercase", marginBottom:10 }}>Step 5 — Pricing & Discount</div>
-            {selRoom ? (<>
+            <div style={{ color:"var(--text3)", fontSize:10, fontWeight:800, letterSpacing:2, textTransform:"uppercase", marginBottom:10 }}>Step 5 — {bookingMode==="multi" ? "Price Summary" : "Pricing & Discount"}</div>
+            {bookingMode === "multi" ? (
+              multiRoomData.some(c => c.room && c.nights > 0) ? (
+                <div style={{ background:"var(--navy)", color:"#fff", borderRadius:10, padding:"14px 16px" }}>
+                  <div style={{ display:"flex", flexDirection:"column", gap:5 }}>
+                    {multiRoomData.filter(c=>c.room&&c.nights>0).map((c,i) => (
+                      <Fragment key={i}>
+                        <div style={{ display:"flex", justifyContent:"space-between", fontSize:12 }}>
+                          <span>Rm {c.number} — {c.nights}n × ৳{c.rate.toLocaleString()}</span>
+                          <span>৳{c.gross.toLocaleString()}</span>
+                        </div>
+                        {c.disc > 0 && (
+                          <div style={{ display:"flex", justifyContent:"space-between", fontSize:12, color:"#fcd34d" }}>
+                            <span>Rm {c.number} Discount</span><span>−৳{c.disc.toLocaleString()}</span>
+                          </div>
+                        )}
+                      </Fragment>
+                    ))}
+                    <div style={{ display:"flex", justifyContent:"space-between", fontSize:20, fontWeight:900, color:"#c9a84c", borderTop:"1px solid rgba(255,255,255,.2)", paddingTop:8, marginTop:4 }}>
+                      <span>Total</span><span>৳{multiTotal.toLocaleString()}</span>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ color:"var(--text3)", fontSize:13, padding:"12px 0", textAlign:"center", opacity:.6 }}>
+                  <i className="ti ti-tag" style={{ marginRight:6 }} />Select rooms above to see pricing
+                </div>
+              )
+            ) : null /* single mode content below */}
+            {bookingMode === "single" && (selRoom ? (<>
               {/* Combined discount — only shown for single room */}
               {!isMultiRoom && (
                 <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12, marginBottom:12 }}>
@@ -1048,7 +1265,7 @@ function NewBookingModal({ onClose, prefill }) {
               <div style={{ color:"var(--text3)", fontSize:13, padding:"12px 0", textAlign:"center", opacity:.6 }}>
                 <i className="ti ti-tag" style={{ marginRight:6 }} />Select a room first to see pricing
               </div>
-            )}
+            ) )}
           </div>
 
           {/* STEP 6 — PAYMENT */}
@@ -1074,12 +1291,15 @@ function NewBookingModal({ onClose, prefill }) {
                 <input value={txnNum} onChange={e=>setTxnNum(e.target.value)} placeholder="e.g. 01X-XXXXXXXXXX" />
               </div>
             )}
-            {adv > 0 && selRoom && !payLater && (
-              <div style={{ display:"flex", justifyContent:"space-between", fontSize:13, fontWeight:700, padding:"10px 14px", background: balance===0 ? "#f0fdf4" : "#fff8e1", borderRadius:8, marginTop:10, color: balance===0 ? "var(--green)" : "#7a5500" }}>
-                <span>{balance===0 ? "✓ Fully Paid" : "Balance Due after payment:"}</span>
-                <span>৳{balance.toLocaleString()}</span>
-              </div>
-            )}
+            {!payLater && (bookingMode === "single" ? (adv > 0 && selRoom) : (multiAdv > 0)) && (() => {
+              const bal = bookingMode === "multi" ? multiBalance : balance;
+              return (
+                <div style={{ display:"flex", justifyContent:"space-between", fontSize:13, fontWeight:700, padding:"10px 14px", background: bal===0 ? "#f0fdf4" : "#fff8e1", borderRadius:8, marginTop:10, color: bal===0 ? "var(--green)" : "#7a5500" }}>
+                  <span>{bal===0 ? "✓ Fully Paid" : "Balance Due after payment:"}</span>
+                  <span>৳{bal.toLocaleString()}</span>
+                </div>
+              );
+            })()}
 
             {/* Pay Later option */}
             <div style={{ marginTop:14, padding:"12px 16px", borderRadius:10, background: payLater ? "#fff8e1" : "#f5f5f5", border: payLater ? "1.5px solid #f0c040" : "1.5px solid #e0e0e0", cursor:"pointer" }}
@@ -1107,12 +1327,195 @@ function NewBookingModal({ onClose, prefill }) {
             </div>
           </div>
 
-        </div>{/* end single column */}
+        </div>
+
+        {/* (multi room form removed — room cards are now inside Step 2) */}
+        {false && (
+        <div>
+          <div>
+            {multiRoomData.map((card, idx) => {
+              const cardAvail = rooms.filter(r => {
+                if (!ci || !card.co) return true;
+                const num = String(r.number);
+                // Allow if it's already selected by this card
+                if (num === String(card.number)) return true;
+                // Exclude rooms selected by other cards
+                if (multiRoomCards.some((c,j) => j!==idx && String(c.number)===num)) return false;
+                return !bookingConflicts(r.number, ci, card.co, null, bookings);
+              });
+              return (
+              <div key={card.id} style={{ border:"2px solid var(--navy)", borderRadius:12, padding:"14px 16px", marginBottom:10, background:"var(--bg4)" }}>
+                {/* Card header */}
+                <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10 }}>
+                  <span style={{ fontSize:12, fontWeight:800, color:"var(--navy)", textTransform:"uppercase", letterSpacing:1 }}>Room {idx+1}</span>
+                  {multiRoomCards.length > 1 && (
+                    <button type="button" onClick={() => setMultiRoomCards(prev => prev.filter((_,j) => j!==idx))}
+                      style={{ background:"#fff0f0", border:"1.5px solid #fca5a5", borderRadius:7, padding:"3px 10px", color:"#c0392b", fontSize:12, fontWeight:700, cursor:"pointer" }}>
+                      ✕ Remove
+                    </button>
+                  )}
+                </div>
+
+                {/* Row 1: Room select + AC/Non-AC */}
+                <div style={{ display:"grid", gridTemplateColumns:"2fr 1fr", gap:10, marginBottom:10 }}>
+                  <div className="form-group" style={{ marginBottom:0 }}>
+                    <label style={{ fontSize:11 }}>Select Room *</label>
+                    <select value={card.number} onChange={e => setMultiRoomCards(prev => prev.map((c,j) => j===idx ? {...c, number:e.target.value, acChoice:"AC"} : c))} style={{ fontWeight:700 }}>
+                      <option value="">Choose a room...</option>
+                      {cardAvail.map(r => (
+                        <option key={r.number} value={r.number}>
+                          Rm {r.number}{r.name?" — "+r.name:""} · {r.type}{r.acRate&&r.nonAcRate?` · AC ৳${r.acRate}/Non-AC ৳${r.nonAcRate}`:`· ৳${r.rate?.toLocaleString()}/n`}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="form-group" style={{ marginBottom:0 }}>
+                    <label style={{ fontSize:11 }}>Check-out *</label>
+                    <DateInput value={card.co} min={ci ? addDaysIso(ci,1) : addDaysIso(today,1)}
+                      onChange={e => setMultiRoomCards(prev => prev.map((c,j) => j===idx ? {...c, co:e.target.value} : c))} />
+                    {card.nights > 0 && <div style={{ fontSize:11, color:"var(--text3)", marginTop:2 }}>{card.nights} night{card.nights!==1?"s":""}</div>}
+                  </div>
+                </div>
+
+                {/* AC/Non-AC buttons (only if dual pricing) */}
+                {card.isDual && card.room && (
+                  <div style={{ display:"flex", gap:8, marginBottom:10 }}>
+                    {["AC","Non-AC"].map(opt => (
+                      <button key={opt} type="button"
+                        onClick={() => setMultiRoomCards(prev => prev.map((c,j) => j===idx ? {...c, acChoice:opt} : c))}
+                        style={{ flex:1, padding:"9px 0", borderRadius:8, border:"2px solid", cursor:"pointer",
+                          fontWeight:800, fontSize:12, fontFamily:"inherit", transition:"all .15s",
+                          background: card.acChoice===opt ? "var(--navy)" : "var(--bg3)",
+                          color:      card.acChoice===opt ? "#fff" : "var(--text2)",
+                          borderColor: card.acChoice===opt ? "var(--navy)" : "var(--border)" }}>
+                        {opt==="AC" ? "❄️ AC" : "🌬️ Non-AC"}
+                        <div style={{ fontSize:10, fontWeight:600, opacity:.8, marginTop:2 }}>
+                          ৳{opt==="AC" ? card.room.acRate?.toLocaleString() : card.room.nonAcRate?.toLocaleString()}/night
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Row 2: Adults, Children, Discount */}
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10, marginBottom:8 }}>
+                  <div className="form-group" style={{ marginBottom:0 }}>
+                    <label style={{ fontSize:11 }}>Adults</label>
+                    <input type="number" min={1} max={20} value={card.adults} onWheel={e=>e.target.blur()}
+                      onChange={e => setMultiRoomCards(prev => prev.map((c,j) => j===idx ? {...c, adults:e.target.value} : c))}
+                      style={{ textAlign:"center", fontWeight:800 }} />
+                  </div>
+                  <div className="form-group" style={{ marginBottom:0 }}>
+                    <label style={{ fontSize:11 }}>Children</label>
+                    <input type="number" min={0} max={15} value={card.children} onWheel={e=>e.target.blur()}
+                      onChange={e => setMultiRoomCards(prev => prev.map((c,j) => j===idx ? {...c, children:e.target.value} : c))}
+                      style={{ textAlign:"center" }} />
+                  </div>
+                  <div className="form-group" style={{ marginBottom:0 }}>
+                    <label style={{ fontSize:11 }}>Discount (৳)</label>
+                    <input type="number" min={0} value={card.discAmt||""} placeholder="0" onWheel={e=>e.target.blur()}
+                      onChange={e => setMultiRoomCards(prev => prev.map((c,j) => j===idx ? {...c, discAmt:e.target.value} : c))}
+                      style={{ textAlign:"right", fontWeight:700 }} />
+                  </div>
+                </div>
+
+                {/* Card subtotal */}
+                {card.room && card.nights > 0 && (
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"8px 12px", background:"var(--navy)", color:"#fff", borderRadius:8, fontSize:13 }}>
+                    <span style={{ opacity:.7 }}>{card.nights}n × ৳{card.rate.toLocaleString()}{card.disc>0 ? ` − ৳${card.disc.toLocaleString()} disc` : ""}</span>
+                    <span style={{ fontWeight:900, fontSize:16, color:"#c9a84c" }}>৳{card.net.toLocaleString()}</span>
+                  </div>
+                )}
+              </div>
+              );
+            })}
+
+            {/* Add room button */}
+            <button type="button" onClick={() => setMultiRoomCards(prev => [...prev, { id: Date.now(), number:"", acChoice:"AC", co: addDaysIso(ci||today,1), adults:2, children:0, discAmt:"" }])}
+              style={{ width:"100%", padding:"11px 0", border:"2px dashed #c4a8f0", borderRadius:10, background:"#f8f4ff", color:"#5a2ea8", fontWeight:800, fontSize:13, cursor:"pointer", fontFamily:"inherit" }}>
+              + Add Another Room
+            </button>
+          </div>
+
+          {/* Grand total summary */}
+          {multiRoomData.some(c => c.room && c.nights > 0) && (
+            <div style={{ background:"var(--navy)", color:"#fff", borderRadius:10, padding:"14px 16px" }}>
+              <div style={{ fontSize:10, opacity:.6, marginBottom:8, textTransform:"uppercase", letterSpacing:.5 }}>Price Summary</div>
+              {multiRoomData.filter(c=>c.room&&c.nights>0).map((c,i) => (
+                <Fragment key={i}>
+                  <div style={{ display:"flex", justifyContent:"space-between", fontSize:12, marginBottom:3 }}>
+                    <span>Rm {c.number} — {c.nights}n × ৳{c.rate.toLocaleString()}</span>
+                    <span>৳{c.gross.toLocaleString()}</span>
+                  </div>
+                  {c.disc > 0 && (
+                    <div style={{ display:"flex", justifyContent:"space-between", fontSize:12, color:"#fcd34d", marginBottom:3 }}>
+                      <span>Rm {c.number} Discount</span><span>−৳{c.disc.toLocaleString()}</span>
+                    </div>
+                  )}
+                </Fragment>
+              ))}
+              <div style={{ display:"flex", justifyContent:"space-between", fontSize:20, fontWeight:900, color:"#c9a84c", borderTop:"1px solid rgba(255,255,255,.2)", paddingTop:8, marginTop:6 }}>
+                <span>Total</span><span>৳{multiTotal.toLocaleString()}</span>
+              </div>
+            </div>
+          )}
+
+          {/* Payment */}
+          <div style={{ border:"2px solid #4a2ea8", borderRadius:12, padding:"18px 20px", background:"#faf8ff" }}>
+            <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:14 }}>
+              <div style={{ width:28, height:28, borderRadius:"50%", background:"#4a2ea8", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                <i className="ti ti-currency-taka" style={{ color:"#fff", fontSize:14 }} />
+              </div>
+              <span style={{ color:"#4a2ea8", fontSize:11, fontWeight:800, letterSpacing:2, textTransform:"uppercase" }}>Payment</span>
+            </div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+              <div className="form-group" style={{ marginBottom:0 }}><label>Method</label>
+                <select value={method} onChange={e=>setMethod(e.target.value)} disabled={payLater}>{PAY_METHODS.map(m=><option key={m}>{m}</option>)}</select>
+              </div>
+              <div className="form-group" style={{ marginBottom:0 }}><label>Payment Amount (৳)</label>
+                <input type="number" value={advance} min={0} onWheel={e=>e.target.blur()} onChange={e=>setAdvance(e.target.value)} disabled={payLater} />
+              </div>
+            </div>
+            {needsTxn && !payLater && (
+              <div className="form-group" style={{ marginTop:10 }}><label>Transaction Number</label>
+                <input value={txnNum} onChange={e=>setTxnNum(e.target.value)} placeholder="e.g. 01X-XXXXXXXXXX" />
+              </div>
+            )}
+            {multiAdv > 0 && !payLater && (
+              <div style={{ display:"flex", justifyContent:"space-between", fontSize:13, fontWeight:700, padding:"10px 14px", background: multiBalance===0?"#f0fdf4":"#fff8e1", borderRadius:8, marginTop:10, color: multiBalance===0?"var(--green)":"#7a5500" }}>
+                <span>{multiBalance===0 ? "✓ Fully Paid" : "Balance Due after payment:"}</span>
+                <span>৳{multiBalance.toLocaleString()}</span>
+              </div>
+            )}
+            <div style={{ marginTop:14, padding:"12px 16px", borderRadius:10, background: payLater?"#fff8e1":"#f5f5f5", border: payLater?"1.5px solid #f0c040":"1.5px solid #e0e0e0", cursor:"pointer" }}
+              onClick={() => { setPayLater(p=>!p); if (!payLater) setAdvance(''); }}>
+              <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                <div style={{ width:20, height:20, borderRadius:4, border:"2px solid "+(payLater?"#f0c040":"#aaa"), background:payLater?"#f0c040":"#fff", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                  {payLater && <i className="ti ti-check" style={{ fontSize:12, color:"#7a5c00" }} />}
+                </div>
+                <div>
+                  <div style={{ fontWeight:700, fontSize:13, color:payLater?"#7a5c00":"var(--text2)" }}>Pay Later</div>
+                  <div style={{ fontSize:11, color:"var(--text3)" }}>Guest will pay at checkout. Manager takes responsibility.</div>
+                </div>
+              </div>
+              {payLater && (
+                <div style={{ marginTop:10, padding:"8px 12px", background:"#fffbe6", borderRadius:8, fontSize:12, color:"#7a5c00", fontWeight:600 }}>
+                  <i className="ti ti-user-check" style={{ fontSize:14, marginRight:6 }} />Responsible: {curUser || "Manager"}
+                </div>
+              )}
+            </div>
+            <div className="form-group" style={{ marginTop:12, marginBottom:0 }}><label>Notes / Special Requests</label>
+              <textarea value={notes} onChange={e=>setNotes(e.target.value)} rows={2} style={{ resize:"vertical" }} placeholder="Special requests..." />
+            </div>
+          </div>
+
+        </div>
+        )}{/* end multi room form */}
 
         {/* Actions */}
         <div className="modal-actions">
           <button className="btn" onClick={onClose}>Cancel</button>
-          {name.trim() && phone.trim() && (
+          {bookingMode === "single" && name.trim() && phone.trim() && (
             <button className="btn" style={{ background:"#fff8e1", borderColor:"#f0c040", color:"#7a5c00" }}
               onClick={() => {
                 onClose({ addAnother: true, prefill: { name: name.trim(), phone: phone.trim(), nat, src, refName, refPhone, ci, co } });
@@ -1120,18 +1523,37 @@ function NewBookingModal({ onClose, prefill }) {
               <i className="ti ti-plus" /> Add Another Room
             </button>
           )}
-          <button className="btn" onClick={()=>doSave("confirmed")}><i className="ti ti-calendar" /> Save Reservation</button>
-          {ci <= today ? (
-            <button className="btn primary" onClick={() => {
-              const bk = buildAndValidate();
-              if (bk) setPreviewBkObj(bk);
-            }}><i className="ti ti-eye" /> Preview & Check In</button>
-          ) : (
-            <div style={{ display:"flex", alignItems:"center", gap:8, background:"#fff8e1", border:"1.5px solid #f0c040", borderRadius:9, padding:"8px 14px", fontSize:12, color:"#7a5c00", fontWeight:600 }}>
-              <i className="ti ti-info-circle" style={{ fontSize:16, color:"#f0a000" }} />
-              Check-in date is {ci} — only reservation available until that date
-            </div>
-          )}
+          {bookingMode === "single" ? (<>
+            <button className="btn" onClick={()=>doSave("confirmed")}><i className="ti ti-calendar" /> Save Reservation</button>
+            {ci <= today ? (
+              <button className="btn primary" onClick={() => {
+                const bk = buildAndValidate();
+                if (bk) setPreviewBkObj(bk);
+              }}><i className="ti ti-eye" /> Preview & Check In</button>
+            ) : (
+              <div style={{ display:"flex", alignItems:"center", gap:8, background:"#fff8e1", border:"1.5px solid #f0c040", borderRadius:9, padding:"8px 14px", fontSize:12, color:"#7a5c00", fontWeight:600 }}>
+                <i className="ti ti-info-circle" style={{ fontSize:16, color:"#f0a000" }} />
+                Check-in date is {ci} — only reservation available until that date
+              </div>
+            )}
+          </>) : (<>
+            <button className="btn" onClick={() => { const bk = buildAndValidateMulti(); if (bk) performSave(bk,"confirmed"); }}>
+              <i className="ti ti-calendar" /> Save Reservation
+            </button>
+            {(() => {
+              const earliestCi = multiRoomCards.reduce((mn, c) => (c.ci && c.ci < mn ? c.ci : mn), multiRoomCards[0]?.ci || today);
+              return earliestCi <= today ? (
+                <button className="btn primary" onClick={() => { const bk = buildAndValidateMulti(); if (bk) setPreviewBkObj(bk); }}>
+                  <i className="ti ti-eye" /> Preview & Check In
+                </button>
+              ) : (
+                <div style={{ display:"flex", alignItems:"center", gap:8, background:"#fff8e1", border:"1.5px solid #f0c040", borderRadius:9, padding:"8px 14px", fontSize:12, color:"#7a5c00", fontWeight:600 }}>
+                  <i className="ti ti-info-circle" style={{ fontSize:16, color:"#f0a000" }} />
+                  Earliest check-in is {earliestCi} — only reservation available until that date
+                </div>
+              );
+            })()}
+          </>)}
         </div>
       </div>
     </div>
@@ -1404,8 +1826,8 @@ export default function Bookings() {
                     <div style={{ fontSize:11, color:"var(--text3)" }}>{b.phone}</div>
                   </td>
                   <td style={{ padding:"10px 12px" }}>
-                    <strong>Rm {b.room}{b.extraRooms?.length > 0 ? ", " + b.extraRooms.map(r=>r.number).join(", ") : ""}</strong>
-                    <div style={{ fontSize:10, color:"var(--text3)" }}>{b.type}{b.extraRooms?.length > 0 ? ` +${b.extraRooms.length} more` : ""}</div>
+                    <strong>Rm {b.isMultiRoomBooking && b.multiRooms?.length > 0 ? b.multiRooms.map(r=>r.number).join(", ") : b.room + (b.extraRooms?.length > 0 ? ", " + b.extraRooms.map(r=>r.number).join(", ") : "")}</strong>
+                    <div style={{ fontSize:10, color:"var(--text3)" }}>{b.isMultiRoomBooking ? `Multi-Room (${b.multiRooms?.length||0})` : b.type + (b.extraRooms?.length > 0 ? ` +${b.extraRooms.length} more` : "")}</div>
                   </td>
                   <td style={{ padding:"10px 12px" }}>{formatDate(b.checkin)}</td>
                   <td style={{ padding:"10px 12px" }}>{formatDate(b.checkout)}</td>
