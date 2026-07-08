@@ -55,7 +55,7 @@ export default function HallExpenses() {
   const [errors, setErrors]   = useState({});
   const [search, setSearch]   = useState("");
   const [filterCat, setFilterCat] = useState("");
-  const [filterMonth, setFilterMonth] = useState("");
+  const [filterMonth, setFilterMonth] = useState(() => today.slice(0, 7));
   const [delTarget, setDelTarget] = useState(null);
   const [delPass, setDelPass] = useState("");
   const fileRef = useRef();
@@ -189,10 +189,10 @@ export default function HallExpenses() {
       {/* ── Stat bar ── */}
       <div className="hall-stat-grid" style={{ display:"grid", gridTemplateColumns: isMobile?"1fr 1fr":"repeat(4,1fr)", gap:10, marginBottom:18 }}>
         {[
-          ["Total Expenses", "৳"+totalAll.toLocaleString(), C.red],
-          ["This Month",     "৳"+totalMonth.toLocaleString(), C.red],
-          ["Filtered Total", "৳"+filteredTotal.toLocaleString(), C.maroon],
-          ["Top Category",   topCat, C.dim],
+          ["Total Expenses", "৳"+filteredTotal.toLocaleString(), C.red],
+          ["No. of Records", filtered.length, C.maroon],
+          ["Top Category",   topCat !== "undefined" ? topCat : "—", C.dim],
+          ["Month", filterMonth ? new Date(filterMonth+"-01").toLocaleString("en-GB",{month:"long",year:"numeric"}) : "All Time", C.navy||"#1e3a5f"],
         ].map(([l,v,c])=>(
           <div key={l} style={{ background:"#fff", border:`1.5px solid ${C.border}`, borderRadius:12, padding:"15px 17px" }}>
             <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:.8, color:C.dim, marginBottom:8 }}>{l}</div>

@@ -136,10 +136,7 @@ export function HallProvider({ children }) {
     try {
       const rows = await loadRows("hall_expenses");
       if (rows && rows.length) {
-        const exps = rows.map(r => ({
-          id: r.id, date: r.date, category: r.category,
-          amount: r.amount, note: r.note, by: r.by,
-        }));
+        const exps = rows.map(r => ({ id: r.id, date: r.date, cat: r.category, desc: r.note, amount: r.amount, by: r.by }));
         setExpensesRaw(exps);
         localStorage.setItem("a_exp", JSON.stringify(exps));
       }
@@ -181,7 +178,7 @@ export function HallProvider({ children }) {
         .on("postgres_changes", { event: "*", schema: "public", table: "hall_expenses" }, () => {
           loadRows("hall_expenses").then(rows => {
             if (!rows?.length) return;
-            const exps = rows.map(r => ({ id: r.id, date: r.date, category: r.category, amount: r.amount, note: r.note, by: r.by }));
+            const exps = rows.map(r => ({ id: r.id, date: r.date, cat: r.category, desc: r.note, amount: r.amount, by: r.by }));
             setExpensesRaw(exps);
             localStorage.setItem("a_exp", JSON.stringify(exps));
           }).catch(() => {});
@@ -228,7 +225,7 @@ export function HallProvider({ children }) {
     setExpensesRaw(v); localStorage.setItem("a_exp", JSON.stringify(v));
     // Sync new/changed entries to Supabase
     if (hasSupabase()) {
-      const rows = v.map(e => ({ id: String(e.id), date: e.date, category: e.category, amount: e.amount || 0, note: e.note || "", by: e.by || "" }));
+      const rows = v.map(e => ({ id: String(e.id), date: e.date, category: e.cat || e.category || "", amount: e.amount || 0, note: e.desc || e.note || "", by: e.by || "" }));
       upsertRows("hall_expenses", rows).catch(() => {});
     }
   }, [expenses]);
