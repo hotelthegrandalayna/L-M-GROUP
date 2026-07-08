@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useCallback, useEffect, useRef } f
 import { hasHotelSupabaseConfig, loadHotelBookingsFromSupabase, loadRoomsFromSupabase, saveRoomsToSupabase } from "../lib/hotelSupabase";
 import { hasSupabase, upsertRows, loadRows, saveConfig, loadConfig } from "../utils/supabaseSync";
 import { syncNtfyConfigFromSupabase } from "../utils/ntfy";
+import { supabase } from "../lib/supabaseClient";
 
 const GA_ROOMS_VER = 'alayna-r1';
 
@@ -315,12 +316,52 @@ export function AppProvider({ children }) {
     };
     document.addEventListener('visibilitychange', onVisibility);
 
-    // Poll every 60s — fast sync across multiple devices/staff
+    // Poll every 60s as fallback
     const interval = setInterval(() => syncFromSupabase(), 60_000);
+
+    // Realtime — instant push from Supabase on any data change (< 1 second)
+    let realtimeChannel = null;
+    if (supabase) {
+      realtimeChannel = supabase
+        .channel("hotel-live")
+        .on("postgres_changes", { event: "*", schema: "public", table: "bookings" }, () => {
+          loadHotelBookingsFromSupabase().then(remoteBookings => {
+            if (!Array.isArray(remoteBookings) || !remoteBookings.length) return;
+            const deletedIds = (() => { try { return new Set(JSON.parse(localStorage.getItem('ga_deleted_booking_ids') || '[]')); } catch { return new Set(); } })();
+            const filtered = remoteBookings.filter(b => !deletedIds.has(String(b.supabaseBookingId ?? b.id ?? '')) && !deletedIds.has(String(b.id ?? '')));
+            setBookings(filtered);
+            const cutoff = new Date(); cutoff.setMonth(cutoff.getMonth() - 6);
+            const cutoffStr = cutoff.toISOString().slice(0, 10);
+            try { localStorage.setItem('ga_bookings', JSON.stringify(filtered.filter(b => ['confirmed','checked-in'].includes(b.status) || (b.checkout && b.checkout >= cutoffStr)))); } catch {}
+          }).catch(() => {});
+        })
+        .on("postgres_changes", { event: "*", schema: "public", table: "revenues" }, () => {
+          const revCutoff = (() => { const d = new Date(); d.setMonth(d.getMonth() - 1); return d.toISOString().slice(0, 7) + "-01"; })();
+          loadRows("revenues", `&date=gte.${revCutoff}`).then(rows => {
+            if (!rows?.length) return;
+            const revs = rows.map(r => ({ id: r.id, date: r.date, source: r.source, amount: r.amount, note: r.note, by: r.by, bookingId: r.booking_id }));
+            setRevenues(revs);
+            try { localStorage.setItem('ga_revenues', JSON.stringify(revs)); } catch {}
+          }).catch(() => {});
+        })
+        .on("postgres_changes", { event: "*", schema: "public", table: "expenses" }, () => {
+          loadRows("expenses", "&order=date.desc").then(rows => {
+            if (!rows?.length) return;
+            const exps = rows.map(r => ({ id: r.id, date: r.date, category: r.category, amount: r.amount, note: r.note, by: r.by }));
+            setExpenses(exps);
+            try { localStorage.setItem('ga_expenses', JSON.stringify(exps)); } catch {}
+          }).catch(() => {});
+        })
+        .on("postgres_changes", { event: "*", schema: "public", table: "app_config" }, () => {
+          syncFromSupabase();
+        })
+        .subscribe();
+    }
 
     return () => {
       document.removeEventListener('visibilitychange', onVisibility);
       clearInterval(interval);
+      if (realtimeChannel) supabase.removeChannel(realtimeChannel);
     };
   }, [syncFromSupabase]);
 
