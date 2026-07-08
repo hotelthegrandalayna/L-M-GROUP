@@ -3,6 +3,7 @@ import { createContext, useContext, useState, useCallback, useEffect } from "rea
 import { hasHallSupabaseConfig, loadHallInvoicesFromSupabase } from "./lib/hallSupabase";
 import { hasSupabase, upsertRow, upsertRows, deleteRow, loadRows } from "../utils/supabaseSync";
 import { syncNtfyConfigFromSupabase } from "../utils/ntfy";
+import { supabase } from "../lib/supabaseClient";
 
 const Ctx = createContext(null);
 
@@ -156,12 +157,48 @@ export function HallProvider({ children }) {
     };
     document.addEventListener('visibilitychange', onVisibility);
 
-    // Poll every 5 minutes — tab focus catches most changes anyway
-    const interval = setInterval(() => syncHallFromSupabase(), 300_000);
+    // Poll every 60s as fallback
+    const interval = setInterval(() => syncHallFromSupabase(), 60_000);
+
+    // Realtime — instant push on any hall data change
+    let realtimeChannel = null;
+    if (supabase) {
+      realtimeChannel = supabase
+        .channel("hall-live")
+        .on("postgres_changes", { event: "*", schema: "public", table: "hall_expenses" }, () => {
+          loadRows("hall_expenses").then(rows => {
+            if (!rows?.length) return;
+            const exps = rows.map(r => ({ id: r.id, date: r.date, category: r.category, amount: r.amount, note: r.note, by: r.by }));
+            setExpensesRaw(exps);
+            localStorage.setItem("a_exp", JSON.stringify(exps));
+          }).catch(() => {});
+        })
+        .on("postgres_changes", { event: "*", schema: "public", table: "hall_revenues" }, () => {
+          loadRows("hall_revenues").then(rows => {
+            if (!rows?.length) return;
+            const revs = rows.map(r => ({ id: r.id, date: r.date, source: r.source, amount: r.amount, note: r.note, by: r.by }));
+            setRevenuesRaw(revs);
+            localStorage.setItem("a_hall_rev", JSON.stringify(revs));
+          }).catch(() => {});
+        })
+        .on("postgres_changes", { event: "*", schema: "public", table: "invoices" }, () => {
+          syncHallFromSupabase();
+        })
+        .on("postgres_changes", { event: "*", schema: "public", table: "crm_leads" }, () => {
+          loadRows("crm_leads").then(rows => {
+            if (!rows?.length) return;
+            const leads = rows.map(r => ({ id: r.id, num: r.num, name: r.name, phone: r.phone, evType: r.ev_type, evDate: r.ev_date, guests: r.guests, source: r.source, stage: r.stage, followDate: r.follow_date, assigned: r.assigned, notes: r.notes, invoiceId: r.invoice_id, invoiceNum: r.invoice_num, createdAt: r.created_at, updatedAt: r.updated_at }));
+            setLeadsRaw(leads);
+            localStorage.setItem("a_crm_leads", JSON.stringify(leads));
+          }).catch(() => {});
+        })
+        .subscribe();
+    }
 
     return () => {
       document.removeEventListener('visibilitychange', onVisibility);
       clearInterval(interval);
+      if (realtimeChannel) supabase.removeChannel(realtimeChannel);
     };
   }, [syncHallFromSupabase]);
 
