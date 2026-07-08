@@ -700,13 +700,10 @@ export default function HallInvoice() {
       />
     );
 
-  // ── Invoice History (list) ─────────────────────────────────────────────────
-  const totBilled = invoices.reduce((s, i) => s + (i.grand || 0), 0);
-  const totCollect = invoices.reduce((s, i) => s + (parseFloat(i.adv) || 0), 0);
-  const totOut = invoices.reduce(
-    (s, i) => s + Math.max(0, (i.grand || 0) - (parseFloat(i.adv) || 0)),
-    0,
-  );
+  // ── Invoice History (list) — stats reflect the current filter/month ──────
+  const totBilled  = filtered.reduce((s, i) => s + (i.grand || 0), 0);
+  const totCollect = filtered.reduce((s, i) => s + (parseFloat(i.adv) || 0), 0);
+  const totOut     = filtered.reduce((s, i) => s + Math.max(0, (i.grand || 0) - (parseFloat(i.adv) || 0)), 0);
 
   return (
     <div
@@ -759,7 +756,7 @@ export default function HallInvoice() {
             Invoice History
           </div>
           <div style={{ fontSize: 12, color: C.dim }}>
-            {invoices.length} total invoices
+            {filtered.length} invoice{filtered.length !== 1 ? "s" : ""}{filterMonth ? ` in ${filterMonth}` : ""}
           </div>
         </div>
         <button onClick={openNew} style={btnStyle("primary")}>
@@ -778,7 +775,7 @@ export default function HallInvoice() {
         }}
       >
         {[
-          ["Total Invoices", invoices.length, "📄", C.maroon],
+          ["Total Invoices", filtered.length, "📄", C.maroon],
           ["Total Billed", "৳" + totBilled.toLocaleString(), "💰", C.gold],
           ["Collected", "৳" + totCollect.toLocaleString(), "✅", C.green],
           ["Outstanding", "৳" + totOut.toLocaleString(), "⏳", C.red],
