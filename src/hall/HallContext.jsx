@@ -120,6 +120,19 @@ export function HallProvider({ children }) {
       }
     } catch {}
 
+    // Sync hall config items from app_config
+    try {
+      const { loadConfig } = await import("../utils/supabaseSync");
+      const [cutlery, renames, smsConfig] = await Promise.all([
+        loadConfig("hall_cutlery"),
+        loadConfig("hall_staff_renames"),
+        loadConfig("hall_sms_config"),
+      ]);
+      if (cutlery?.c1 && cutlery?.c2) localStorage.setItem("ameliaCutData", JSON.stringify(cutlery));
+      if (renames && typeof renames === 'object') localStorage.setItem("a_renames", JSON.stringify(renames));
+      if (smsConfig && typeof smsConfig === 'object') localStorage.setItem("ga_sms_config", JSON.stringify(smsConfig));
+    } catch {}
+
     try {
       const rows = await loadRows("hall_expenses");
       if (rows && rows.length) {

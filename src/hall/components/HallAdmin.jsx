@@ -14,7 +14,10 @@ const DEFAULT_RECOVERY_EMAILS = ["mainulhasan86@gmail.com","mainulhasan86@yahoo.
 function loadRecoveryEmails() {
   try { const s=localStorage.getItem("ga_recovery_emails"); return s?JSON.parse(s):DEFAULT_RECOVERY_EMAILS.slice(); } catch { return DEFAULT_RECOVERY_EMAILS.slice(); }
 }
-function saveRecoveryEmails(list) { localStorage.setItem("ga_recovery_emails", JSON.stringify(list)); }
+function saveRecoveryEmails(list) {
+  localStorage.setItem("ga_recovery_emails", JSON.stringify(list));
+  saveConfig("hotel_recovery_emails", list).catch(() => {});
+}
 
 const BASE_STAFF = { staff:"staff123", staff2:"staff456" };
 function getStaffPass(user) { return localStorage.getItem("a_pass_"+user) || BASE_STAFF[user] || ""; }
@@ -297,6 +300,7 @@ export default function HallAdmin() {
     const renames = getStaffRenames();
     renames[user] = name;
     localStorage.setItem("a_renames", JSON.stringify(renames));
+    saveConfig("hall_staff_renames", renames).catch(() => {});
     setStaffRenamesState({...renames});
     setStaffMsg(m=>({...m,[user]:`Renamed to "${name}" ✅`}));
     setStaffMsgType(m=>({...m,[user]:"success"}));
@@ -1009,6 +1013,7 @@ function LoginActivityPanel({ notify }) {
   function toggleMonitor(val) {
     setEnabled(val);
     localStorage.setItem("ga_login_monitor", JSON.stringify(val));
+    saveConfig("hotel_login_monitor", val).catch(() => {});
     notify(val ? "Login monitoring enabled ✅" : "Login monitoring disabled", val ? "success" : "info");
   }
 
@@ -1721,7 +1726,10 @@ export function loadSmsConfig() {
   catch { return { enabled:false, apiUrl:"", apiKey:"", senderId:"", template:DEFAULT_TEMPLATE }; }
 }
 
-function saveSmsConfig(cfg) { localStorage.setItem(SMS_KEY, JSON.stringify(cfg)); }
+function saveSmsConfig(cfg) {
+  localStorage.setItem(SMS_KEY, JSON.stringify(cfg));
+  saveConfig("hall_sms_config", cfg).catch(() => {});
+}
 
 export async function sendSmsForInvoice(inv) {
   const cfg = loadSmsConfig();

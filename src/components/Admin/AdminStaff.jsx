@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useApp } from "../../context/AppContext";
+import { saveConfig, loadConfig } from "../../utils/supabaseSync";
 
 const ROLES = ["admin","manager","receptionist","accountant"];
 const DEFAULT_USERS = [
@@ -20,7 +21,20 @@ export default function AdminStaff() {
   const [pw1,   setPw1]   = useState("");
   const [pw2,   setPw2]   = useState("");
 
-  function save(list) { setUsers(list); localStorage.setItem("ga_staff", JSON.stringify(list)); }
+  function save(list) {
+    setUsers(list);
+    localStorage.setItem("ga_staff", JSON.stringify(list));
+    saveConfig("hotel_staff", list).catch(() => {});
+  }
+
+  useEffect(() => {
+    loadConfig("hotel_staff").then(v => {
+      if (Array.isArray(v) && v.length) {
+        setUsers(v);
+        localStorage.setItem("ga_staff", JSON.stringify(v));
+      }
+    }).catch(() => {});
+  }, []);
 
   function openNew()  { setUname(""); setUrole("receptionist"); setPw1(""); setPw2(""); setModal("new"); }
   function openEdit(u){ setUname(u.username); setUrole(u.role); setPw1(""); setPw2(""); setModal(u); }

@@ -1,7 +1,8 @@
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useHall } from "../HallContext";
 import useIsMobile from "../useIsMobile";
+import { saveConfig, loadConfig } from "../../utils/supabaseSync";
 
 const NAVY = "#1e3a5f";
 const MAROON = "#7B1212";
@@ -44,7 +45,10 @@ function loadCut() {
   try { const s = localStorage.getItem("ameliaCutData"); if (s) return JSON.parse(s); } catch {}
   return null;
 }
-function saveCut(d) { try { localStorage.setItem("ameliaCutData", JSON.stringify(d)); } catch {} }
+function saveCut(d) {
+  try { localStorage.setItem("ameliaCutData", JSON.stringify(d)); } catch {}
+  saveConfig("hall_cutlery", d).catch(() => {});
+}
 
 function bnToNum(s) {
   if (!s) return 0;
@@ -79,6 +83,15 @@ export default function HallCutlery() {
 
   const [data, setData] = useState(initData);
   const [tables, setTables] = useState(1);
+
+  useEffect(() => {
+    loadConfig("hall_cutlery").then(v => {
+      if (v?.c1 && v?.c2) {
+        setData({ c1: v.c1, c2: v.c2, locked: v.locked || false });
+        try { localStorage.setItem("ameliaCutData", JSON.stringify(v)); } catch {}
+      }
+    }).catch(() => {});
+  }, []);
 
   const { c1, c2, locked } = data;
 

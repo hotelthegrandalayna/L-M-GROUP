@@ -262,7 +262,7 @@ export function AppProvider({ children }) {
     const sbUrl = (import.meta.env?.VITE_SUPABASE_URL || '').trim();
     const sbKey = ((import.meta.env?.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env?.VITE_SUPABASE_ANON_KEY) || '').trim();
     if (sbUrl && sbKey) {
-      const configKeys = ['hotel_guest_profiles','hotel_sms_tpl','hotel_pricing','hotel_loyalty_rules','hotel_loyalty_data','hotel_inv_items','hotel_extra_person','hotel_surveys'];
+      const configKeys = ['hotel_guest_profiles','hotel_sms_tpl','hotel_pricing','hotel_loyalty_rules','hotel_loyalty_data','hotel_inv_items','hotel_extra_person','hotel_surveys','hotel_staff','hotel_login_monitor','hotel_recovery_emails','hall_staff_renames','hall_sms_config'];
       fetch(sbUrl.replace(/\/$/, '') + '/rest/v1/app_config?key=in.(' + configKeys.join(',') + ')', {
         headers: { apikey: sbKey, Authorization: 'Bearer ' + sbKey },
       })
@@ -296,6 +296,21 @@ export function AppProvider({ children }) {
                 break;
               case 'hotel_surveys':
                 if (Array.isArray(v)) { setSurveys(v); localStorage.setItem('ga_surveys', JSON.stringify(v)); }
+                break;
+              case 'hotel_staff':
+                if (Array.isArray(v)) localStorage.setItem('ga_staff', JSON.stringify(v));
+                break;
+              case 'hotel_login_monitor':
+                if (v !== null && v !== undefined) localStorage.setItem('ga_login_monitor', JSON.stringify(v));
+                break;
+              case 'hotel_recovery_emails':
+                if (Array.isArray(v)) localStorage.setItem('ga_recovery_emails', JSON.stringify(v));
+                break;
+              case 'hall_staff_renames':
+                if (typeof v === 'object') localStorage.setItem('a_renames', JSON.stringify(v));
+                break;
+              case 'hall_sms_config':
+                if (typeof v === 'object') localStorage.setItem('ga_sms_config', JSON.stringify(v));
                 break;
             }
           });
