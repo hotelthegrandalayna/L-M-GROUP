@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import { hasHotelSupabaseConfig, loadHotelBookingsFromSupabase, loadRoomsFromSupabase, saveRoomsToSupabase } from "../lib/hotelSupabase";
-import { hasSupabase, upsertRows, loadRows } from "../utils/supabaseSync";
+import { hasSupabase, upsertRows, loadRows, saveConfig, loadConfig } from "../utils/supabaseSync";
 import { syncNtfyConfigFromSupabase } from "../utils/ntfy";
 
 const GA_ROOMS_VER = 'alayna-r1';
@@ -102,6 +102,61 @@ export function AppProvider({ children }) {
     }
   }, [smsTemplates]);
 
+  // Syncing setters for config data
+  const updatePricing = useCallback((next) => {
+    setPricing(prev => {
+      const val = typeof next === 'function' ? next(prev) : next;
+      localStorage.setItem('ga_pricing', JSON.stringify(val));
+      if (hasSupabase()) saveConfig('hotel_pricing', val).catch(() => {});
+      return val;
+    });
+  }, []);
+
+  const updateLoyaltyRules = useCallback((next) => {
+    setLoyaltyRules(prev => {
+      const val = typeof next === 'function' ? next(prev) : next;
+      localStorage.setItem('ga_loyalty_rules', JSON.stringify(val));
+      if (hasSupabase()) saveConfig('hotel_loyalty_rules', val).catch(() => {});
+      return val;
+    });
+  }, []);
+
+  const updateLoyalty = useCallback((next) => {
+    setLoyalty(prev => {
+      const val = typeof next === 'function' ? next(prev) : next;
+      localStorage.setItem('ga_loyalty', JSON.stringify(val));
+      if (hasSupabase()) saveConfig('hotel_loyalty_data', val).catch(() => {});
+      return val;
+    });
+  }, []);
+
+  const updateInvItems = useCallback((next) => {
+    setInvItems(prev => {
+      const val = typeof next === 'function' ? next(prev) : next;
+      localStorage.setItem('ga_inv_items', JSON.stringify(val));
+      if (hasSupabase()) saveConfig('hotel_inv_items', val).catch(() => {});
+      return val;
+    });
+  }, []);
+
+  const updateExtraPersonRules = useCallback((next) => {
+    setExtraPersonRules(prev => {
+      const val = typeof next === 'function' ? next(prev) : next;
+      localStorage.setItem('ga_extra_person', JSON.stringify(val));
+      if (hasSupabase()) saveConfig('hotel_extra_person', val).catch(() => {});
+      return val;
+    });
+  }, []);
+
+  const updateSurveys = useCallback((next) => {
+    setSurveys(prev => {
+      const val = typeof next === 'function' ? next(prev) : next;
+      localStorage.setItem('ga_surveys', JSON.stringify(val));
+      if (hasSupabase()) saveConfig('hotel_surveys', val).catch(() => {});
+      return val;
+    });
+  }, []);
+
   // Central Supabase sync function — called on mount, on tab focus, and every 60s
   const syncFromSupabase = useCallback((opts = {}) => {
     if (!hasHotelSupabaseConfig()) return;
@@ -193,35 +248,54 @@ export function AppProvider({ children }) {
         }
       }).catch(() => {});
 
-    // Sync expenses (only on initial load)
-    if (!silent) {
-      loadRows("expenses")
-        .then(rows => {
-          if (!rows || !rows.length) return;
-          const exps = rows.map(r => ({ id: r.id, date: r.date, category: r.category, amount: r.amount, note: r.note, by: r.by }));
-          setExpenses(exps);
-          localStorage.setItem('ga_expenses', JSON.stringify(exps));
-        }).catch(() => {});
-    }
+    // Sync expenses — always pull so all devices stay in sync
+    loadRows("expenses", "&order=date.desc")
+      .then(rows => {
+        if (!rows || !rows.length) return;
+        const exps = rows.map(r => ({ id: r.id, date: r.date, category: r.category, amount: r.amount, note: r.note, by: r.by }));
+        setExpenses(exps);
+        localStorage.setItem('ga_expenses', JSON.stringify(exps));
+      }).catch(() => {});
 
-    // Sync guest profiles and SMS templates from app_config
+    // Sync all config from app_config in one request
     const sbUrl = (import.meta.env?.VITE_SUPABASE_URL || '').trim();
     const sbKey = ((import.meta.env?.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env?.VITE_SUPABASE_ANON_KEY) || '').trim();
     if (sbUrl && sbKey) {
-      fetch(sbUrl.replace(/\/$/, '') + '/rest/v1/app_config?key=in.(hotel_guest_profiles,hotel_sms_tpl)', {
+      const configKeys = ['hotel_guest_profiles','hotel_sms_tpl','hotel_pricing','hotel_loyalty_rules','hotel_loyalty_data','hotel_inv_items','hotel_extra_person','hotel_surveys'];
+      fetch(sbUrl.replace(/\/$/, '') + '/rest/v1/app_config?key=in.(' + configKeys.join(',') + ')', {
         headers: { apikey: sbKey, Authorization: 'Bearer ' + sbKey },
       })
         .then(r => r.json())
         .then(rows => {
           if (!Array.isArray(rows)) return;
           rows.forEach(row => {
-            if (row.key === 'hotel_guest_profiles' && row.value && typeof row.value === 'object') {
-              setGuests(row.value);
-              localStorage.setItem('ga_guests', JSON.stringify(row.value));
-            }
-            if (row.key === 'hotel_sms_tpl' && row.value && typeof row.value === 'object') {
-              setSmsTemplatesRaw(row.value);
-              localStorage.setItem('ga_sms_tpl', JSON.stringify(row.value));
+            const v = row.value;
+            if (!v) return;
+            switch (row.key) {
+              case 'hotel_guest_profiles':
+                if (typeof v === 'object') { setGuests(v); localStorage.setItem('ga_guests', JSON.stringify(v)); }
+                break;
+              case 'hotel_sms_tpl':
+                if (typeof v === 'object') { setSmsTemplatesRaw(v); localStorage.setItem('ga_sms_tpl', JSON.stringify(v)); }
+                break;
+              case 'hotel_pricing':
+                if (Array.isArray(v)) { setPricing(v); localStorage.setItem('ga_pricing', JSON.stringify(v)); }
+                break;
+              case 'hotel_loyalty_rules':
+                if (typeof v === 'object') { setLoyaltyRules(v); localStorage.setItem('ga_loyalty_rules', JSON.stringify(v)); }
+                break;
+              case 'hotel_loyalty_data':
+                if (typeof v === 'object') { setLoyalty(v); localStorage.setItem('ga_loyalty', JSON.stringify(v)); }
+                break;
+              case 'hotel_inv_items':
+                if (Array.isArray(v)) { setInvItems(v); localStorage.setItem('ga_inv_items', JSON.stringify(v)); }
+                break;
+              case 'hotel_extra_person':
+                if (typeof v === 'object') { setExtraPersonRules(v); localStorage.setItem('ga_extra_person', JSON.stringify(v)); }
+                break;
+              case 'hotel_surveys':
+                if (Array.isArray(v)) { setSurveys(v); localStorage.setItem('ga_surveys', JSON.stringify(v)); }
+                break;
             }
           });
         })
@@ -241,8 +315,8 @@ export function AppProvider({ children }) {
     };
     document.addEventListener('visibilitychange', onVisibility);
 
-    // Poll every 5 minutes — tab focus (visibilitychange) catches most real-time needs
-    const interval = setInterval(() => syncFromSupabase(), 300_000);
+    // Poll every 60s — fast sync across multiple devices/staff
+    const interval = setInterval(() => syncFromSupabase(), 60_000);
 
     return () => {
       document.removeEventListener('visibilitychange', onVisibility);
@@ -372,13 +446,13 @@ export function AppProvider({ children }) {
       bookings, updateBookings,
       revenues, updateRevenues,
       expenses, updateExpenses,
-      loyaltyData, setLoyalty,
-      surveyData, setSurveys,
+      loyaltyData, setLoyalty: updateLoyalty,
+      surveyData, setSurveys: updateSurveys,
       guestProfiles, setGuests, updateGuests,
-      pricingRules, setPricing,
-      loyaltyRules, setLoyaltyRules,
-      invItems, setInvItems,
-      extraPersonRules, setExtraPersonRules,
+      pricingRules, setPricing: updatePricing,
+      loyaltyRules, setLoyaltyRules: updateLoyaltyRules,
+      invItems, setInvItems: updateInvItems,
+      extraPersonRules, setExtraPersonRules: updateExtraPersonRules,
       smsTemplates, setSmsTemplates,
       save,
       // ui
