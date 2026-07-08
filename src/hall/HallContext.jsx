@@ -223,12 +223,23 @@ export function HallProvider({ children }) {
   const setExpenses = useCallback(next => {
     const v = typeof next === "function" ? next(expenses) : next;
     setExpensesRaw(v); localStorage.setItem("a_exp", JSON.stringify(v));
-    // Sync new/changed entries to Supabase
+    // Upsert only — caller is responsible for deleting from Supabase when removing a row
     if (hasSupabase()) {
       const rows = v.map(e => ({ id: String(e.id), date: e.date, category: e.cat || e.category || "", amount: e.amount || 0, note: e.desc || e.note || "", by: e.by || "" }));
       upsertRows("hall_expenses", rows).catch(() => {});
     }
   }, [expenses]);
+
+  const deleteExpense = useCallback((id) => {
+    setExpensesRaw(prev => {
+      const next = prev.filter(e => String(e.id) !== String(id));
+      localStorage.setItem("a_exp", JSON.stringify(next));
+      return next;
+    });
+    if (hasSupabase()) {
+      deleteRow("hall_expenses", id).catch(() => {});
+    }
+  }, []);
 
   const setRevenues = useCallback(next => {
     const v = typeof next === "function" ? next(revenues) : next;
@@ -264,7 +275,7 @@ export function HallProvider({ children }) {
   }, []);
 
   return (
-    <Ctx.Provider value={{ curUser, curRole, login, logout, invoices, setInvoices, expenses, setExpenses, revenues, setRevenues, leads, setLeads, activeTab, setActiveTab, notification, notify, invoiceJumpSignal, bumpInvoiceJump }}>
+    <Ctx.Provider value={{ curUser, curRole, login, logout, invoices, setInvoices, expenses, setExpenses, deleteExpense, revenues, setRevenues, leads, setLeads, activeTab, setActiveTab, notification, notify, invoiceJumpSignal, bumpInvoiceJump }}>
       {children}
     </Ctx.Provider>
   );

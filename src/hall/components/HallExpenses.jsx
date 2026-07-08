@@ -46,7 +46,7 @@ const blankForm = (today) => ({
 });
 
 export default function HallExpenses() {
-  const { expenses, setExpenses, curRole, notify } = useHall();
+  const { expenses, setExpenses, deleteExpense, curRole, notify } = useHall();
   const isMobile = useIsMobile();
   const today = new Date().toISOString().split("T")[0];
 
@@ -156,7 +156,7 @@ export default function HallExpenses() {
 
   function confirmDelete() {
     if (!checkHallAdminPass(delPass)) { notify("Incorrect password","error"); return; }
-    setExpenses(prev => prev.filter(e => e.id !== delTarget.id));
+    deleteExpense(delTarget.id);
     notify("Expense deleted","success");
     setDelTarget(null);
   }
@@ -372,7 +372,7 @@ export default function HallExpenses() {
                   </td>
                   <td style={{ padding:"10px 12px" }}>
                     <div style={{ display:"flex", gap:4 }}>
-                      <button onClick={()=>startEdit(e)} style={{ padding:"4px 8px", borderRadius:7, border:"1.5px solid #ddd", background:"#fff", cursor:"pointer", fontSize:12 }}>✏️</button>
+                      {isAdmin && <button onClick={()=>startEdit(e)} style={{ padding:"4px 8px", borderRadius:7, border:"1.5px solid #ddd", background:"#fff", cursor:"pointer", fontSize:12 }}>✏️</button>}
                       {isAdmin && <button onClick={()=>{setDelTarget(e);setDelPass("");}} style={{ padding:"4px 8px", borderRadius:7, border:`1.5px solid ${C.red}40`, background:"#fff0f0", cursor:"pointer", fontSize:12 }}>🗑</button>}
                     </div>
                   </td>
