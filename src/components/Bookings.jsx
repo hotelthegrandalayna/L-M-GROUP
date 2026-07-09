@@ -500,7 +500,7 @@ function NewBookingModal({ onClose, prefill }) {
   const [notes,       setNotes]       = useState("");
   const [guestType,   setGuestType]   = useState("single"); // "single" | "couple" | "group"
   const [spouseName,  setSpouseName]  = useState("");
-  const [groupMembers, setGroupMembers] = useState([""]);
+  const [groupMembers, setGroupMembers] = useState([{ name: "", phone: "" }]);
   const [smsData,     setSmsData]     = useState(null); // { booking, refName, refPhone }
   const [previewBkObj, setPreviewBkObj] = useState(null);
 
@@ -657,7 +657,7 @@ function NewBookingModal({ onClose, prefill }) {
       extraPersonCharge: (epAccepted && epCharge > 0) ? { qty: epCount, rate: epRate, total: epCharge } : null,
       guestType: guestType || "single",
       spouseName: guestType === "couple" ? spouseName.trim() : "",
-      groupMembers: guestType === "group" ? groupMembers.map(m=>m.trim()).filter(Boolean) : [],
+      groupMembers: guestType === "group" ? groupMembers.filter(m=>m.name.trim()||m.phone.trim()) : [],
       createdAt: new Date().toISOString(), by: curUser || "staff",
     };
   }
@@ -711,7 +711,7 @@ function NewBookingModal({ onClose, prefill }) {
       advance: a, paymentMethod: method, txnNumber: t, transactionNumber: t,
       restPayment: 0, dueAmount: Math.max(0, multiTotal - a),
       paymentHistory: a > 0 ? [{ ts: new Date().toISOString(), amount: a, method, txnNumber: t, note: "Advance paid", type: "room", by: curUser || "staff" }] : [],
-      guestType: "single", spouseName: "", groupMembers: [],
+      guestType: guestType || "single", spouseName: "", groupMembers: [],
       createdAt: new Date().toISOString(), by: curUser || "staff",
     };
   }
@@ -1049,7 +1049,7 @@ function NewBookingModal({ onClose, prefill }) {
                 <select value={guestType} onChange={e=>{
                   setGuestType(e.target.value);
                   if(e.target.value!=="couple") setSpouseName("");
-                  if(e.target.value!=="group") setGroupMembers([""]);
+                  if(e.target.value!=="group") setGroupMembers([{ name:"", phone:"" }]);
                 }}>
                   <option value="single">Single / Family</option>
                   <option value="couple">Couple</option>
@@ -1071,9 +1071,15 @@ function NewBookingModal({ onClose, prefill }) {
                 {groupMembers.map((m, i) => (
                   <div key={i} style={{ display:"flex", gap:8, marginBottom:7, alignItems:"center" }}>
                     <input
-                      value={m}
-                      onChange={e => setGroupMembers(prev => prev.map((x,j) => j===i ? e.target.value : x))}
+                      value={m.name}
+                      onChange={e => setGroupMembers(prev => prev.map((x,j) => j===i ? {...x, name:e.target.value} : x))}
                       placeholder={`Member ${i+1} name`}
+                      style={{ flex:1, fontSize:13 }}
+                    />
+                    <input
+                      value={m.phone}
+                      onChange={e => setGroupMembers(prev => prev.map((x,j) => j===i ? {...x, phone:e.target.value} : x))}
+                      placeholder="Mobile number"
                       style={{ flex:1, fontSize:13 }}
                     />
                     {groupMembers.length > 1 && (
@@ -1082,7 +1088,7 @@ function NewBookingModal({ onClose, prefill }) {
                     )}
                   </div>
                 ))}
-                <button type="button" onClick={() => setGroupMembers(prev => [...prev, ""])}
+                <button type="button" onClick={() => setGroupMembers(prev => [...prev, { name:"", phone:"" }])}
                   style={{ display:"flex", alignItems:"center", gap:6, padding:"7px 14px", border:"1.5px dashed #c4a8f0", borderRadius:7, background:"transparent", color:"#5a2ea8", fontSize:12, fontWeight:700, cursor:"pointer", marginTop:2 }}>
                   + Add Member
                 </button>
