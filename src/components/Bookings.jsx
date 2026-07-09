@@ -500,6 +500,7 @@ function NewBookingModal({ onClose, prefill }) {
   const [notes,       setNotes]       = useState("");
   const [guestType,   setGuestType]   = useState("single"); // "single" | "couple" | "group"
   const [spouseName,  setSpouseName]  = useState("");
+  const [spousePhone, setSpousePhone] = useState("");
   const [groupMembers, setGroupMembers] = useState([{ name: "", phone: "" }]);
   const [smsData,     setSmsData]     = useState(null); // { booking, refName, refPhone }
   const [previewBkObj, setPreviewBkObj] = useState(null);
@@ -657,6 +658,7 @@ function NewBookingModal({ onClose, prefill }) {
       extraPersonCharge: (epAccepted && epCharge > 0) ? { qty: epCount, rate: epRate, total: epCharge } : null,
       guestType: guestType || "single",
       spouseName: guestType === "couple" ? spouseName.trim() : "",
+      spousePhone: guestType === "couple" ? spousePhone.trim() : "",
       groupMembers: guestType === "group" ? groupMembers.filter(m=>m.name.trim()||m.phone.trim()) : [],
       createdAt: new Date().toISOString(), by: curUser || "staff",
     };
@@ -711,7 +713,7 @@ function NewBookingModal({ onClose, prefill }) {
       advance: a, paymentMethod: method, txnNumber: t, transactionNumber: t,
       restPayment: 0, dueAmount: Math.max(0, multiTotal - a),
       paymentHistory: a > 0 ? [{ ts: new Date().toISOString(), amount: a, method, txnNumber: t, note: "Advance paid", type: "room", by: curUser || "staff" }] : [],
-      guestType: guestType || "single", spouseName: "", groupMembers: [],
+      guestType: guestType || "single", spouseName: "", spousePhone: "", groupMembers: [],
       createdAt: new Date().toISOString(), by: curUser || "staff",
     };
   }
@@ -1029,24 +1031,30 @@ function NewBookingModal({ onClose, prefill }) {
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
               <div className="form-group" style={{ marginBottom:0 }}><label>Full Name *</label><input value={name} onChange={e=>setName(e.target.value)} placeholder="As per ID" autoFocus /></div>
               <div className="form-group" style={{ marginBottom:0 }}><label>Phone *</label><input value={phone} onChange={e=>setPhone(e.target.value)} placeholder="+880..." /></div>
-              <div className="form-group" style={{ marginBottom:0 }}>
-                <label>Guest Type</label>
-                <select value={guestType} onChange={e=>{
-                  setGuestType(e.target.value);
-                  if(e.target.value!=="couple") setSpouseName("");
-                  if(e.target.value!=="group") setGroupMembers([{ name:"", phone:"" }]);
-                }}>
-                  <option value="single">Single / Family</option>
-                  <option value="couple">Couple</option>
-                  <option value="group">Group</option>
-                </select>
+              <div style={{ gridColumn:"1/-1" }}>
+                <div style={{ fontSize:11, fontWeight:800, color:"#5a2ea8", textTransform:"uppercase", letterSpacing:.5, marginBottom:7 }}>👤 Guest Type</div>
+                <div style={{ display:"flex", gap:0, borderRadius:9, overflow:"hidden", border:"2px solid #5a2ea8" }}>
+                  {[["single","🧍 Single / Family"],["couple","💑 Couple"],["group","👥 Group"]].map(([val,label])=>(
+                    <button key={val} type="button" onClick={()=>{
+                      setGuestType(val);
+                      if(val!=="couple"){ setSpouseName(""); setSpousePhone(""); }
+                      if(val!=="group") setGroupMembers([{ name:"", phone:"" }]);
+                    }} style={{ flex:1, padding:"10px 6px", fontWeight:800, fontSize:13, cursor:"pointer", border:"none", borderRight: val!=="group" ? "1.5px solid #5a2ea8" : "none", background: guestType===val ? "#5a2ea8" : "#f3eeff", color: guestType===val ? "#fff" : "#5a2ea8", transition:"all .15s" }}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
               </div>
-              {guestType === "couple" && (
+              {guestType === "couple" && (<>
                 <div className="form-group" style={{ marginBottom:0 }}>
                   <label>Spouse / Wife Name</label>
                   <input value={spouseName} onChange={e=>setSpouseName(e.target.value)} placeholder="As per ID" />
                 </div>
-              )}
+                <div className="form-group" style={{ marginBottom:0 }}>
+                  <label>Spouse Mobile</label>
+                  <input value={spousePhone} onChange={e=>setSpousePhone(e.target.value)} placeholder="+880..." />
+                </div>
+              </>)}
             </div>
             {guestType === "group" && (
               <div style={{ marginTop:12, border:"1.5px solid #c4a8f0", borderRadius:9, padding:"12px 14px", background:"#f8f4ff" }}>
