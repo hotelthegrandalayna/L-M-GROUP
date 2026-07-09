@@ -921,21 +921,6 @@ function NewBookingModal({ onClose, prefill }) {
                   ))}
                 </div>
               )}
-              {room && (
-                <select value="" onChange={e => {
-                  const num = e.target.value; if (!num) return;
-                  if (String(num) === String(room)) { notify("Already the primary room","error"); return; }
-                  if (extraRooms.find(x => String(x.number) === String(num))) { notify("Room already added","error"); return; }
-                  setExtraRooms(prev => [...prev, { number: num, acChoice: "AC" }]);
-                }} style={{ width:"100%", padding:"9px 12px", borderRadius:8, border:"1.5px dashed #c4a8f0", background:"#f8f4ff", color:"#5a2ea8", fontWeight:700, fontSize:13, cursor:"pointer" }}>
-                  <option value="">+ Add Another Room to this Booking</option>
-                  {availRooms.filter(r => String(r.number) !== String(room) && !extraRooms.find(x => String(x.number) === String(r.number))).map(r => (
-                    <option key={r.number} value={r.number}>
-                      Rm {r.number} — {r.name || r.type} {r.acRate&&r.nonAcRate ? `· AC ৳${r.acRate}/Non-AC ৳${r.nonAcRate}` : `· ৳${r.rate?.toLocaleString()}`}
-                    </option>
-                  ))}
-                </select>
-              )}
             </>)}
             {bookingMode === "multi" && (<>
               {/* ── MULTI-ROOM CARDS ── */}
