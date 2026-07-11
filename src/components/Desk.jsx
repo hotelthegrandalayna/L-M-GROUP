@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, Fragment, useMemo } from "react";
 import { useApp } from "../context/AppContext";
 import { todayStr, money, bookingConflicts, getRoomDisplayStatus, maxId, formatDate } from "../utils/helpers";
 import { buildInvoiceHTML, buildTCHtml, hotelPrint } from "./Invoice";
+import { sendNtfyAlert } from "../utils/ntfy";
 
 function addDaysIso(iso, days) {
   const d = new Date(iso + "T00:00:00");
@@ -934,6 +935,10 @@ export default function Desk() {
       }]);
     }
     void persistHotelBookingBundle(updated).catch(() => {});
+    sendNtfyAlert(
+      `🏨 Stay Extended — ${b.guest}`,
+      `Room: ${b.room}\nNew Check-out: ${newCheckout}\nExtra Nights: ${extraNights}\nExtension Total: ৳${extTotal.toLocaleString()}${advance > 0 ? `\nCollected: ৳${advance.toLocaleString()} (${method})` : ""}`
+    ).catch(() => {});
     notify(b.guest + " extended to " + newCheckout + (advance > 0 ? " · Advance ৳" + advance.toLocaleString() : ""), "success");
     setExtendTarget(null);
     setExpandedRow(null);
@@ -1002,6 +1007,10 @@ export default function Desk() {
       console.error("Failed to sync checkout to Supabase:", err);
       notify("Checkout saved locally, but Supabase sync failed", "error");
     });
+    sendNtfyAlert(
+      `🏨 Checkout — ${b.guest}`,
+      `Room: ${b.room}\nCheck-in: ${b.checkin}\nCheck-out: ${today}\nTotal: ৳${((b.invoiceTotal ?? b.amount) || 0).toLocaleString()}${collectBalance && out > 0 ? `\nCollected at checkout: ৳${out.toLocaleString()}` : ""}`
+    ).catch(() => {});
     notify(b.guest + " checked out successfully", "success");
     setCheckoutTarget(null);
     setPostCheckout(b); // show post-checkout options (survey / review)
