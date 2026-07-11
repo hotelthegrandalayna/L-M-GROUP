@@ -1084,8 +1084,12 @@ export default function Desk() {
           { label:"Departures",   value:departures.length,    sub:"today",                           icon:"ti-logout",        color:"var(--red2)" },
           { label:"Today Revenue",value:money(dRev),          sub:"tap to see breakdown",             icon:"ti-currency-taka", color:"var(--gold2)", onClick:()=>setShowRevDetail(true) },
           curRole==="admin"
-            ? { label:"This Month Profit", value:money(mRev-mExp), sub:"month to date",              icon:"ti-trending-up",   color:(mRev-mExp)>=0?"var(--green)":"var(--red2)" }
+            ? { label:"This Month Revenue", value:money(mRev), sub:"month to date",                 icon:"ti-currency-taka", color:"var(--gold2)" }
             : { label:"Pending Balance", value:pendingBal.length, sub:"guests with balance due",    icon:"ti-alert-circle",  color:pendingBal.length>0?"var(--red2)":"var(--green)" },
+          ...(curRole==="admin" ? [
+            { label:"This Month Cost",   value:money(mExp),     sub:"month to date",                icon:"ti-receipt",       color:"var(--red2)" },
+            { label:"This Month Profit", value:money(mRev-mExp), sub:"month to date",               icon:"ti-trending-up",   color:(mRev-mExp)>=0?"var(--green)":"var(--red2)" },
+          ] : []),
         ].map(s => (
           <div key={s.label} onClick={s.onClick} style={{ background:"var(--bg2)", border:"1.5px solid var(--border)", borderRadius:10, padding:"9px 12px", display:"flex", alignItems:"center", gap:9, cursor:s.onClick?"pointer":"default" }}>
             <i className={"ti "+s.icon} style={{ fontSize:19, color:s.color, flexShrink:0 }} />
