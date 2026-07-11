@@ -585,10 +585,14 @@ function ExtendStayModal({ booking, rooms, onConfirm, onClose }) {
   const [method,     setMethod]       = useState("Cash");
   const [txn,        setTxn]          = useState("");
   const [showPreview, setShowPreview] = useState(false);
+  const [acChoice,   setAcChoice]     = useState(booking.acChoice || "AC");
 
   const roomNumber = booking.room;
   const selectedRoom = rooms.find(r => r.number === roomNumber);
-  const rate = selectedRoom ? (selectedRoom.acRate || selectedRoom.rate || 0) : (booking.roomRate || booking.amount / (booking.nights || 1));
+  const hasNonAc = selectedRoom && selectedRoom.nonAcRate > 0;
+  const rate = selectedRoom
+    ? (acChoice === "Non-AC" && selectedRoom.nonAcRate ? selectedRoom.nonAcRate : (selectedRoom.acRate || selectedRoom.rate || 0))
+    : (booking.roomRate || booking.amount / (booking.nights || 1));
 
   const extraNights = (() => {
     if (!newCheckout || newCheckout <= booking.checkout) return 0;
@@ -609,6 +613,7 @@ function ExtendStayModal({ booking, rooms, onConfirm, onClose }) {
     checkout: newCheckout,
     nights: (booking.nights || 0) + extraNights,
     invoiceTotal: (booking.invoiceTotal ?? booking.amount ?? 0) + extTotal,
+    discAmt: (booking.discAmt || 0) + discAmt,
     restPayment: (booking.restPayment || 0) + adv,
     paymentHistory: adv > 0
       ? [...(booking.paymentHistory || []), { ts: new Date().toISOString(), amount: adv, method, txnNumber: txn || "", note: `Extend stay +${extraNights} night${extraNights > 1 ? "s" : ""}`, type: "room" }]
@@ -633,7 +638,7 @@ function ExtendStayModal({ booking, rooms, onConfirm, onClose }) {
               <button className="btn" onClick={() => setShowPreview(false)} style={{ fontSize:13 }}>
                 <i className="ti ti-edit" /> Edit
               </button>
-              <button onClick={() => onConfirm({ newCheckout, extTotal, discAmt, advance: adv, method, txn })}
+              <button onClick={() => onConfirm({ newCheckout, extTotal, discAmt, advance: adv, method, txn, acChoice })}
                 style={{ padding:"9px 20px", borderRadius:8, border:"none", cursor:"pointer", fontWeight:800, fontSize:13, fontFamily:"inherit", background:"#4a2ea8", color:"#fff", display:"flex", alignItems:"center", gap:6 }}>
                 <i className="ti ti-calendar-plus" /> Confirm Extension
               </button>
@@ -688,6 +693,21 @@ function ExtendStayModal({ booking, rooms, onConfirm, onClose }) {
             <span>Extension Total</span><span>৳{extTotal.toLocaleString()}</span>
           </div>
         </div>
+
+        {/* AC / Non-AC toggle */}
+        {hasNonAc && (
+          <div style={{ display:"flex", gap:0, borderRadius:8, overflow:"hidden", border:"1.5px solid #4a2ea8", marginBottom:12 }}>
+            {["AC","Non-AC"].map(opt => (
+              <button key={opt} type="button" onClick={() => setAcChoice(opt)}
+                style={{ flex:1, padding:"9px 6px", fontWeight:800, fontSize:13, cursor:"pointer", border:"none",
+                  borderRight: opt==="AC" ? "1.5px solid #4a2ea8" : "none",
+                  background: acChoice===opt ? "#4a2ea8" : "#f3eeff",
+                  color: acChoice===opt ? "#fff" : "#4a2ea8" }}>
+                {opt === "AC" ? "❄️ AC" : "🌬️ Non-AC"}
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Discount */}
         <div className="form-row">
@@ -884,7 +904,7 @@ export default function Desk() {
   }
 
   // Extend stay from Desk popup
-  function handleExtendStay(b, { newCheckout, extTotal, advance, method, txn }) {
+  function handleExtendStay(b, { newCheckout, extTotal, discAmt: extDiscAmt, advance, method, txn, acChoice }) {
     const extraNights = Math.round((new Date(newCheckout) - new Date(b.checkout)) / 86400000);
     const totalNights = (b.nights || 0) + extraNights;
 
@@ -897,6 +917,8 @@ export default function Desk() {
       checkout: newCheckout,
       nights: totalNights,
       invoiceTotal: (b.invoiceTotal ?? b.amount ?? 0) + extTotal,
+      discAmt: (b.discAmt || 0) + (extDiscAmt || 0),
+      ...(acChoice ? { acChoice } : {}),
       restPayment: (b.restPayment || 0) + advance,
       paymentHistory: [...(b.paymentHistory||[]), ...extPayEntry],
     };
