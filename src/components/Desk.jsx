@@ -1076,7 +1076,7 @@ export default function Desk() {
       )}
 
       {/* ── Stat bar ── */}
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(6,1fr)", gap:8, marginBottom:14 }}>
+      <div style={{ display:"grid", gridTemplateColumns:curRole==="admin" ? "repeat(8,1fr)" : "repeat(6,1fr)", gap:6, marginBottom:14 }}>
         {[
           { label:"Occupancy",    value:occPct+"%",           sub:occ+" of "+rooms.length+" rooms", icon:"ti-percentage",    color:"var(--navy)" },
           { label:"In-House",     value:inhouse.length,       sub:"guests staying",                  icon:"ti-users",         color:"#5b3fa0" },
@@ -1091,12 +1091,12 @@ export default function Desk() {
             { label:"This Month Profit", value:money(mRev-mExp), sub:"month to date",               icon:"ti-trending-up",   color:(mRev-mExp)>=0?"var(--green)":"var(--red2)" },
           ] : []),
         ].map(s => (
-          <div key={s.label} onClick={s.onClick} style={{ background:"var(--bg2)", border:"1.5px solid var(--border)", borderRadius:10, padding:"9px 12px", display:"flex", alignItems:"center", gap:9, cursor:s.onClick?"pointer":"default" }}>
-            <i className={"ti "+s.icon} style={{ fontSize:19, color:s.color, flexShrink:0 }} />
+          <div key={s.label} onClick={s.onClick} style={{ background:"var(--bg2)", border:"1.5px solid var(--border)", borderRadius:10, padding:curRole==="admin"?"7px 9px":"9px 12px", display:"flex", alignItems:"center", gap:curRole==="admin"?6:9, cursor:s.onClick?"pointer":"default" }}>
+            <i className={"ti "+s.icon} style={{ fontSize:curRole==="admin"?16:19, color:s.color, flexShrink:0 }} />
             <div>
-              <div style={{ fontSize:14, fontWeight:800, color:s.color, lineHeight:1.1 }}>{s.value}</div>
-              <div style={{ fontSize:9, color:"var(--text3)", fontWeight:600, textTransform:"uppercase", letterSpacing:.5, marginTop:2 }}>{s.label}</div>
-              <div style={{ fontSize:8, color:"var(--text3)", marginTop:1 }}>{s.sub}</div>
+              <div style={{ fontSize:curRole==="admin"?12:14, fontWeight:800, color:s.color, lineHeight:1.1 }}>{s.value}</div>
+              <div style={{ fontSize:8, color:"var(--text3)", fontWeight:600, textTransform:"uppercase", letterSpacing:.5, marginTop:2 }}>{s.label}</div>
+              <div style={{ fontSize:7.5, color:"var(--text3)", marginTop:1 }}>{s.sub}</div>
             </div>
           </div>
         ))}
