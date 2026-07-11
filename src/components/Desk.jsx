@@ -860,8 +860,11 @@ export default function Desk() {
 
   const dRev  = allRevEntries.filter(r => r.date === today).reduce((s,r) => s+r.amount, 0);
   const dExp  = expenses.filter(e => e.date === today).reduce((s,e) => s+e.amount, 0);
+  const thisMonth = today.slice(0, 7); // "YYYY-MM"
   const tRev  = allRevEntries.reduce((s,r) => s+r.amount, 0);
   const tExp  = expenses.reduce((s,e) => s+e.amount, 0);
+  const mRev  = allRevEntries.filter(r => r.date && r.date.startsWith(thisMonth)).reduce((s,r) => s+r.amount, 0);
+  const mExp  = expenses.filter(e => e.date && e.date.startsWith(thisMonth)).reduce((s,e) => s+e.amount, 0);
   const inhouse    = bookings.filter(b => b.status === "checked-in");
   const arrivals   = bookings.filter(b => b.checkin === today && (b.status === "confirmed" || b.status === "checked-in"));
   const departures = bookings.filter(b => b.checkout === today && b.status === "checked-in");
@@ -1081,7 +1084,7 @@ export default function Desk() {
           { label:"Departures",   value:departures.length,    sub:"today",                           icon:"ti-logout",        color:"var(--red2)" },
           { label:"Today Revenue",value:money(dRev),          sub:"tap to see breakdown",             icon:"ti-currency-taka", color:"var(--gold2)", onClick:()=>setShowRevDetail(true) },
           curRole==="admin"
-            ? { label:"All-time Profit", value:money(tRev-tExp), sub:"total",                       icon:"ti-trending-up",   color:(tRev-tExp)>=0?"var(--green)":"var(--red2)" }
+            ? { label:"This Month Profit", value:money(mRev-mExp), sub:"month to date",              icon:"ti-trending-up",   color:(mRev-mExp)>=0?"var(--green)":"var(--red2)" }
             : { label:"Pending Balance", value:pendingBal.length, sub:"guests with balance due",    icon:"ti-alert-circle",  color:pendingBal.length>0?"var(--red2)":"var(--green)" },
         ].map(s => (
           <div key={s.label} onClick={s.onClick} style={{ background:"var(--bg2)", border:"1.5px solid var(--border)", borderRadius:10, padding:"9px 12px", display:"flex", alignItems:"center", gap:9, cursor:s.onClick?"pointer":"default" }}>
