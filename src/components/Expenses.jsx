@@ -24,6 +24,7 @@ const BUSINESS_CAT_OPTIONS = [
   { v:"Maintenance",     l:"🔧 Maintenance" },
   { v:"Utilities",       l:"🏢 Utilities" },
   { v:"Supplies",        l:"📦 Supplies" },
+  { v:"Guest Amenities", l:"🧴 Guest Amenities (soap, shampoo)" },
   { v:"Marketing",       l:"📣 Marketing" },
   { v:"Transport",       l:"🚗 Transport" },
   { v:"Miscellaneous",   l:"📌 Miscellaneous" },
@@ -40,7 +41,7 @@ const NONBUSINESS_CAT_OPTIONS = [
 
 const CAT_EMOJI = {
   "Salaries":"👤","Electricity":"⚡","Food & Beverage":"🍳","Laundry":"🧺","Maintenance":"🔧",
-  "Utilities":"🏢","Supplies":"📦","Marketing":"📣","Transport":"🚗","Miscellaneous":"📌",
+  "Utilities":"🏢","Supplies":"📦","Guest Amenities":"🧴","Marketing":"📣","Transport":"🚗","Miscellaneous":"📌",
   "Bank Transfer":"🏦","Owner Withdrawal":"💸","Donation":"🤲","Lending":"🤝","Personal Use":"👤","Other Transfer":"📌",
 };
 
