@@ -148,9 +148,13 @@ export default function HallExpenses() {
   }, [filtered]);
 
   const allMonths = useMemo(() => {
-    const s = new Set(normalizedExpenses.map(e=>(e.date||"").slice(0,7)).filter(Boolean));
+    const s = new Set([
+      ...normalizedExpenses.map(e=>(e.date||"").slice(0,7)),
+      ...invoices.map(i=>(i.evDate||i.invDate||"").slice(0,7)),
+      thisMonth,
+    ].filter(Boolean));
     return [...s].sort().reverse();
-  }, [normalizedExpenses]);
+  }, [normalizedExpenses, invoices, thisMonth]);
 
   // ── Current category options based on type ───────────────────────────────────
   const catOptions = form.type === "nonbusiness" ? NONBUSINESS_CAT_OPTIONS : BUSINESS_CAT_OPTIONS;
@@ -253,10 +257,23 @@ export default function HallExpenses() {
   return (
     <div className="hall-page" style={{ padding: isMobile?"10px 8px":"22px 28px", maxWidth:1100, margin:"0 auto", width:"100%" }}>
 
-      {/* ── Page title ── */}
-      <div style={{ marginBottom:18 }}>
-        <div style={{ fontSize:26, fontWeight:700, fontFamily:"'Playfair Display',serif", color:C.maroon }}>Expenses & Cash</div>
-        <div style={{ fontSize:12, color:C.dim, marginTop:4 }}>Money overview — {monthLabel}</div>
+      {/* ── Page title + month selector (synced with the filter bar below) ── */}
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-end", flexWrap:"wrap", gap:10, marginBottom:18 }}>
+        <div>
+          <div style={{ fontSize:26, fontWeight:700, fontFamily:"'Playfair Display',serif", color:C.maroon }}>Expenses & Cash</div>
+          <div style={{ fontSize:12, color:C.dim, marginTop:4 }}>Money overview — {monthLabel}</div>
+        </div>
+        <div>
+          <label style={{ fontSize:10, fontWeight:700, color:C.dim, textTransform:"uppercase", letterSpacing:.8, display:"block", marginBottom:4 }}>📅 Report Month</label>
+          <select value={filterMonth} onChange={e=>setFilterMonth(e.target.value)}
+            style={{ padding:"9px 14px", border:`2px solid ${C.maroon}`, borderRadius:9, fontSize:13, fontWeight:700, fontFamily:"inherit", background:"#fff", color:C.maroon, cursor:"pointer", outline:"none" }}>
+            <option value="">All Months</option>
+            {allMonths.map(m=>{
+              const [y,mo]=m.split("-");
+              return <option key={m} value={m}>{MONTHS_LABEL[parseInt(mo)-1]} {y}</option>;
+            })}
+          </select>
+        </div>
       </div>
 
       {/* ── Row 1: Billing (same formulas as Invoice History) ── */}
@@ -308,7 +325,7 @@ export default function HallExpenses() {
       </div>
 
       {/* ── Record Expense Form — whole panel tints with the selected type ── */}
-      <div style={{ background: isNonBusiness ? "#fff7ed" : "#fdf3f3", border:`2px solid ${isNonBusiness?C.orange:C.maroon}`, borderRadius:12, padding:"20px 22px", marginBottom:18, transition:"all .2s" }}>
+      <div style={{ background: isNonBusiness ? "#ffe3c4" : "#f6d7d7", border:`3px solid ${isNonBusiness?C.orange:C.maroon}`, borderRadius:12, padding:"20px 22px", marginBottom:18, transition:"all .2s" }}>
 
         {editId && (
           <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:14 }}>
