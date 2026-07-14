@@ -3,6 +3,7 @@ import { useApp } from "../context/AppContext";
 import { todayStr, money } from "../utils/helpers";
 import { deleteRow, hasSupabase } from "../utils/supabaseSync";
 import { hotelExpenseType } from "../utils/expenseType";
+import CostAnalysis from "./CostAnalysis";
 
 // Hotel theme: navy primary (vs hall maroon) so the two sides are easy to tell apart
 const C = { navy:"#1e3a5f", gold:"#c9a84c", dim:"#666", border:"#cdd7e4", green:"#1a7040", red:"#c0392b", orange:"#e67e22" };
@@ -129,6 +130,15 @@ export default function Expenses() {
 
   const netProfit   = monthRevenue - businessTotal;
   const cashInHand  = monthRevenue - businessTotal - nonBusinessTotal;
+
+  // ── Cost analysis inputs — business expenses only, normalized to {cat, amount, date}
+  const allBizItems = useMemo(() =>
+    normalizedExpenses.filter(e => e.expType === "business")
+      .map(e => ({ cat: e.category, amount: e.amount, date: e.date })),
+  [normalizedExpenses]);
+  const monthBizItems = useMemo(() =>
+    allBizItems.filter(e => (e.date||"").startsWith(filterMonth || thisMonth)),
+  [allBizItems, filterMonth, thisMonth]);
 
   // ── Filtered list ─────────────────────────────────────────────────────────────
   const filtered = useMemo(() => {
@@ -308,6 +318,17 @@ export default function Expenses() {
         </div>
 
       </div>
+
+      {/* ── Cost analysis — where did the money go? ── */}
+      <CostAnalysis
+        items={monthBizItems}
+        allItems={allBizItems}
+        monthKey={filterMonth || thisMonth}
+        monthLabel={monthLabel}
+        catEmoji={CAT_EMOJI}
+        accent={C.navy}
+        onPickCategory={cat => setFilterCat(prev => prev === cat ? "" : cat)}
+      />
 
       {/* ── Record Expense Form — whole panel tints with the selected type ── */}
       <div style={{ background: isNonBusiness ? "#ffe3c4" : "#dbe7f5", border:`3px solid ${isNonBusiness?C.orange:C.navy}`, borderRadius:12, padding:"20px 22px", marginBottom:18, transition:"all .2s" }}>

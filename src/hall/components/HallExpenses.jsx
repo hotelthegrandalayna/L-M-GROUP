@@ -2,6 +2,13 @@
 import { useState, useMemo, useRef } from "react";
 import { useHall, EXP_CATS, checkHallAdminPass, invBilled, invCollected, invOutstanding, invInMonth, sumBy, expenseType } from "../HallContext";
 import useIsMobile from "../useIsMobile";
+import CostAnalysis from "../../components/CostAnalysis";
+
+// Emoji per category for the cost analysis panel (EXP_CATS icons + non-business cats)
+const HALL_CAT_EMOJI = {
+  ...Object.fromEntries(Object.entries(EXP_CATS).map(([k,v]) => [k, v.i])),
+  "Bank Transfer":"🏦", "Owner Withdrawal":"💸", "Lending":"🤝", "Personal Use":"👤", "Other Transfer":"📌",
+};
 
 // Expense types are stored in Supabase app_config (key "hall_exp_types") via
 // HallContext — synced to all devices. No local storage dependency here.
@@ -107,6 +114,15 @@ export default function HallExpenses() {
 
   const netProfit   = monthRevenue - businessTotal;
   const cashInHand  = monthRevenue - businessTotal - nonBusinessTotal;
+
+  // ── Cost analysis inputs — business expenses only, normalized to {cat, amount, date}
+  const allBizItems = useMemo(() =>
+    normalizedExpenses.filter(e => e.expType === "business")
+      .map(e => ({ cat: e.cat, amount: e.amount, date: e.date })),
+  [normalizedExpenses]);
+  const monthBizItems = useMemo(() =>
+    allBizItems.filter(e => (e.date||"").startsWith(filterMonth || thisMonth)),
+  [allBizItems, filterMonth, thisMonth]);
 
   // ── Filtered list ─────────────────────────────────────────────────────────────
   const filtered = useMemo(() => {
@@ -300,6 +316,17 @@ export default function HallExpenses() {
         </div>
 
       </div>
+
+      {/* ── Cost analysis — where did the money go? ── */}
+      <CostAnalysis
+        items={monthBizItems}
+        allItems={allBizItems}
+        monthKey={filterMonth || thisMonth}
+        monthLabel={monthLabel}
+        catEmoji={HALL_CAT_EMOJI}
+        accent={C.maroon}
+        onPickCategory={cat => setFilterCat(prev => prev === cat ? "" : cat)}
+      />
 
       {/* ── Record Expense Form — whole panel tints with the selected type ── */}
       <div style={{ background: isNonBusiness ? "#ffe3c4" : "#f6d7d7", border:`3px solid ${isNonBusiness?C.orange:C.maroon}`, borderRadius:12, padding:"20px 22px", marginBottom:18, transition:"all .2s" }}>
