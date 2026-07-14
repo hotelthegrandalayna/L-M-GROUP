@@ -94,13 +94,28 @@ const SVC_ICONS = {
 function DateInput({ value, onChange, min, style }) {
   const display = value ? value.split('-').reverse().join('/') : '';
   const ref = useRef(null);
+  // showPicker() must be called on the date input from a direct user gesture.
+  // The invisible overlay input was swallowing clicks without opening the
+  // calendar (browsers only open it from the icon), so open it explicitly.
+  const openPicker = () => {
+    const el = ref.current;
+    if (!el) return;
+    try { el.showPicker ? el.showPicker() : (el.focus(), el.click()); }
+    catch { el.focus(); }
+  };
   return (
-    <div style={{ position:'relative' }}>
-      <input type="text" value={display} placeholder="DD/MM/YYYY" readOnly
-        onClick={() => ref.current?.showPicker?.() || ref.current?.click()}
-        style={{ ...style, cursor:'pointer', width:'100%', boxSizing:'border-box' }} />
-      <input type="date" ref={ref} value={value||''} min={min} onChange={onChange}
-        style={{ position:'absolute', inset:0, opacity:0, width:'100%', height:'100%', cursor:'pointer', zIndex:1 }} />
+    <div style={{ position:'relative', display:'flex', gap:6 }}>
+      <div style={{ position:'relative', flex:1 }}>
+        <input type="text" value={display} placeholder="DD/MM/YYYY" readOnly
+          style={{ ...style, cursor:'pointer', width:'100%', boxSizing:'border-box' }} />
+        <input type="date" ref={ref} value={value||''} min={min} onChange={onChange}
+          onClick={openPicker} onFocus={openPicker}
+          style={{ position:'absolute', inset:0, opacity:0, width:'100%', height:'100%', cursor:'pointer', zIndex:1 }} />
+      </div>
+      <button type="button" onClick={openPicker} title="Open calendar"
+        style={{ flexShrink:0, width:40, borderRadius:8, border:'1.5px solid #c9a84c', background:'#fdf8ee', cursor:'pointer', fontSize:16, display:'flex', alignItems:'center', justifyContent:'center' }}>
+        📅
+      </button>
     </div>
   );
 }
