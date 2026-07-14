@@ -3,6 +3,7 @@ import { useApp } from "../context/AppContext";
 import { todayStr, money, bookingConflicts, getRoomDisplayStatus, maxId, formatDate } from "../utils/helpers";
 import { buildInvoiceHTML, buildTCHtml, hotelPrint } from "./Invoice";
 import { sendNtfyAlert } from "../utils/ntfy";
+import { hotelBusinessOnly } from "../utils/expenseType";
 
 function addDaysIso(iso, days) {
   const d = new Date(iso + "T00:00:00");
@@ -810,7 +811,7 @@ function CheckInPreviewModal({ booking, rooms, onConfirm, onEdit, onClose }) {
 }
 
 export default function Desk() {
-  const { curRole, curUser, rooms, bookings, revenues, expenses, updateBookings, updateRevenues, notify, setActiveTab, setPendingInvoiceId } = useApp();
+  const { curRole, curUser, rooms, bookings, revenues, expenses, expTypes, updateBookings, updateRevenues, notify, setActiveTab, setPendingInvoiceId } = useApp();
   const [sel, setSel] = useState(null);
   const [checkoutTarget, setCheckoutTarget] = useState(null);
   const [postCheckout, setPostCheckout] = useState(null);
@@ -859,13 +860,16 @@ export default function Desk() {
   const manualRevEntries = revenues.filter(r => !r.bookingId && !r.fromBooking);
   const allRevEntries = [...bookingRevEntries, ...manualRevEntries];
 
+  // Profit/cost figures count only business expenses — non-business transfers
+  // (owner withdrawal, bank transfer, etc.) never reduce profit
+  const bizExpenses = hotelBusinessOnly(expenses, expTypes || {});
   const dRev  = allRevEntries.filter(r => r.date === today).reduce((s,r) => s+r.amount, 0);
-  const dExp  = expenses.filter(e => e.date === today).reduce((s,e) => s+e.amount, 0);
+  const dExp  = bizExpenses.filter(e => e.date === today).reduce((s,e) => s+e.amount, 0);
   const thisMonth = today.slice(0, 7); // "YYYY-MM"
   const tRev  = allRevEntries.reduce((s,r) => s+r.amount, 0);
-  const tExp  = expenses.reduce((s,e) => s+e.amount, 0);
+  const tExp  = bizExpenses.reduce((s,e) => s+e.amount, 0);
   const mRev  = allRevEntries.filter(r => r.date && r.date.startsWith(thisMonth)).reduce((s,r) => s+r.amount, 0);
-  const mExp  = expenses.filter(e => e.date && e.date.startsWith(thisMonth)).reduce((s,e) => s+e.amount, 0);
+  const mExp  = bizExpenses.filter(e => e.date && e.date.startsWith(thisMonth)).reduce((s,e) => s+e.amount, 0);
   const inhouse    = bookings.filter(b => b.status === "checked-in");
   const arrivals   = bookings.filter(b => b.checkin === today && (b.status === "confirmed" || b.status === "checked-in"));
   const departures = bookings.filter(b => b.checkout === today && b.status === "checked-in");

@@ -76,6 +76,7 @@ export function AppProvider({ children }) {
   const [bookings,     setBookings]   = useState(() => ls('ga_bookings', []));
   const [revenues,     setRevenues]   = useState(() => ls('ga_revenues', []));
   const [expenses,     setExpenses]   = useState(() => ls('ga_expenses', []));
+  const [expTypes,     setExpTypesRaw] = useState(() => ls('ga_exp_types', {}));
   const [loyaltyData,  setLoyalty]    = useState(() => ls('ga_loyalty', {}));
   const [surveyData,   setSurveys]    = useState(() => ls('ga_surveys', []));
   const [guestProfiles,setGuests]     = useState(() => ls('ga_guests', {}));
@@ -262,7 +263,7 @@ export function AppProvider({ children }) {
     const sbUrl = (import.meta.env?.VITE_SUPABASE_URL || '').trim();
     const sbKey = ((import.meta.env?.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env?.VITE_SUPABASE_ANON_KEY) || '').trim();
     if (sbUrl && sbKey) {
-      const configKeys = ['hotel_guest_profiles','hotel_sms_tpl','hotel_pricing','hotel_loyalty_rules','hotel_loyalty_data','hotel_inv_items','hotel_extra_person','hotel_surveys','hotel_staff','hotel_login_monitor','hotel_recovery_emails','hall_staff_renames','hall_sms_config'];
+      const configKeys = ['hotel_guest_profiles','hotel_sms_tpl','hotel_pricing','hotel_loyalty_rules','hotel_loyalty_data','hotel_inv_items','hotel_extra_person','hotel_surveys','hotel_staff','hotel_login_monitor','hotel_recovery_emails','hotel_exp_types','hall_staff_renames','hall_sms_config'];
       fetch(sbUrl.replace(/\/$/, '') + '/rest/v1/app_config?key=in.(' + configKeys.join(',') + ')', {
         headers: { apikey: sbKey, Authorization: 'Bearer ' + sbKey },
       })
@@ -305,6 +306,16 @@ export function AppProvider({ children }) {
                 break;
               case 'hotel_recovery_emails':
                 if (Array.isArray(v)) localStorage.setItem('ga_recovery_emails', JSON.stringify(v));
+                break;
+              case 'hotel_exp_types':
+                if (typeof v === 'object') {
+                  setExpTypesRaw(prev => {
+                    // Merge: cloud wins for existing keys, keep local-only keys
+                    const merged = { ...prev, ...v };
+                    localStorage.setItem('ga_exp_types', JSON.stringify(merged));
+                    return merged;
+                  });
+                }
                 break;
               case 'hall_staff_renames':
                 if (typeof v === 'object') localStorage.setItem('a_renames', JSON.stringify(v));
@@ -476,6 +487,26 @@ export function AppProvider({ children }) {
     });
   }, []);
 
+  // ── Expense type map (business/nonbusiness) — source of truth is Supabase app_config ──
+  const setExpenseType = useCallback((id, type) => {
+    setExpTypesRaw(prev => {
+      const v = { ...prev, [String(id)]: type };
+      localStorage.setItem('ga_exp_types', JSON.stringify(v));
+      if (hasSupabase()) saveConfig('hotel_exp_types', v).catch(() => {});
+      return v;
+    });
+  }, []);
+
+  const removeExpenseType = useCallback((id) => {
+    setExpTypesRaw(prev => {
+      const v = { ...prev };
+      delete v[String(id)];
+      localStorage.setItem('ga_exp_types', JSON.stringify(v));
+      if (hasSupabase()) saveConfig('hotel_exp_types', v).catch(() => {});
+      return v;
+    });
+  }, []);
+
   const notify = useCallback((msg, type = 'info') => {
     setNotification({ msg, type });
     setTimeout(() => setNotification(null), 3200);
@@ -502,6 +533,7 @@ export function AppProvider({ children }) {
       bookings, updateBookings,
       revenues, updateRevenues,
       expenses, updateExpenses,
+      expTypes, setExpenseType, removeExpenseType,
       loyaltyData, setLoyalty: updateLoyalty,
       surveyData, setSurveys: updateSurveys,
       guestProfiles, setGuests, updateGuests,

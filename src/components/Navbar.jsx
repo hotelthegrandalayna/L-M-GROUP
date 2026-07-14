@@ -4,7 +4,7 @@ import { useApp } from '../context/AppContext';
 const TABS = [
   { id: 'desk',      icon: 'ti-layout-dashboard', label: 'Desk'      },
   { id: 'bookings',  icon: 'ti-calendar-check',   label: 'Bookings'  },
-  { id: 'expenses',  icon: 'ti-receipt',          label: 'Expenses'  },
+  { id: 'expenses',  icon: 'ti-receipt',          label: 'Expenses & Cash' },
   { id: 'crm',       icon: 'ti-users',            label: 'CRM'       },
   { id: 'insights',  icon: 'ti-chart-bar',        label: 'Insights'  },
   { id: 'marketing', icon: 'ti-speakerphone',     label: 'Marketing' },
