@@ -1,7 +1,30 @@
 
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useCallback } from "react";
 import { useHall, EXP_CATS, checkHallAdminPass } from "../HallContext";
 import useIsMobile from "../useIsMobile";
+
+// Separate localStorage key for expense types — survives Supabase reloads
+// which don't carry expType. Maps { [expenseId]: "business"|"nonbusiness" }
+const EXP_TYPES_KEY = "a_exp_types_v2";
+function loadExpTypes() {
+  try { return JSON.parse(localStorage.getItem(EXP_TYPES_KEY) || "{}"); } catch { return {}; }
+}
+function saveExpType(id, type) {
+  const m = loadExpTypes(); m[String(id)] = type;
+  localStorage.setItem(EXP_TYPES_KEY, JSON.stringify(m));
+}
+function removeExpType(id) {
+  const m = loadExpTypes(); delete m[String(id)];
+  localStorage.setItem(EXP_TYPES_KEY, JSON.stringify(m));
+}
+function resolveType(e, typesMap) {
+  // Check separate map first (survives Supabase sync), fall back to stored expType
+  const t = typesMap[String(e.id)] || e.expType;
+  if (t === "nonbusiness") return "nonbusiness";
+  if (["personal", "Personal Salary", "Personal Other", "Donation"].includes(t) ||
+      ["Personal Salary", "Personal Other", "Donation"].includes(e.cat)) return "nonbusiness";
+  return "business";
+}
 
 const C = { maroon:"#7B1212", gold:"#c9a84c", dim:"#666", border:"#e0d0b0", green:"#1a7040", red:"#c0392b", orange:"#e67e22", navy:"#1e3a5f" };
 
@@ -54,7 +77,7 @@ const blankForm = (today) => ({
 });
 
 export default function HallExpenses() {
-  const { expenses, setExpenses, deleteExpense, revenues, curRole, notify } = useHall();
+  const { expenses, setExpenses, deleteExpense, invoices, curRole, notify } = useHall();
   const isMobile = useIsMobile();
   const today = new Date().toISOString().split("T")[0];
   const thisMonth = today.slice(0,7);
@@ -68,26 +91,27 @@ export default function HallExpenses() {
   const [filterMonth, setFilterMonth] = useState(() => thisMonth);
   const [delTarget, setDelTarget] = useState(null);
   const [delPass, setDelPass] = useState("");
+  const [typesMap, setTypesMap] = useState(() => loadExpTypes());
   const fileRef = useRef();
+
+  // Keep typesMap in sync with localStorage changes
+  const refreshTypesMap = useCallback(() => setTypesMap(loadExpTypes()), []);
 
   const setF = (k,v) => setForm(p => ({ ...p, [k]:v }));
   const isAdmin = curRole === "admin";
 
-  // ── Normalize old personal expenses to nonbusiness ──────────────────────────
-  const normalizedExpenses = useMemo(() => expenses.map(e => {
-    if (e.expType === "personal" || ["Personal Salary","Personal Other","Donation"].includes(e.cat)) {
-      return { ...e, expType: "nonbusiness" };
-    }
-    if (!e.expType || e.expType === "public") return { ...e, expType: "business" };
-    return e;
-  }), [expenses]);
+  // ── Normalize expenses — use separate typesMap so Supabase reloads don't wipe type
+  const normalizedExpenses = useMemo(() => expenses.map(e => ({
+    ...e, expType: resolveType(e, typesMap),
+  })), [expenses, typesMap]);
 
-  // ── Month revenue (hall) ─────────────────────────────────────────────────────
+  // ── Month revenue from paid invoices (same source as Insights page) ──────────
   const monthRevenue = useMemo(() => {
-    return revenues
-      .filter(r => (r.date||r.createdAt||"").startsWith(filterMonth || thisMonth))
-      .reduce((s,r) => s + (parseFloat(r.amount)||0), 0);
-  }, [revenues, filterMonth, thisMonth]);
+    const m = filterMonth || thisMonth;
+    return invoices
+      .filter(inv => (inv.invDate||"").startsWith(m))
+      .reduce((s, inv) => s + (inv.adv || 0), 0);
+  }, [invoices, filterMonth, thisMonth]);
 
   // ── Expense stats ─────────────────────────────────────────────────────────────
   const { businessTotal, nonBusinessTotal } = useMemo(() => {
@@ -167,17 +191,22 @@ export default function HallExpenses() {
     };
 
     if (editId) {
+      saveExpType(editId, form.type);
       setExpenses(prev => prev.map(e => e.id===editId ? { ...e, ...rec } : e));
+      refreshTypesMap();
       notify("Expense updated", "success");
     } else {
-      setExpenses(prev => [...prev, { id: String(Date.now()), ...rec }]);
+      const newId = String(Date.now());
+      saveExpType(newId, form.type);
+      setExpenses(prev => [...prev, { id: newId, ...rec }]);
+      refreshTypesMap();
       notify("Expense saved!", "success");
     }
     clearForm();
   }
 
   function startEdit(e) {
-    const type = e.expType === "nonbusiness" ? "nonbusiness" : "business";
+    const type = resolveType(e, typesMap);
     setForm({
       type, cat: e.cat||"", date: e.date||today,
       amount: String(e.amount||""), desc: e.desc||"", payMethod: e.payMethod||"Cash",
@@ -192,7 +221,9 @@ export default function HallExpenses() {
 
   function confirmDelete() {
     if (!checkHallAdminPass(delPass)) { notify("Incorrect password","error"); return; }
+    removeExpType(delTarget.id);
     deleteExpense(delTarget.id);
+    refreshTypesMap();
     notify("Expense deleted","success");
     setDelTarget(null);
   }
