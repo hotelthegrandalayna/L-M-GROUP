@@ -63,7 +63,7 @@ const subTabStyle = (active) => ({
 });
 
 export default function HallAdmin() {
-  const { curRole, invoices, setInvoices, expenses, setExpenses, revenues, setRevenues, leads, setLeads, notify } = useHall();
+  const { curRole, invoices, setInvoices, expenses, setExpenses, expTypes, revenues, setRevenues, leads, setLeads, notify } = useHall();
   const isMobile = useIsMobile();
   const [tab, setTab] = useState("overview");
   const isAdmin = curRole === "admin";
@@ -111,7 +111,7 @@ export default function HallAdmin() {
   const totalInvoices = invoices.length;
   const totalBilled   = sumBy(invoices, invBilled);
   const totalReceived = sumBy(invoices, invCollected);
-  const totalExpenses = businessExpensesOnly(expenses).reduce((s,e)=>s+(e.amount||0),0);
+  const totalExpenses = businessExpensesOnly(expenses, expTypes).reduce((s,e)=>s+(e.amount||0),0);
 
   // ── Chart data ───────────────────────────────────────────────────────────────
   const chartData = useMemo(() => {
@@ -661,7 +661,7 @@ export default function HallAdmin() {
           {/* ── P&L ── */}
           {isAdmin && (() => {
             const pnlInv = pnlMonth==="all" ? invoices : invoices.filter(i=>invInMonth(i, pnlMonth));
-            const bizExpenses = businessExpensesOnly(expenses);
+            const bizExpenses = businessExpensesOnly(expenses, expTypes);
             const pnlExp = pnlMonth==="all" ? bizExpenses : bizExpenses.filter(e=>(e.date||"").startsWith(pnlMonth));
             const inc = sumBy(pnlInv, invCollected);
             const bil = sumBy(pnlInv, invBilled);
@@ -882,7 +882,7 @@ export default function HallAdmin() {
       )}
 
       {/* ════════ SMS ════════ */}
-      {tab==="insights" && <InsightsPanel invoices={invoices} expenses={expenses} leads={leads} />}
+      {tab==="insights" && <InsightsPanel invoices={invoices} expenses={expenses} expTypes={expTypes} leads={leads} />}
       {tab==="pricing" && isAdmin && <PricingRulesPanel notify={notify} />}
       {tab==="sms" && isAdmin && <SmsPanel notify={notify} isMobile={isMobile} invoices={invoices} />}
       {tab==="audit" && isAdmin && <AuditLogViewer scope="hall" title="Hall — Activity Audit Log" checkPassword={checkHallAdminPass} notify={notify} />}
@@ -1101,7 +1101,7 @@ function LoginActivityPanel({ notify }) {
 }
 
 // ── Business Insights Panel ───────────────────────────────────────────────────
-function InsightsPanel({ invoices, expenses, leads }) {
+function InsightsPanel({ invoices, expenses, expTypes, leads }) {
   const now = new Date();
   const thisMonth = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`;
   const lastMonthDate = new Date(now.getFullYear(), now.getMonth()-1, 1);
@@ -1128,7 +1128,7 @@ function InsightsPanel({ invoices, expenses, leads }) {
 
   const thisInv  = invoices.filter(i => invInMonth(i, thisMonth));
   const lastInv  = invoices.filter(i => invInMonth(i, lastMonth));
-  const thisExp  = businessExpensesOnly(expenses).filter(e => (e.date||"").startsWith(thisMonth));
+  const thisExp  = businessExpensesOnly(expenses, expTypes).filter(e => (e.date||"").startsWith(thisMonth));
 
   const thisBilled   = sumBy(thisInv, invBilled);
   const thisReceived = sumBy(thisInv, invCollected);

@@ -63,22 +63,23 @@ export const EXP_CATS = {
 export const PERSONAL_CATS = ["Personal Salary", "Donation", "Personal Other"];
 
 // ── Expense type (business / nonbusiness) — single source of truth ─────────
-// Types live in a separate localStorage map so Supabase reloads (which don't
-// carry expType) can never wipe them.
+// The type map is stored in Supabase app_config (key "hall_exp_types") and
+// synced to every device. localStorage is only an offline cache.
+const NONBIZ_CATS = ["Personal Salary", "Personal Other", "Donation", "Bank Transfer", "Owner Withdrawal", "Lending", "Personal Use", "Other Transfer"];
 export function getExpTypesMap() {
   try { return JSON.parse(localStorage.getItem("a_exp_types_v2") || "{}"); } catch { return {}; }
 }
 export function expenseType(e, map = getExpTypesMap()) {
   const t = map[String(e.id)] || e.expType;
   if (t === "nonbusiness") return "nonbusiness";
-  if (["personal", "Personal Salary", "Personal Other", "Donation"].includes(t) ||
-      ["Personal Salary", "Personal Other", "Donation"].includes(e.cat)) return "nonbusiness";
+  if (t === "business") return "business";
+  // No explicit type known — infer from category (non-business categories are unique)
+  if (["personal"].includes(t) || NONBIZ_CATS.includes(e.cat)) return "nonbusiness";
   return "business";
 }
 // Only business expenses count toward profit — use this in every P&L/profit calc
-export function businessExpensesOnly(expenses) {
-  const m = getExpTypesMap();
-  return expenses.filter(e => expenseType(e, m) === "business");
+export function businessExpensesOnly(expenses, map = getExpTypesMap()) {
+  return expenses.filter(e => expenseType(e, map) === "business");
 }
 
 // ── Single source of truth for invoice money math ──────────────────────────
@@ -112,6 +113,7 @@ export function HallProvider({ children }) {
   const [expenses, setExpensesRaw] = useState(() => loadLS("a_exp", []));
   const [revenues, setRevenuesRaw] = useState(() => loadLS("a_hall_rev", []));
   const [leads,    setLeadsRaw]    = useState(() => loadLS("a_crm_leads", []));
+  const [expTypes, setExpTypesRaw] = useState(() => loadLS("a_exp_types_v2", {}));
   const [activeTab, setActiveTab] = useState("invoice");
   const [notification, setNotification] = useState(null);
   const [invoiceJumpSignal, setInvoiceJumpSignal] = useState(0);
@@ -151,14 +153,24 @@ export function HallProvider({ children }) {
     // Sync hall config items from app_config
     try {
       const { loadConfig } = await import("../utils/supabaseSync");
-      const [cutlery, renames, smsConfig] = await Promise.all([
+      const [cutlery, renames, smsConfig, expTypesCfg] = await Promise.all([
         loadConfig("hall_cutlery"),
         loadConfig("hall_staff_renames"),
         loadConfig("hall_sms_config"),
+        loadConfig("hall_exp_types"),
       ]);
       if (cutlery?.c1 && cutlery?.c2) localStorage.setItem("ameliaCutData", JSON.stringify(cutlery));
       if (renames && typeof renames === 'object') localStorage.setItem("a_renames", JSON.stringify(renames));
       if (smsConfig && typeof smsConfig === 'object') localStorage.setItem("ga_sms_config", JSON.stringify(smsConfig));
+      if (expTypesCfg && typeof expTypesCfg === 'object') {
+        setExpTypesRaw(prev => {
+          // Merge: cloud wins for existing keys, but keep local-only keys so a
+          // save made moments ago on this device isn't lost mid-sync
+          const merged = { ...prev, ...expTypesCfg };
+          localStorage.setItem("a_exp_types_v2", JSON.stringify(merged));
+          return merged;
+        });
+      }
     } catch {}
 
     try {
@@ -269,6 +281,30 @@ export function HallProvider({ children }) {
     }
   }, []);
 
+  // ── Expense type map — source of truth is Supabase app_config ──────────────
+  const setExpenseType = useCallback((id, type) => {
+    setExpTypesRaw(prev => {
+      const v = { ...prev, [String(id)]: type };
+      localStorage.setItem("a_exp_types_v2", JSON.stringify(v));
+      if (hasSupabase()) {
+        import("../utils/supabaseSync").then(({ saveConfig }) => saveConfig("hall_exp_types", v)).catch(() => {});
+      }
+      return v;
+    });
+  }, []);
+
+  const removeExpenseType = useCallback((id) => {
+    setExpTypesRaw(prev => {
+      const v = { ...prev };
+      delete v[String(id)];
+      localStorage.setItem("a_exp_types_v2", JSON.stringify(v));
+      if (hasSupabase()) {
+        import("../utils/supabaseSync").then(({ saveConfig }) => saveConfig("hall_exp_types", v)).catch(() => {});
+      }
+      return v;
+    });
+  }, []);
+
   const setRevenues = useCallback(next => {
     const v = typeof next === "function" ? next(revenues) : next;
     setRevenuesRaw(v); localStorage.setItem("a_hall_rev", JSON.stringify(v));
@@ -303,7 +339,7 @@ export function HallProvider({ children }) {
   }, []);
 
   return (
-    <Ctx.Provider value={{ curUser, curRole, login, logout, invoices, setInvoices, expenses, setExpenses, deleteExpense, revenues, setRevenues, leads, setLeads, activeTab, setActiveTab, notification, notify, invoiceJumpSignal, bumpInvoiceJump }}>
+    <Ctx.Provider value={{ curUser, curRole, login, logout, invoices, setInvoices, expenses, setExpenses, deleteExpense, expTypes, setExpenseType, removeExpenseType, revenues, setRevenues, leads, setLeads, activeTab, setActiveTab, notification, notify, invoiceJumpSignal, bumpInvoiceJump }}>
       {children}
     </Ctx.Provider>
   );

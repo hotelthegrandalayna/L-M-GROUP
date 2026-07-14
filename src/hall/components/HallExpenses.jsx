@@ -1,21 +1,11 @@
 
-import { useState, useMemo, useRef, useCallback } from "react";
-import { useHall, EXP_CATS, checkHallAdminPass, invBilled, invCollected, invOutstanding, invInMonth, sumBy, getExpTypesMap, expenseType } from "../HallContext";
+import { useState, useMemo, useRef } from "react";
+import { useHall, EXP_CATS, checkHallAdminPass, invBilled, invCollected, invOutstanding, invInMonth, sumBy, expenseType } from "../HallContext";
 import useIsMobile from "../useIsMobile";
 
-// Type storage now lives in HallContext (getExpTypesMap / expenseType) so
-// Admin & Insights share the exact same business/nonbusiness split.
-const EXP_TYPES_KEY = "a_exp_types_v2";
-const loadExpTypes = getExpTypesMap;
+// Expense types are stored in Supabase app_config (key "hall_exp_types") via
+// HallContext — synced to all devices. No local storage dependency here.
 const resolveType = expenseType;
-function saveExpType(id, type) {
-  const m = loadExpTypes(); m[String(id)] = type;
-  localStorage.setItem(EXP_TYPES_KEY, JSON.stringify(m));
-}
-function removeExpType(id) {
-  const m = loadExpTypes(); delete m[String(id)];
-  localStorage.setItem(EXP_TYPES_KEY, JSON.stringify(m));
-}
 
 const C = { maroon:"#7B1212", gold:"#c9a84c", dim:"#666", border:"#e0d0b0", green:"#1a7040", red:"#c0392b", orange:"#e67e22", navy:"#1e3a5f" };
 
@@ -68,7 +58,7 @@ const blankForm = (today) => ({
 });
 
 export default function HallExpenses() {
-  const { expenses, setExpenses, deleteExpense, invoices, curRole, notify } = useHall();
+  const { expenses, setExpenses, deleteExpense, expTypes, setExpenseType, removeExpenseType, invoices, curRole, notify } = useHall();
   const isMobile = useIsMobile();
   const today = new Date().toISOString().split("T")[0];
   const thisMonth = today.slice(0,7);
@@ -82,11 +72,10 @@ export default function HallExpenses() {
   const [filterMonth, setFilterMonth] = useState(() => thisMonth);
   const [delTarget, setDelTarget] = useState(null);
   const [delPass, setDelPass] = useState("");
-  const [typesMap, setTypesMap] = useState(() => loadExpTypes());
   const fileRef = useRef();
 
-  // Keep typesMap in sync with localStorage changes
-  const refreshTypesMap = useCallback(() => setTypesMap(loadExpTypes()), []);
+  // Types come from HallContext (Supabase-synced) — reactive, no local copy
+  const typesMap = expTypes;
 
   const setF = (k,v) => setForm(p => ({ ...p, [k]:v }));
   const isAdmin = curRole === "admin";
@@ -189,15 +178,13 @@ export default function HallExpenses() {
     };
 
     if (editId) {
-      saveExpType(editId, form.type);
+      setExpenseType(editId, form.type);
       setExpenses(prev => prev.map(e => e.id===editId ? { ...e, ...rec } : e));
-      refreshTypesMap();
       notify("Expense updated", "success");
     } else {
       const newId = String(Date.now());
-      saveExpType(newId, form.type);
+      setExpenseType(newId, form.type);
       setExpenses(prev => [...prev, { id: newId, ...rec }]);
-      refreshTypesMap();
       notify("Expense saved!", "success");
     }
     clearForm();
@@ -219,9 +206,8 @@ export default function HallExpenses() {
 
   function confirmDelete() {
     if (!checkHallAdminPass(delPass)) { notify("Incorrect password","error"); return; }
-    removeExpType(delTarget.id);
+    removeExpenseType(delTarget.id);
     deleteExpense(delTarget.id);
-    refreshTypesMap();
     notify("Expense deleted","success");
     setDelTarget(null);
   }

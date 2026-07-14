@@ -7,12 +7,12 @@ const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov
 
 export default function HallInsights() {
   const isMobile = useIsMobile();
-  const { invoices, expenses } = useHall();
+  const { invoices, expenses, expTypes } = useHall();
   const today = new Date().toISOString().split("T")[0];
   const thisMonth = today.slice(0,7);
   const thisYear  = today.slice(0,4);
 
-  const bizExpenses = businessExpensesOnly(expenses);
+  const bizExpenses = businessExpensesOnly(expenses, expTypes);
   const mInv  = invoices.filter(inv=>invInMonth(inv, thisMonth));
   const mExp  = bizExpenses.filter(e=>e.date?.startsWith(thisMonth)).reduce((s,e)=>s+e.amount,0);
   const mBilled = sumBy(mInv, invBilled);
@@ -35,11 +35,11 @@ export default function HallInsights() {
       const inv=invoices.filter(x=>invInMonth(x, m));
       const billed=sumBy(inv, invBilled);
       const paid=sumBy(inv, invCollected);
-      const exp=businessExpensesOnly(expenses).filter(e=>e.date?.startsWith(m)).reduce((s,e)=>s+e.amount,0);
+      const exp=businessExpensesOnly(expenses, expTypes).filter(e=>e.date?.startsWith(m)).reduce((s,e)=>s+e.amount,0);
       months.push({label,billed,paid,exp,cnt:inv.length});
     }
     return months;
-  },[invoices,expenses]);
+  },[invoices,expenses,expTypes]);
 
   const maxBar = Math.max(...last6.map(x=>x.billed),1);
 
