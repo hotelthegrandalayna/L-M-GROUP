@@ -702,8 +702,8 @@ export default function HallInvoice() {
 
   // ── Invoice History (list) — stats reflect the current filter/month ──────
   const totBilled  = filtered.reduce((s, i) => s + (i.grand || 0), 0);
-  const totCollect = filtered.reduce((s, i) => s + (parseFloat(i.adv) || 0), 0);
   const totOut     = filtered.reduce((s, i) => s + Math.max(0, (i.grand || 0) - (parseFloat(i.adv) || 0)), 0);
+  const totCollect = totBilled - totOut;
 
   return (
     <div

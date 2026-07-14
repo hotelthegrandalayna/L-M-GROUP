@@ -105,12 +105,13 @@ export default function HallExpenses() {
     ...e, expType: resolveType(e, typesMap),
   })), [expenses, typesMap]);
 
-  // ── Month revenue — same filter logic as Invoice History (filters by evDate) ─
+  // ── Month revenue — mirrors Invoice History: Billed minus Outstanding ────────
   const monthRevenue = useMemo(() => {
     const m = filterMonth || thisMonth;
-    return invoices
-      .filter(inv => !inv.evDate || inv.evDate.startsWith(m))
-      .reduce((s, inv) => s + (parseFloat(inv.adv) || 0), 0);
+    const month = invoices.filter(inv => !inv.evDate || inv.evDate.startsWith(m));
+    const billed = month.reduce((s, inv) => s + (inv.grand || 0), 0);
+    const outstanding = month.reduce((s, inv) => s + Math.max(0, (inv.grand || 0) - (parseFloat(inv.adv) || 0)), 0);
+    return billed - outstanding;
   }, [invoices, filterMonth, thisMonth]);
 
   // ── Expense stats ─────────────────────────────────────────────────────────────
