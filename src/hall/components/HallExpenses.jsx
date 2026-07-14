@@ -1,14 +1,13 @@
 
 import { useState, useMemo, useRef, useCallback } from "react";
-import { useHall, EXP_CATS, checkHallAdminPass, invBilled, invCollected, invOutstanding, invInMonth, sumBy } from "../HallContext";
+import { useHall, EXP_CATS, checkHallAdminPass, invBilled, invCollected, invOutstanding, invInMonth, sumBy, getExpTypesMap, expenseType } from "../HallContext";
 import useIsMobile from "../useIsMobile";
 
-// Separate localStorage key for expense types — survives Supabase reloads
-// which don't carry expType. Maps { [expenseId]: "business"|"nonbusiness" }
+// Type storage now lives in HallContext (getExpTypesMap / expenseType) so
+// Admin & Insights share the exact same business/nonbusiness split.
 const EXP_TYPES_KEY = "a_exp_types_v2";
-function loadExpTypes() {
-  try { return JSON.parse(localStorage.getItem(EXP_TYPES_KEY) || "{}"); } catch { return {}; }
-}
+const loadExpTypes = getExpTypesMap;
+const resolveType = expenseType;
 function saveExpType(id, type) {
   const m = loadExpTypes(); m[String(id)] = type;
   localStorage.setItem(EXP_TYPES_KEY, JSON.stringify(m));
@@ -16,14 +15,6 @@ function saveExpType(id, type) {
 function removeExpType(id) {
   const m = loadExpTypes(); delete m[String(id)];
   localStorage.setItem(EXP_TYPES_KEY, JSON.stringify(m));
-}
-function resolveType(e, typesMap) {
-  // Check separate map first (survives Supabase sync), fall back to stored expType
-  const t = typesMap[String(e.id)] || e.expType;
-  if (t === "nonbusiness") return "nonbusiness";
-  if (["personal", "Personal Salary", "Personal Other", "Donation"].includes(t) ||
-      ["Personal Salary", "Personal Other", "Donation"].includes(e.cat)) return "nonbusiness";
-  return "business";
 }
 
 const C = { maroon:"#7B1212", gold:"#c9a84c", dim:"#666", border:"#e0d0b0", green:"#1a7040", red:"#c0392b", orange:"#e67e22", navy:"#1e3a5f" };

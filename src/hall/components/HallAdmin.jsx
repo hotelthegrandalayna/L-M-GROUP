@@ -1,6 +1,6 @@
 
 import { useState, useMemo, useEffect } from "react";
-import { useHall, EV_TYPES, checkHallAdminPass, invBilled, invCollected, invOutstanding, invInMonth, sumBy } from "../HallContext";
+import { useHall, EV_TYPES, checkHallAdminPass, invBilled, invCollected, invOutstanding, invInMonth, sumBy, businessExpensesOnly } from "../HallContext";
 import useIsMobile from "../useIsMobile";
 import { loadWaConfig, saveWaConfig, sendWhatsAppAlert } from "../../utils/whatsapp";
 import { loadNtfyConfig, saveNtfyConfig, sendNtfyAlert } from "../../utils/ntfy";
@@ -111,7 +111,7 @@ export default function HallAdmin() {
   const totalInvoices = invoices.length;
   const totalBilled   = sumBy(invoices, invBilled);
   const totalReceived = sumBy(invoices, invCollected);
-  const totalExpenses = expenses.reduce((s,e)=>s+(e.amount||0),0);
+  const totalExpenses = businessExpensesOnly(expenses).reduce((s,e)=>s+(e.amount||0),0);
 
   // ── Chart data ───────────────────────────────────────────────────────────────
   const chartData = useMemo(() => {
@@ -424,7 +424,7 @@ export default function HallAdmin() {
               ["Total Invoices", totalInvoices, "#1a1a2e"],
               ["Revenue",        "৳"+fmt(totalBilled),   C.gold],
               ["Received",       "৳"+fmt(totalReceived), C.green],
-              ["Expenses",       "৳"+fmt(totalExpenses), C.red],
+              ["Business Expenses", "৳"+fmt(totalExpenses), C.red],
             ].map(([l,v,c])=>(
               <div key={l} style={{ background:"#fff", border:`1.5px solid ${C.border}`, borderRadius:12, padding:"15px 18px" }}>
                 <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:.8, color:C.dim, marginBottom:8 }}>{l}</div>
@@ -661,7 +661,8 @@ export default function HallAdmin() {
           {/* ── P&L ── */}
           {isAdmin && (() => {
             const pnlInv = pnlMonth==="all" ? invoices : invoices.filter(i=>invInMonth(i, pnlMonth));
-            const pnlExp = pnlMonth==="all" ? expenses : expenses.filter(e=>(e.date||"").startsWith(pnlMonth));
+            const bizExpenses = businessExpensesOnly(expenses);
+            const pnlExp = pnlMonth==="all" ? bizExpenses : bizExpenses.filter(e=>(e.date||"").startsWith(pnlMonth));
             const inc = sumBy(pnlInv, invCollected);
             const bil = sumBy(pnlInv, invBilled);
             const exp = pnlExp.reduce((s,e)=>s+(e.amount||0),0);
@@ -1127,7 +1128,7 @@ function InsightsPanel({ invoices, expenses, leads }) {
 
   const thisInv  = invoices.filter(i => invInMonth(i, thisMonth));
   const lastInv  = invoices.filter(i => invInMonth(i, lastMonth));
-  const thisExp  = expenses.filter(e => (e.date||"").startsWith(thisMonth));
+  const thisExp  = businessExpensesOnly(expenses).filter(e => (e.date||"").startsWith(thisMonth));
 
   const thisBilled   = sumBy(thisInv, invBilled);
   const thisReceived = sumBy(thisInv, invCollected);

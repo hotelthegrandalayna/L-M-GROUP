@@ -62,6 +62,25 @@ export const EXP_CATS = {
 
 export const PERSONAL_CATS = ["Personal Salary", "Donation", "Personal Other"];
 
+// ── Expense type (business / nonbusiness) — single source of truth ─────────
+// Types live in a separate localStorage map so Supabase reloads (which don't
+// carry expType) can never wipe them.
+export function getExpTypesMap() {
+  try { return JSON.parse(localStorage.getItem("a_exp_types_v2") || "{}"); } catch { return {}; }
+}
+export function expenseType(e, map = getExpTypesMap()) {
+  const t = map[String(e.id)] || e.expType;
+  if (t === "nonbusiness") return "nonbusiness";
+  if (["personal", "Personal Salary", "Personal Other", "Donation"].includes(t) ||
+      ["Personal Salary", "Personal Other", "Donation"].includes(e.cat)) return "nonbusiness";
+  return "business";
+}
+// Only business expenses count toward profit — use this in every P&L/profit calc
+export function businessExpensesOnly(expenses) {
+  const m = getExpTypesMap();
+  return expenses.filter(e => expenseType(e, m) === "business");
+}
+
 // ── Single source of truth for invoice money math ──────────────────────────
 // Every page MUST use these so Billed = Collected + Outstanding always holds.
 export const invBilled      = inv => inv.grand || 0;
