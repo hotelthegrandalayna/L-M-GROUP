@@ -79,6 +79,7 @@ export default function HallExpenses() {
   const [filterMonth, setFilterMonth] = useState(() => thisMonth);
   const [delTarget, setDelTarget] = useState(null);
   const [delPass, setDelPass] = useState("");
+  const [showRecords, setShowRecords] = useState(false);
   const fileRef = useRef();
 
   // Types come from HallContext (Supabase-synced) — reactive, no local copy
@@ -325,7 +326,7 @@ export default function HallExpenses() {
         monthLabel={monthLabel}
         catEmoji={HALL_CAT_EMOJI}
         accent={C.maroon}
-        onPickCategory={cat => setFilterCat(prev => prev === cat ? "" : cat)}
+        onPickCategory={cat => { setFilterCat(prev => prev === cat ? "" : cat); setShowRecords(true); }}
       />
 
       {/* ── Record Expense Form — whole panel tints with the selected type ── */}
@@ -445,6 +446,16 @@ export default function HallExpenses() {
         </div>
       </div>
 
+      {/* ── Collapsible records section ── */}
+      <button onClick={()=>setShowRecords(v=>!v)} style={{
+        width:"100%", display:"flex", justifyContent:"space-between", alignItems:"center",
+        padding:"14px 18px", marginBottom:12, borderRadius:12, cursor:"pointer",
+        border:`1.5px solid ${C.border}`, background:"#fff", fontFamily:"inherit" }}>
+        <span style={{ fontSize:14, fontWeight:800, color:C.maroon }}>📋 All Expense Records ({filtered.length}) · {money(filteredTotal)}</span>
+        <span style={{ fontSize:13, fontWeight:700, color:C.dim }}>{showRecords ? "▲ Hide" : "▼ Show"}</span>
+      </button>
+
+      {showRecords && (<>
       {/* ── Filter bar ── */}
       <div style={{ display:"flex", gap:8, marginBottom:12, flexWrap:"wrap", alignItems:"center" }}>
         <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Search..." style={{ ...inp(), flex:1, minWidth:140 }} />
@@ -537,6 +548,7 @@ export default function HallExpenses() {
           </tbody>
         </table>
       </div>
+      </>)}
 
       {/* ── Delete confirm modal ── */}
       {delTarget && (

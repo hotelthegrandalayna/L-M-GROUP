@@ -78,6 +78,7 @@ export default function Expenses() {
   const [filterType, setFilterType] = useState(""); // "" | "business" | "nonbusiness"
   const [filterMonth, setFilterMonth] = useState(() => thisMonth);
   const [delTarget, setDelTarget] = useState(null);
+  const [showRecords, setShowRecords] = useState(false);
   const fileRef = useRef();
 
   const setF = (k,v) => setForm(p => ({ ...p, [k]:v }));
@@ -327,7 +328,7 @@ export default function Expenses() {
         monthLabel={monthLabel}
         catEmoji={CAT_EMOJI}
         accent={C.navy}
-        onPickCategory={cat => setFilterCat(prev => prev === cat ? "" : cat)}
+        onPickCategory={cat => { setFilterCat(prev => prev === cat ? "" : cat); setShowRecords(true); }}
       />
 
       {/* ── Record Expense Form — whole panel tints with the selected type ── */}
@@ -447,6 +448,16 @@ export default function Expenses() {
         </div>
       </div>
 
+      {/* ── Collapsible records section ── */}
+      <button onClick={()=>setShowRecords(v=>!v)} style={{
+        width:"100%", display:"flex", justifyContent:"space-between", alignItems:"center",
+        padding:"14px 18px", marginBottom:12, borderRadius:12, cursor:"pointer",
+        border:`1.5px solid ${C.border}`, background:"#fff", fontFamily:"inherit" }}>
+        <span style={{ fontSize:14, fontWeight:800, color:C.navy }}>📋 All Expense Records ({filtered.length}) · {money(filteredTotal)}</span>
+        <span style={{ fontSize:13, fontWeight:700, color:C.dim }}>{showRecords ? "▲ Hide" : "▼ Show"}</span>
+      </button>
+
+      {showRecords && (<>
       {/* ── Filter bar ── */}
       <div style={{ display:"flex", gap:8, marginBottom:12, flexWrap:"wrap", alignItems:"center" }}>
         <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Search..." style={{ ...inp(), flex:1, minWidth:140 }} />
@@ -538,6 +549,7 @@ export default function Expenses() {
           </tbody>
         </table>
       </div>
+      </>)}
 
       {/* ── Delete confirm modal ── */}
       {delTarget && (
