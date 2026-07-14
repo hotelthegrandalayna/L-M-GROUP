@@ -1,6 +1,6 @@
 
 import { useState, useMemo, useRef, useCallback } from "react";
-import { useHall, EXP_CATS, checkHallAdminPass, invCollected, invInMonth, sumBy } from "../HallContext";
+import { useHall, EXP_CATS, checkHallAdminPass, invBilled, invCollected, invOutstanding, invInMonth, sumBy } from "../HallContext";
 import useIsMobile from "../useIsMobile";
 
 // Separate localStorage key for expense types — survives Supabase reloads
@@ -105,10 +105,15 @@ export default function HallExpenses() {
     ...e, expType: resolveType(e, typesMap),
   })), [expenses, typesMap]);
 
-  // ── Month revenue — shared formula (invCollected) used by every page ─────────
-  const monthRevenue = useMemo(() => {
+  // ── Billing row — same shared formulas as Invoice History ────────────────────
+  const { monthBilled, monthRevenue, monthOutstanding } = useMemo(() => {
     const m = filterMonth || thisMonth;
-    return sumBy(invoices.filter(inv => invInMonth(inv, m)), invCollected);
+    const monthInv = invoices.filter(inv => invInMonth(inv, m));
+    return {
+      monthBilled:      sumBy(monthInv, invBilled),
+      monthRevenue:     sumBy(monthInv, invCollected),
+      monthOutstanding: sumBy(monthInv, invOutstanding),
+    };
   }, [invoices, filterMonth, thisMonth]);
 
   // ── Expense stats ─────────────────────────────────────────────────────────────
@@ -250,38 +255,53 @@ export default function HallExpenses() {
 
       {/* ── Page title ── */}
       <div style={{ marginBottom:18 }}>
-        <div style={{ fontSize:26, fontWeight:700, fontFamily:"'Playfair Display',serif", color:C.maroon }}>Hall Expenses</div>
-        <div style={{ fontSize:12, color:C.dim, marginTop:4 }}>Track business costs, transfers & owner withdrawals — {monthLabel}</div>
+        <div style={{ fontSize:26, fontWeight:700, fontFamily:"'Playfair Display',serif", color:C.maroon }}>Expenses & Cash</div>
+        <div style={{ fontSize:12, color:C.dim, marginTop:4 }}>Money overview — {monthLabel}</div>
       </div>
 
-      {/* ── Summary cards ── */}
+      {/* ── Row 1: Billing (same formulas as Invoice History) ── */}
+      <div style={{ display:"grid", gridTemplateColumns: isMobile?"1fr 1fr 1fr":"repeat(3,1fr)", gap:12, marginBottom:12 }}>
+        {[
+          ["💰","Total Billed", monthBilled, "#7d6608", "#fdf8ee", "#f0e0b0"],
+          ["✅","Collected",    monthRevenue, "#1a7040", "#f0fdf4", "#86efac"],
+          ["⏳","Outstanding",  monthOutstanding, "#c0392b", "#fff5f5", "#fca5a5"],
+        ].map(([icon,label,val,color,bg,border])=>(
+          <div key={label} style={{ background:bg, border:`1.5px solid ${border}`, borderRadius:12, padding:"14px 16px", textAlign:"center" }}>
+            <div style={{ fontSize:18 }}>{icon}</div>
+            <div style={{ fontSize:20, fontWeight:800, fontFamily:"'Playfair Display',serif", color }}>{money(val)}</div>
+            <div style={{ fontSize:11, color:C.dim, marginTop:2 }}>{label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* ── Row 2: Profit and cash ── */}
       <div style={{ display:"grid", gridTemplateColumns: isMobile?"1fr 1fr":"repeat(4,1fr)", gap:12, marginBottom:20 }}>
 
-        {/* Revenue */}
-        <div style={{ background:"#f0fdf4", border:"1.5px solid #86efac", borderRadius:12, padding:"16px 18px" }}>
-          <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:.8, color:C.green, marginBottom:6 }}>📈 Revenue ({monthLabel})</div>
-          <div style={{ fontSize:22, fontWeight:800, fontFamily:"'Playfair Display',serif", color:C.green }}>{money(monthRevenue)}</div>
-          <div style={{ fontSize:11, color:C.green, marginTop:4, opacity:.7 }}>Total collected</div>
-        </div>
-
         {/* Business Expenses */}
-        <div style={{ background:"#fff5f5", border:"1.5px solid #fca5a5", borderRadius:12, padding:"16px 18px" }}>
+        <div style={{ background:"#fff5f5", border:"1.5px solid #fca5a5", borderRadius:12, padding:"14px 16px" }}>
           <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:.8, color:C.red, marginBottom:6 }}>🏢 Business Expenses</div>
-          <div style={{ fontSize:22, fontWeight:800, fontFamily:"'Playfair Display',serif", color:C.red }}>{money(businessTotal)}</div>
+          <div style={{ fontSize:20, fontWeight:800, fontFamily:"'Playfair Display',serif", color:C.red }}>{money(businessTotal)}</div>
           <div style={{ fontSize:11, color:C.red, marginTop:4, opacity:.7 }}>Salary, utilities, ops</div>
         </div>
 
+        {/* Non-Business Expenses */}
+        <div style={{ background:"#fff7ed", border:"1.5px solid #fdba74", borderRadius:12, padding:"14px 16px" }}>
+          <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:.8, color:C.orange, marginBottom:6 }}>💸 Non-Business</div>
+          <div style={{ fontSize:20, fontWeight:800, fontFamily:"'Playfair Display',serif", color:C.orange }}>{money(nonBusinessTotal)}</div>
+          <div style={{ fontSize:11, color:C.orange, marginTop:4, opacity:.7 }}>Transfers, withdrawals</div>
+        </div>
+
         {/* Net Profit */}
-        <div style={{ background: netProfit >= 0 ? "#f0fdf4":"#fff5f5", border:`1.5px solid ${netProfit>=0?"#86efac":"#fca5a5"}`, borderRadius:12, padding:"16px 18px" }}>
+        <div style={{ background: netProfit >= 0 ? "#f0fdf4":"#fff5f5", border:`1.5px solid ${netProfit>=0?"#86efac":"#fca5a5"}`, borderRadius:12, padding:"14px 16px" }}>
           <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:.8, color:netProfit>=0?C.green:C.red, marginBottom:6 }}>📊 Net Profit</div>
-          <div style={{ fontSize:22, fontWeight:800, fontFamily:"'Playfair Display',serif", color:netProfit>=0?C.green:C.red }}>{money(netProfit)}</div>
-          <div style={{ fontSize:11, color:C.dim, marginTop:4, opacity:.7 }}>Revenue − Business Expenses</div>
+          <div style={{ fontSize:20, fontWeight:800, fontFamily:"'Playfair Display',serif", color:netProfit>=0?C.green:C.red }}>{money(netProfit)}</div>
+          <div style={{ fontSize:11, color:C.dim, marginTop:4, opacity:.7 }}>Collected − Business Exp.</div>
         </div>
 
         {/* Cash in Hand */}
-        <div style={{ background: cashInHand >= 0 ? "#fffbeb":"#fff5f5", border:`1.5px solid ${cashInHand>=0?"#fcd34d":"#fca5a5"}`, borderRadius:12, padding:"16px 18px" }}>
+        <div style={{ background: cashInHand >= 0 ? "#fffbeb":"#fff5f5", border:`1.5px solid ${cashInHand>=0?"#fcd34d":"#fca5a5"}`, borderRadius:12, padding:"14px 16px" }}>
           <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:.8, color:cashInHand>=0?C.gold:C.red, marginBottom:6 }}>💰 Cash in Hand</div>
-          <div style={{ fontSize:22, fontWeight:800, fontFamily:"'Playfair Display',serif", color:cashInHand>=0?C.gold:C.red }}>{money(cashInHand)}</div>
+          <div style={{ fontSize:20, fontWeight:800, fontFamily:"'Playfair Display',serif", color:cashInHand>=0?C.gold:C.red }}>{money(cashInHand)}</div>
           <div style={{ fontSize:11, color:C.dim, marginTop:4, opacity:.7 }}>After all expenses & transfers</div>
         </div>
 

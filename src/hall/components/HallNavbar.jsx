@@ -7,7 +7,7 @@ const TABS = [
   { id:"calendar", icon:"📅", label:"Calendar" },
   { id:"crm",      icon:"🤝", label:"CRM"      },
   { id:"cutlery",  icon:"🍽", label:"Cutlery"  },
-  { id:"expenses", icon:"💸", label:"Expenses" },
+  { id:"expenses", icon:"💸", label:"Expenses & Cash" },
   { id:"insights", icon:"📊", label:"Insights" },
   { id:"admin",    icon:"⚙️",  label:"Admin"    },
 ];
