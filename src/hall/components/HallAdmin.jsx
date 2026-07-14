@@ -1,6 +1,6 @@
 
 import { useState, useMemo, useEffect } from "react";
-import { useHall, EV_TYPES, checkHallAdminPass } from "../HallContext";
+import { useHall, EV_TYPES, checkHallAdminPass, invBilled, invCollected, invOutstanding, invInMonth, sumBy } from "../HallContext";
 import useIsMobile from "../useIsMobile";
 import { loadWaConfig, saveWaConfig, sendWhatsAppAlert } from "../../utils/whatsapp";
 import { loadNtfyConfig, saveNtfyConfig, sendNtfyAlert } from "../../utils/ntfy";
@@ -109,17 +109,17 @@ export default function HallAdmin() {
 
   // ── Stats ────────────────────────────────────────────────────────────────────
   const totalInvoices = invoices.length;
-  const totalBilled   = invoices.reduce((s,i)=>s+(i.grand||0),0);
-  const totalReceived = invoices.reduce((s,i)=>s+(parseFloat(i.adv)||0),0);
+  const totalBilled   = sumBy(invoices, invBilled);
+  const totalReceived = sumBy(invoices, invCollected);
   const totalExpenses = expenses.reduce((s,e)=>s+(e.amount||0),0);
 
   // ── Chart data ───────────────────────────────────────────────────────────────
   const chartData = useMemo(() => {
     return MONTHS_S.map((mo, mi) => {
       const prefix = `${chartYear}-${String(mi+1).padStart(2,"0")}`;
-      const monthInv = invoices.filter(i=>(i.evDate||i.invDate||"").startsWith(prefix));
-      const billed   = monthInv.reduce((s,i)=>s+(i.grand||0),0);
-      const received = monthInv.reduce((s,i)=>s+(parseFloat(i.adv)||0),0);
+      const monthInv = invoices.filter(i=>invInMonth(i, prefix));
+      const billed   = sumBy(monthInv, invBilled);
+      const received = sumBy(monthInv, invCollected);
       return { mo, billed, received };
     });
   }, [invoices, chartYear]);
@@ -130,11 +130,11 @@ export default function HallAdmin() {
   const monthBreakdown = useMemo(() => {
     return MONTHS_S.map((mo, mi) => {
       const prefix = `${chartYear}-${String(mi+1).padStart(2,"0")}`;
-      const monthInv = invoices.filter(i=>(i.evDate||i.invDate||"").startsWith(prefix));
-      const billed   = monthInv.reduce((s,i)=>s+(i.grand||0),0);
-      const received = monthInv.reduce((s,i)=>s+(parseFloat(i.adv)||0),0);
+      const monthInv = invoices.filter(i=>invInMonth(i, prefix));
+      const billed   = sumBy(monthInv, invBilled);
+      const received = sumBy(monthInv, invCollected);
       const guests   = monthInv.reduce((s,i)=>s+(parseInt(i.wGuests||i.hGuests||i.guests)||0),0);
-      return { mo, count:monthInv.length, guests, billed, received, pending:Math.max(0,billed-received) };
+      return { mo, count:monthInv.length, guests, billed, received, pending:sumBy(monthInv, invOutstanding) };
     });
   }, [invoices, chartYear]);
 
@@ -213,7 +213,7 @@ export default function HallAdmin() {
 
     const dataRows = filteredInv.map(inv => {
       const waiterTotal = inv.waiterTotal || 0;
-      const balance = inv.balance ?? Math.max(0,(inv.grand||0)-(parseFloat(inv.adv)||0));
+      const balance = invOutstanding(inv);
       return `<Row>
         ${strCell(inv.num)}${strCell(inv.client)}${strCell(inv.phone)}
         ${strCell(inv.evType)}${strCell(inv.evDate)}
@@ -401,7 +401,7 @@ export default function HallAdmin() {
                 </div>
                 <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
                   {overdue.map(inv => {
-                    const bal = inv.balance ?? Math.max(0, (inv.grand||0) - (parseFloat(inv.adv)||0));
+                    const bal = invOutstanding(inv);
                     return (
                       <div key={inv.id} style={{ background:"rgba(0,0,0,.25)", borderRadius:8, padding:"10px 14px", display:"flex", alignItems:"center", gap:12, flexWrap:"wrap" }}>
                         <div style={{ flex:1, minWidth:160 }}>
@@ -550,8 +550,8 @@ export default function HallAdmin() {
             {selMonths.length > 0 && (
               <div style={{ padding:"10px 14px", background:"#f8f5ee", border:`1px solid ${C.border}`, borderRadius:9, fontSize:12, display:"flex", gap:20, flexWrap:"wrap" }}>
                 <span><strong>{filteredInv.length}</strong> invoices selected</span>
-                <span>Billed: <strong>৳{fmt(filteredInv.reduce((s,i)=>s+(i.grand||0),0))}</strong></span>
-                <span>Received: <strong>৳{fmt(filteredInv.reduce((s,i)=>s+(parseFloat(i.adv)||0),0))}</strong></span>
+                <span>Billed: <strong>৳{fmt(sumBy(filteredInv, invBilled))}</strong></span>
+                <span>Received: <strong>৳{fmt(sumBy(filteredInv, invCollected))}</strong></span>
               </div>
             )}
           </div>
@@ -660,10 +660,10 @@ export default function HallAdmin() {
         <div>
           {/* ── P&L ── */}
           {isAdmin && (() => {
-            const pnlInv = pnlMonth==="all" ? invoices : invoices.filter(i=>(i.evDate||i.invDate||"").startsWith(pnlMonth));
+            const pnlInv = pnlMonth==="all" ? invoices : invoices.filter(i=>invInMonth(i, pnlMonth));
             const pnlExp = pnlMonth==="all" ? expenses : expenses.filter(e=>(e.date||"").startsWith(pnlMonth));
-            const inc = pnlInv.reduce((s,i)=>s+(parseFloat(i.adv)||0),0);
-            const bil = pnlInv.reduce((s,i)=>s+(i.grand||0),0);
+            const inc = sumBy(pnlInv, invCollected);
+            const bil = sumBy(pnlInv, invBilled);
             const exp = pnlExp.reduce((s,e)=>s+(e.amount||0),0);
             const net = inc - exp;
             const mx  = Math.max(inc, exp, 1);
@@ -1125,17 +1125,17 @@ function InsightsPanel({ invoices, expenses, leads }) {
     return <span style={{ color, fontWeight:700, fontSize:12 }}>{diff >= 0 ? "▲" : "▼"} {Math.abs(diff)}%</span>;
   }
 
-  const thisInv  = invoices.filter(i => (i.evDate||i.invDate||"").startsWith(thisMonth));
-  const lastInv  = invoices.filter(i => (i.evDate||i.invDate||"").startsWith(lastMonth));
+  const thisInv  = invoices.filter(i => invInMonth(i, thisMonth));
+  const lastInv  = invoices.filter(i => invInMonth(i, lastMonth));
   const thisExp  = expenses.filter(e => (e.date||"").startsWith(thisMonth));
 
-  const thisBilled   = thisInv.reduce((s,i)=>s+(i.grand||0),0);
-  const thisReceived = thisInv.reduce((s,i)=>s+(parseFloat(i.adv)||0),0);
-  const thisOutstand = thisInv.reduce((s,i)=>s+(i.balance??Math.max(0,(i.grand||0)-(parseFloat(i.adv)||0))),0);
+  const thisBilled   = sumBy(thisInv, invBilled);
+  const thisReceived = sumBy(thisInv, invCollected);
+  const thisOutstand = sumBy(thisInv, invOutstanding);
   const thisExpTotal = thisExp.reduce((s,e)=>s+(e.amount||0),0);
 
-  const lastBilled   = lastInv.reduce((s,i)=>s+(i.grand||0),0);
-  const lastReceived = lastInv.reduce((s,i)=>s+(parseFloat(i.adv)||0),0);
+  const lastBilled   = sumBy(lastInv, invBilled);
+  const lastReceived = sumBy(lastInv, invCollected);
 
   // Upcoming events — next 30 days
   const today = now.toISOString().split("T")[0];
@@ -1147,8 +1147,8 @@ function InsightsPanel({ invoices, expenses, leads }) {
 
   // All overdue outstanding (event date past, balance > 0)
   const overdue = invoices
-    .filter(i => (i.evDate||"") < today && (i.balance??Math.max(0,(i.grand||0)-(parseFloat(i.adv)||0))) > 0)
-    .sort((a,b)=>(b.balance??0)-(a.balance??0))
+    .filter(i => (i.evDate||"") < today && invOutstanding(i) > 0)
+    .sort((a,b)=>invOutstanding(b)-invOutstanding(a))
     .slice(0,5);
 
   // Best event type by avg revenue
@@ -1232,7 +1232,7 @@ function InsightsPanel({ invoices, expenses, leads }) {
             </thead>
             <tbody>
               {overdue.map(inv => {
-                const bal = inv.balance ?? Math.max(0,(inv.grand||0)-(parseFloat(inv.adv)||0));
+                const bal = invOutstanding(inv);
                 return (
                   <tr key={inv.id} style={{ borderBottom:"1px solid #f9f5f0" }}>
                     <td style={{ padding:"9px 10px", fontWeight:700, fontSize:13 }}>{inv.client}</td>
@@ -1264,7 +1264,7 @@ function InsightsPanel({ invoices, expenses, leads }) {
               </thead>
               <tbody>
                 {upcoming.map(inv => {
-                  const bal = inv.balance ?? Math.max(0,(inv.grand||0)-(parseFloat(inv.adv)||0));
+                  const bal = invOutstanding(inv);
                   const psColor = inv.payStatus==="Paid"?"#1a7040":inv.payStatus==="Partial"?"#a07000":"#c0392b";
                   const daysLeft = Math.round((new Date(inv.evDate)-now)/(1000*60*60*24));
                   return (
@@ -1294,8 +1294,8 @@ function InsightsPanel({ invoices, expenses, leads }) {
         <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))", gap:12 }}>
           {[
             { label:"Total invoices ever", val: invoices.length },
-            { label:"Total billed (all time)", val:"৳"+fmt(invoices.reduce((s,i)=>s+(i.grand||0),0)) },
-            { label:"Total received (all time)", val:"৳"+fmt(invoices.reduce((s,i)=>s+(parseFloat(i.adv)||0),0)) },
+            { label:"Total billed (all time)", val:"৳"+fmt(sumBy(invoices, invBilled)) },
+            { label:"Total received (all time)", val:"৳"+fmt(sumBy(invoices, invCollected)) },
             bestType ? { label:"Best event type", val:bestType[0], sub:`avg ৳${fmt(Math.round(bestType[1].total/bestType[1].count))} · ${bestType[1].count} bookings` } : null,
             busiestMonth ? { label:"Historically busiest month", val: MONTHS_FULL[parseInt(busiestMonth[0])-1], sub:`${busiestMonth[1]} bookings recorded` } : null,
             convRate !== null ? { label:"CRM conversion rate", val: convRate+"%", sub:`${converted} of ${totalLeads} leads confirmed` } : null,
@@ -1565,7 +1565,7 @@ function printAdminInvoice(inv) {
           <tfoot>
             <tr class="total-row">
               <td>Balance Due</td>
-              <td style="text-align:right;color:#c0392b">৳ ${fc(inv.balance ?? Math.max(0,(inv.grand||0)-(parseFloat(inv.adv)||0)))}</td>
+              <td style="text-align:right;color:#c0392b">৳ ${fc(invOutstanding(inv))}</td>
             </tr>
           </tfoot>
         </table>
@@ -1698,7 +1698,7 @@ function InvoiceDetailModal({ inv, onClose, isAdmin, onDelete }) {
               <tfoot>
                 <tr style={{ borderTop:"2.5px solid #e0d0b0" }}>
                   <td style={{ padding:"10px 12px", fontWeight:800, fontSize:14 }}>Balance Due</td>
-                  <td style={{ padding:"10px 12px", fontWeight:800, fontSize:14, color:"#c0392b", textAlign:"right" }}>৳ {fc(inv.balance ?? Math.max(0,(inv.grand||0)-(parseFloat(inv.adv)||0)))}</td>
+                  <td style={{ padding:"10px 12px", fontWeight:800, fontSize:14, color:"#c0392b", textAlign:"right" }}>৳ {fc(invOutstanding(inv))}</td>
                 </tr>
               </tfoot>
             </table>

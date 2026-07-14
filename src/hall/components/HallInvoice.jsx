@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef, useEffect } from "react";
-import { useHall, EV_TYPES, checkHallAdminPass } from "../HallContext";
+import { useHall, EV_TYPES, checkHallAdminPass, invBilled, invCollected, invOutstanding, invInMonth, sumBy } from "../HallContext";
 import useIsMobile from "../useIsMobile";
 import { sendSmsForInvoice } from "./HallAdmin";
 import { sendWhatsAppAlert, buildHallWaMessage } from "../../utils/whatsapp";
@@ -557,10 +557,11 @@ export default function HallInvoice() {
       );
     if (filterType) list = list.filter((i) => i.evType === filterType);
     if (filterStatus) list = list.filter((i) => i.payStatus === filterStatus);
-    // Drafts/leads with no event date set yet always stay visible, regardless of the month filter —
-    // a saved-but-incomplete invoice must never disappear from history until cleared or deleted.
+    // Month bucketing must match every other page (invInMonth): event date first,
+    // invoice-creation date as fallback — so a draft with no event date still shows
+    // under the month it was created and totals agree across all pages.
     if (filterMonth)
-      list = list.filter((i) => !i.evDate || i.evDate.startsWith(filterMonth));
+      list = list.filter((i) => invInMonth(i, filterMonth));
     return list;
   }, [invoices, search, filterType, filterStatus, filterMonth]);
 
@@ -588,7 +589,7 @@ export default function HallInvoice() {
             </div>
             <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
               {unpaidPastEvents.map(inv => {
-                const bal = inv.balance ?? Math.max(0, (inv.grand||0) - (parseFloat(inv.adv)||0));
+                const bal = invOutstanding(inv);
                 return (
                   <div key={inv.id} style={{
                     background:"rgba(0,0,0,.25)", borderRadius:8,
@@ -701,9 +702,9 @@ export default function HallInvoice() {
     );
 
   // ── Invoice History (list) — stats reflect the current filter/month ──────
-  const totBilled  = filtered.reduce((s, i) => s + (i.grand || 0), 0);
-  const totOut     = filtered.reduce((s, i) => s + Math.max(0, (i.grand || 0) - (parseFloat(i.adv) || 0)), 0);
-  const totCollect = totBilled - totOut;
+  const totBilled  = sumBy(filtered, invBilled);
+  const totOut     = sumBy(filtered, invOutstanding);
+  const totCollect = sumBy(filtered, invCollected);
 
   return (
     <div
@@ -867,10 +868,7 @@ export default function HallInvoice() {
         )}
         {filtered.map((inv, i) => {
           const et = EV_TYPES.find((t) => t.v === inv.evType);
-          const bal = Math.max(
-            0,
-            (inv.grand || 0) - (parseFloat(inv.adv) || 0),
-          );
+          const bal = invOutstanding(inv);
           const sc = {
             Paid: C.green,
             Partial: C.gold,

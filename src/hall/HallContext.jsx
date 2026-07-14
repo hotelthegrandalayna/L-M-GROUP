@@ -62,6 +62,15 @@ export const EXP_CATS = {
 
 export const PERSONAL_CATS = ["Personal Salary", "Donation", "Personal Other"];
 
+// ── Single source of truth for invoice money math ──────────────────────────
+// Every page MUST use these so Billed = Collected + Outstanding always holds.
+export const invBilled      = inv => inv.grand || 0;
+export const invOutstanding = inv => Math.max(0, (inv.grand || 0) - (parseFloat(inv.adv) || 0));
+export const invCollected   = inv => invBilled(inv) - invOutstanding(inv);
+// Month bucketing: event date first, invoice date as fallback
+export const invInMonth     = (inv, m) => (inv.evDate || inv.invDate || "").startsWith(m);
+export const sumBy = (list, fn) => list.reduce((s, x) => s + fn(x), 0);
+
 export function checkHallAdminPass(pw) {
   const stored = localStorage.getItem("a_pass_admin");
   return pw === (stored || BASE_USERS.admin.pass);

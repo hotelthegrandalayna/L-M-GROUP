@@ -1,6 +1,6 @@
 
 import { useMemo } from "react";
-import { useHall, EV_TYPES } from "../HallContext";
+import { useHall, EV_TYPES, invBilled, invCollected, invInMonth, sumBy } from "../HallContext";
 import useIsMobile from "../useIsMobile";
 
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -12,11 +12,11 @@ export default function HallInsights() {
   const thisMonth = today.slice(0,7);
   const thisYear  = today.slice(0,4);
 
-  const mInv  = invoices.filter(inv=>inv.invDate?.startsWith(thisMonth));
+  const mInv  = invoices.filter(inv=>invInMonth(inv, thisMonth));
   const mExp  = expenses.filter(e=>e.date?.startsWith(thisMonth)).reduce((s,e)=>s+e.amount,0);
-  const mBilled = mInv.reduce((s,i)=>s+(i.grand||0),0);
-  const mPaid   = mInv.reduce((s,i)=>s+(i.adv||0),0);
-  const allPaid = invoices.reduce((s,i)=>s+(i.adv||0),0);
+  const mBilled = sumBy(mInv, invBilled);
+  const mPaid   = sumBy(mInv, invCollected);
+  const allPaid = sumBy(invoices, invCollected);
   const allExp  = expenses.reduce((s,e)=>s+e.amount,0);
 
   const byType = useMemo(()=>{
@@ -31,9 +31,9 @@ export default function HallInsights() {
       const d=new Date(); d.setMonth(d.getMonth()-i);
       const m=d.toISOString().slice(0,7);
       const label=MONTHS[d.getMonth()]+" "+String(d.getFullYear()).slice(2);
-      const inv=invoices.filter(x=>x.invDate?.startsWith(m));
-      const billed=inv.reduce((s,x)=>s+(x.grand||0),0);
-      const paid=inv.reduce((s,x)=>s+(x.adv||0),0);
+      const inv=invoices.filter(x=>invInMonth(x, m));
+      const billed=sumBy(inv, invBilled);
+      const paid=sumBy(inv, invCollected);
       const exp=expenses.filter(e=>e.date?.startsWith(m)).reduce((s,e)=>s+e.amount,0);
       months.push({label,billed,paid,exp,cnt:inv.length});
     }

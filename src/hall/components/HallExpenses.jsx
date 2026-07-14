@@ -1,6 +1,6 @@
 
 import { useState, useMemo, useRef, useCallback } from "react";
-import { useHall, EXP_CATS, checkHallAdminPass } from "../HallContext";
+import { useHall, EXP_CATS, checkHallAdminPass, invCollected, invInMonth, sumBy } from "../HallContext";
 import useIsMobile from "../useIsMobile";
 
 // Separate localStorage key for expense types — survives Supabase reloads
@@ -105,13 +105,10 @@ export default function HallExpenses() {
     ...e, expType: resolveType(e, typesMap),
   })), [expenses, typesMap]);
 
-  // ── Month revenue — mirrors Invoice History: Billed minus Outstanding ────────
+  // ── Month revenue — shared formula (invCollected) used by every page ─────────
   const monthRevenue = useMemo(() => {
     const m = filterMonth || thisMonth;
-    const month = invoices.filter(inv => !inv.evDate || inv.evDate.startsWith(m));
-    const billed = month.reduce((s, inv) => s + (inv.grand || 0), 0);
-    const outstanding = month.reduce((s, inv) => s + Math.max(0, (inv.grand || 0) - (parseFloat(inv.adv) || 0)), 0);
-    return billed - outstanding;
+    return sumBy(invoices.filter(inv => invInMonth(inv, m)), invCollected);
   }, [invoices, filterMonth, thisMonth]);
 
   // ── Expense stats ─────────────────────────────────────────────────────────────
