@@ -238,7 +238,7 @@ export default function HallExpenses() {
     const a = document.createElement("a"); a.href="data:text/csv;charset=utf-8,"+encodeURIComponent(csv); a.download="expenses.csv"; a.click();
   }
 
-  const inp = (s={}) => ({ padding:"9px 12px", border:"1.5px solid #e5e3de", borderRadius:8, fontSize:13, fontFamily:"inherit", background:"#fafaf9", width:"100%", boxSizing:"border-box", outline:"none", ...s });
+  const inp = (s={}) => ({ padding:"9px 12px", border:"1.5px solid #e5e3de", borderRadius:8, fontSize:13, fontFamily:"inherit", background:"#fff", width:"100%", boxSizing:"border-box", outline:"none", ...s });
   const lbl = { fontSize:11, fontWeight:700, color:"#555", textTransform:"uppercase", letterSpacing:.5, marginBottom:4, display:"block" };
   const errT = { fontSize:11, color:C.red, marginTop:3 };
 
@@ -307,20 +307,22 @@ export default function HallExpenses() {
 
       </div>
 
-      {/* ── Record Expense Form ── */}
-      <div style={{ background:"#fff", border:`1.5px solid ${C.border}`, borderTop:`3px solid ${isNonBusiness?C.orange:C.maroon}`, borderRadius:12, padding:"20px 22px", marginBottom:18 }}>
+      {/* ── Record Expense Form — whole panel tints with the selected type ── */}
+      <div style={{ background: isNonBusiness ? "#fff7ed" : "#fdf3f3", border:`2px solid ${isNonBusiness?C.orange:C.maroon}`, borderRadius:12, padding:"20px 22px", marginBottom:18, transition:"all .2s" }}>
 
-        <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:18 }}>
-          <div style={{ fontSize:9, letterSpacing:2, textTransform:"uppercase", fontWeight:700, color:"#fff", background:isNonBusiness?C.orange:C.maroon, padding:"5px 12px", borderRadius:7 }}>
-            ➕ {editId ? "Edit Expense" : "Record New Expense"}
+        {editId && (
+          <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:14 }}>
+            <div style={{ fontSize:9, letterSpacing:2, textTransform:"uppercase", fontWeight:700, color:"#fff", background:isNonBusiness?C.orange:C.maroon, padding:"5px 12px", borderRadius:7 }}>
+              ✏️ Editing Expense
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Business / Non-Business toggle */}
         <div style={{ display:"flex", gap:8, marginBottom:16 }}>
           <button type="button" onClick={()=>{ setF("type","business"); setF("cat",""); }}
             style={{ flex:1, padding:"12px 10px", borderRadius:10, border:`2px solid ${form.type==="business"?C.maroon:"#e5e3de"}`,
-              background:form.type==="business"?"#7B1212":"#fafaf9",
+              background:form.type==="business"?"#7B1212":"#fff",
               color:form.type==="business"?"#fff":C.dim,
               cursor:"pointer", fontFamily:"inherit", fontWeight:800, fontSize:13, transition:"all .15s" }}>
             🏢 Business Expense
@@ -328,7 +330,7 @@ export default function HallExpenses() {
           </button>
           <button type="button" onClick={()=>{ setF("type","nonbusiness"); setF("cat",""); }}
             style={{ flex:1, padding:"12px 10px", borderRadius:10, border:`2px solid ${form.type==="nonbusiness"?C.orange:"#e5e3de"}`,
-              background:form.type==="nonbusiness"?"#e67e22":"#fafaf9",
+              background:form.type==="nonbusiness"?"#e67e22":"#fff",
               color:form.type==="nonbusiness"?"#fff":C.dim,
               cursor:"pointer", fontFamily:"inherit", fontWeight:800, fontSize:13, transition:"all .15s" }}>
             💸 Non-Business Transfer
@@ -394,7 +396,7 @@ export default function HallExpenses() {
         </div>
 
         {/* File attachment */}
-        <div style={{ background:"#fafaf8", border:"1.5px dashed #e0d0b0", borderRadius:10, padding:14, marginBottom:14 }}>
+        <div style={{ background:"#fff", border:"1.5px dashed #e0d0b0", borderRadius:10, padding:14, marginBottom:14 }}>
           <div style={{ fontSize:10, letterSpacing:1.5, textTransform:"uppercase", color:C.gold, marginBottom:9, fontWeight:700 }}>📎 Attach Invoice / Receipt</div>
           <div style={{ display:"flex", gap:8, flexWrap:"wrap", alignItems:"center" }}>
             <label htmlFor="expFile" style={{ display:"inline-block", padding:"7px 13px", background:"#f0ede8", border:`1.5px solid ${C.gold}80`, borderRadius:8, cursor:"pointer", fontSize:11, color:C.gold, fontWeight:600 }}>
