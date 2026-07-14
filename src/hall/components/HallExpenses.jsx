@@ -105,12 +105,12 @@ export default function HallExpenses() {
     ...e, expType: resolveType(e, typesMap),
   })), [expenses, typesMap]);
 
-  // ── Month revenue from paid invoices (same source as Insights page) ──────────
+  // ── Month revenue — same filter logic as Invoice History (filters by evDate) ─
   const monthRevenue = useMemo(() => {
     const m = filterMonth || thisMonth;
     return invoices
-      .filter(inv => (inv.invDate||"").startsWith(m))
-      .reduce((s, inv) => s + (inv.adv || 0), 0);
+      .filter(inv => !inv.evDate || inv.evDate.startsWith(m))
+      .reduce((s, inv) => s + (parseFloat(inv.adv) || 0), 0);
   }, [invoices, filterMonth, thisMonth]);
 
   // ── Expense stats ─────────────────────────────────────────────────────────────
