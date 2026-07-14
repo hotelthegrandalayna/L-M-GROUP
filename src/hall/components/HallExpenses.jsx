@@ -1,9 +1,9 @@
 
 import { useState, useMemo, useRef } from "react";
-import { useHall, EXP_CATS, PERSONAL_CATS, checkHallAdminPass } from "../HallContext";
+import { useHall, EXP_CATS, checkHallAdminPass } from "../HallContext";
 import useIsMobile from "../useIsMobile";
 
-const C = { maroon:"#7B1212", gold:"#c9a84c", dim:"#666", border:"#e0d0b0", green:"#1a7040", red:"#c0392b" };
+const C = { maroon:"#7B1212", gold:"#c9a84c", dim:"#666", border:"#e0d0b0", green:"#1a7040", red:"#c0392b", orange:"#e67e22", navy:"#1e3a5f" };
 
 const PAY_METHODS = [
   { v:"Cash",          i:"💵" },
@@ -13,7 +13,7 @@ const PAY_METHODS = [
   { v:"Cheque",        i:"📄" },
 ];
 
-const EXP_CAT_OPTIONS = [
+const BUSINESS_CAT_OPTIONS = [
   { v:"Salary",         l:"👤 Employee Salary" },
   { v:"Electricity",    l:"⚡ Electricity" },
   { v:"Generator Oil",  l:"🛢️ Generator Oil" },
@@ -25,10 +25,16 @@ const EXP_CAT_OPTIONS = [
   { v:"Security",       l:"🔐 Security" },
   { v:"Marketing",      l:"📣 Marketing" },
   { v:"Tax",            l:"📋 Tax" },
-  { v:"Donation",       l:"🤲 Donation" },
-  { v:"Personal Salary",l:"💼 Personal Salary" },
-  { v:"Personal Other", l:"👤 Personal Other" },
   { v:"Other",          l:"📌 Other" },
+];
+
+const NONBUSINESS_CAT_OPTIONS = [
+  { v:"Bank Transfer",      l:"🏦 Bank Transfer" },
+  { v:"Owner Withdrawal",   l:"💸 Owner Withdrawal" },
+  { v:"Donation",           l:"🤲 Donation" },
+  { v:"Lending",            l:"🤝 Lending / Loan Given" },
+  { v:"Personal Use",       l:"👤 Owner Personal Use" },
+  { v:"Other Transfer",     l:"📌 Other" },
 ];
 
 const MONTHS_LABEL = ["January","February","March","April","May","June","July","August","September","October","November","December"];
@@ -39,44 +45,71 @@ function fmtDate(iso) {
   return `${parseInt(d)} ${["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][parseInt(m)-1]} ${y}`;
 }
 
+function money(n) { return "৳" + (n||0).toLocaleString(); }
+
 const blankForm = (today) => ({
-  type:"public", cat:"", date:today, amount:"", desc:"",
+  type:"business", cat:"", date:today, amount:"", desc:"",
   payMethod:"Cash", empName:"", empRole:"", payPeriod:"",
   billNo:"", billPeriod:"", fileData:"", fileName:"",
 });
 
 export default function HallExpenses() {
-  const { expenses, setExpenses, deleteExpense, curRole, notify } = useHall();
+  const { expenses, setExpenses, deleteExpense, revenues, curRole, notify } = useHall();
   const isMobile = useIsMobile();
   const today = new Date().toISOString().split("T")[0];
+  const thisMonth = today.slice(0,7);
 
   const [form, setForm]       = useState(() => blankForm(today));
   const [editId, setEditId]   = useState(null);
   const [errors, setErrors]   = useState({});
   const [search, setSearch]   = useState("");
   const [filterCat, setFilterCat] = useState("");
-  const [filterMonth, setFilterMonth] = useState(() => today.slice(0, 7));
+  const [filterType, setFilterType] = useState(""); // "" | "business" | "nonbusiness"
+  const [filterMonth, setFilterMonth] = useState(() => thisMonth);
   const [delTarget, setDelTarget] = useState(null);
   const [delPass, setDelPass] = useState("");
   const fileRef = useRef();
 
   const setF = (k,v) => setForm(p => ({ ...p, [k]:v }));
-
-  // ── Stats ────────────────────────────────────────────────────────────────────
   const isAdmin = curRole === "admin";
-  const publicExp  = expenses.filter(e => !PERSONAL_CATS.includes(e.cat));
-  const thisMonthExp = publicExp.filter(e => (e.date||"").startsWith(today.slice(0,7)));
-  const totalAll   = publicExp.reduce((s,e)=>s+(e.amount||0),0);
-  const totalMonth = thisMonthExp.reduce((s,e)=>s+(e.amount||0),0);
+
+  // ── Normalize old personal expenses to nonbusiness ──────────────────────────
+  const normalizedExpenses = useMemo(() => expenses.map(e => {
+    if (e.expType === "personal" || ["Personal Salary","Personal Other","Donation"].includes(e.cat)) {
+      return { ...e, expType: "nonbusiness" };
+    }
+    if (!e.expType || e.expType === "public") return { ...e, expType: "business" };
+    return e;
+  }), [expenses]);
+
+  // ── Month revenue (hall) ─────────────────────────────────────────────────────
+  const monthRevenue = useMemo(() => {
+    return revenues
+      .filter(r => (r.date||r.createdAt||"").startsWith(filterMonth || thisMonth))
+      .reduce((s,r) => s + (parseFloat(r.amount)||0), 0);
+  }, [revenues, filterMonth, thisMonth]);
+
+  // ── Expense stats ─────────────────────────────────────────────────────────────
+  const { businessTotal, nonBusinessTotal } = useMemo(() => {
+    const mExp = normalizedExpenses.filter(e => (e.date||"").startsWith(filterMonth || thisMonth));
+    return {
+      businessTotal:    mExp.filter(e => e.expType === "business").reduce((s,e) => s+(e.amount||0), 0),
+      nonBusinessTotal: mExp.filter(e => e.expType === "nonbusiness").reduce((s,e) => s+(e.amount||0), 0),
+    };
+  }, [normalizedExpenses, filterMonth, thisMonth]);
+
+  const netProfit   = monthRevenue - businessTotal;
+  const cashInHand  = monthRevenue - businessTotal - nonBusinessTotal;
 
   // ── Filtered list ─────────────────────────────────────────────────────────────
   const filtered = useMemo(() => {
-    let list = isAdmin ? [...expenses] : expenses.filter(e => !PERSONAL_CATS.includes(e.cat));
-    if (search) list = list.filter(e => (e.cat||"").toLowerCase().includes(search.toLowerCase()) || (e.desc||"").toLowerCase().includes(search.toLowerCase()) || (e.empName||"").toLowerCase().includes(search.toLowerCase()));
+    let list = [...normalizedExpenses];
+    if (search)      list = list.filter(e => (e.cat||"").toLowerCase().includes(search.toLowerCase()) || (e.desc||"").toLowerCase().includes(search.toLowerCase()) || (e.empName||"").toLowerCase().includes(search.toLowerCase()));
     if (filterCat)   list = list.filter(e => e.cat === filterCat);
+    if (filterType)  list = list.filter(e => e.expType === filterType);
     if (filterMonth) list = list.filter(e => (e.date||"").startsWith(filterMonth));
     return list.slice().reverse();
-  }, [expenses, search, filterCat, filterMonth, isAdmin]);
+  }, [normalizedExpenses, search, filterCat, filterType, filterMonth]);
 
   const filteredTotal = filtered.reduce((s,e)=>s+(e.amount||0),0);
 
@@ -87,11 +120,13 @@ export default function HallExpenses() {
     return top ? top[0] : "—";
   }, [filtered]);
 
-  // All months in expenses for dropdown
   const allMonths = useMemo(() => {
-    const s = new Set(expenses.map(e=>(e.date||"").slice(0,7)).filter(Boolean));
+    const s = new Set(normalizedExpenses.map(e=>(e.date||"").slice(0,7)).filter(Boolean));
     return [...s].sort().reverse();
-  }, [expenses]);
+  }, [normalizedExpenses]);
+
+  // ── Current category options based on type ───────────────────────────────────
+  const catOptions = form.type === "nonbusiness" ? NONBUSINESS_CAT_OPTIONS : BUSINESS_CAT_OPTIONS;
 
   // ── Form actions ─────────────────────────────────────────────────────────────
   function clearForm() {
@@ -142,8 +177,9 @@ export default function HallExpenses() {
   }
 
   function startEdit(e) {
+    const type = e.expType === "nonbusiness" ? "nonbusiness" : "business";
     setForm({
-      type: e.expType||"public", cat: e.cat||"", date: e.date||today,
+      type, cat: e.cat||"", date: e.date||today,
       amount: String(e.amount||""), desc: e.desc||"", payMethod: e.payMethod||"Cash",
       empName: e.empName||"", empRole: e.empRole||"", payPeriod: e.payPeriod||"",
       billNo: e.billNo||"", billPeriod: e.billPeriod||"",
@@ -162,8 +198,8 @@ export default function HallExpenses() {
   }
 
   function exportCSV() {
-    const headers = ["Date","Category","Description","Amount","Payment","Employee","Type"];
-    const rows = filtered.map(e => [e.date,e.cat,e.desc,e.amount,e.payMethod,e.empName,e.expType].map(v=>`"${(v||"").toString().replace(/"/g,'""')}"`));
+    const headers = ["Date","Type","Category","Description","Amount","Payment","Employee"];
+    const rows = filtered.map(e => [e.date,e.expType,e.cat,e.desc,e.amount,e.payMethod,e.empName].map(v=>`"${(v||"").toString().replace(/"/g,'""')}"`));
     const csv = [headers,...rows].map(r=>r.join(",")).join("\n");
     const a = document.createElement("a"); a.href="data:text/csv;charset=utf-8,"+encodeURIComponent(csv); a.download="expenses.csv"; a.click();
   }
@@ -172,10 +208,13 @@ export default function HallExpenses() {
   const lbl = { fontSize:11, fontWeight:700, color:"#555", textTransform:"uppercase", letterSpacing:.5, marginBottom:4, display:"block" };
   const errT = { fontSize:11, color:C.red, marginTop:3 };
 
-  const isSalary = form.cat === "Salary" || form.cat === "Personal Salary";
+  const isSalary = form.cat === "Salary";
   const isBill   = form.cat === "Electricity" || form.cat === "Internet";
+  const isNonBusiness = form.type === "nonbusiness";
 
-  const cd = form.cat ? (EXP_CATS[form.cat]||EXP_CATS["Other"]) : null;
+  const monthLabel = filterMonth
+    ? new Date(filterMonth+"-01").toLocaleString("en-GB",{month:"long",year:"numeric"})
+    : "All Time";
 
   return (
     <div className="hall-page" style={{ padding: isMobile?"10px 8px":"22px 28px", maxWidth:1100, margin:"0 auto", width:"100%" }}>
@@ -183,60 +222,85 @@ export default function HallExpenses() {
       {/* ── Page title ── */}
       <div style={{ marginBottom:18 }}>
         <div style={{ fontSize:26, fontWeight:700, fontFamily:"'Playfair Display',serif", color:C.maroon }}>Hall Expenses</div>
-        <div style={{ fontSize:12, color:C.dim, marginTop:4 }}>Track all running costs — salaries, utilities, supplies &amp; more.</div>
+        <div style={{ fontSize:12, color:C.dim, marginTop:4 }}>Track business costs, transfers & owner withdrawals — {monthLabel}</div>
       </div>
 
-      {/* ── Stat bar ── */}
-      <div className="hall-stat-grid" style={{ display:"grid", gridTemplateColumns: isMobile?"1fr 1fr":"repeat(4,1fr)", gap:10, marginBottom:18 }}>
-        {[
-          ["Total Expenses", "৳"+filteredTotal.toLocaleString(), C.red],
-          ["No. of Records", filtered.length, C.maroon],
-          ["Top Category",   topCat !== "undefined" ? topCat : "—", C.dim],
-          ["Month", filterMonth ? new Date(filterMonth+"-01").toLocaleString("en-GB",{month:"long",year:"numeric"}) : "All Time", C.navy||"#1e3a5f"],
-        ].map(([l,v,c])=>(
-          <div key={l} style={{ background:"#fff", border:`1.5px solid ${C.border}`, borderRadius:12, padding:"15px 17px" }}>
-            <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:.8, color:C.dim, marginBottom:8 }}>{l}</div>
-            <div style={{ fontSize:20, fontWeight:800, fontFamily:"'Playfair Display',serif", color:c }}>{v}</div>
-          </div>
-        ))}
+      {/* ── Summary cards ── */}
+      <div style={{ display:"grid", gridTemplateColumns: isMobile?"1fr 1fr":"repeat(4,1fr)", gap:12, marginBottom:20 }}>
+
+        {/* Revenue */}
+        <div style={{ background:"#f0fdf4", border:"1.5px solid #86efac", borderRadius:12, padding:"16px 18px" }}>
+          <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:.8, color:C.green, marginBottom:6 }}>📈 Revenue ({monthLabel})</div>
+          <div style={{ fontSize:22, fontWeight:800, fontFamily:"'Playfair Display',serif", color:C.green }}>{money(monthRevenue)}</div>
+          <div style={{ fontSize:11, color:C.green, marginTop:4, opacity:.7 }}>Total collected</div>
+        </div>
+
+        {/* Business Expenses */}
+        <div style={{ background:"#fff5f5", border:"1.5px solid #fca5a5", borderRadius:12, padding:"16px 18px" }}>
+          <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:.8, color:C.red, marginBottom:6 }}>🏢 Business Expenses</div>
+          <div style={{ fontSize:22, fontWeight:800, fontFamily:"'Playfair Display',serif", color:C.red }}>{money(businessTotal)}</div>
+          <div style={{ fontSize:11, color:C.red, marginTop:4, opacity:.7 }}>Salary, utilities, ops</div>
+        </div>
+
+        {/* Net Profit */}
+        <div style={{ background: netProfit >= 0 ? "#f0fdf4":"#fff5f5", border:`1.5px solid ${netProfit>=0?"#86efac":"#fca5a5"}`, borderRadius:12, padding:"16px 18px" }}>
+          <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:.8, color:netProfit>=0?C.green:C.red, marginBottom:6 }}>📊 Net Profit</div>
+          <div style={{ fontSize:22, fontWeight:800, fontFamily:"'Playfair Display',serif", color:netProfit>=0?C.green:C.red }}>{money(netProfit)}</div>
+          <div style={{ fontSize:11, color:C.dim, marginTop:4, opacity:.7 }}>Revenue − Business Expenses</div>
+        </div>
+
+        {/* Cash in Hand */}
+        <div style={{ background: cashInHand >= 0 ? "#fffbeb":"#fff5f5", border:`1.5px solid ${cashInHand>=0?"#fcd34d":"#fca5a5"}`, borderRadius:12, padding:"16px 18px" }}>
+          <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:.8, color:cashInHand>=0?C.gold:C.red, marginBottom:6 }}>💰 Cash in Hand</div>
+          <div style={{ fontSize:22, fontWeight:800, fontFamily:"'Playfair Display',serif", color:cashInHand>=0?C.gold:C.red }}>{money(cashInHand)}</div>
+          <div style={{ fontSize:11, color:C.dim, marginTop:4, opacity:.7 }}>After all expenses & transfers</div>
+        </div>
+
       </div>
 
-      {/* ── Inline form card ── */}
-      <div style={{ background:"#fff", border:`1.5px solid ${C.border}`, borderTop:`3px solid ${C.maroon}`, borderRadius:12, padding:"20px 22px", marginBottom:18 }}>
+      {/* ── Record Expense Form ── */}
+      <div style={{ background:"#fff", border:`1.5px solid ${C.border}`, borderTop:`3px solid ${isNonBusiness?C.orange:C.maroon}`, borderRadius:12, padding:"20px 22px", marginBottom:18 }}>
 
-        {/* Form header */}
         <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:18 }}>
-          <div style={{ fontSize:9, letterSpacing:2, textTransform:"uppercase", fontWeight:700, color:"#fff", background:C.maroon, padding:"5px 12px", borderRadius:7 }}>
+          <div style={{ fontSize:9, letterSpacing:2, textTransform:"uppercase", fontWeight:700, color:"#fff", background:isNonBusiness?C.orange:C.maroon, padding:"5px 12px", borderRadius:7 }}>
             ➕ {editId ? "Edit Expense" : "Record New Expense"}
           </div>
         </div>
 
-        {/* Hall / Personal toggle */}
-        <div style={{ display:"flex", gap:8, marginBottom:14 }}>
-          <label style={{ display:"flex", alignItems:"center", gap:6, padding:"7px 13px", background:form.type==="public"?"#fdf0cc":"#fafaf9", border:`1.5px solid ${form.type==="public"?C.gold+"80":"#e5e3de"}`, borderRadius:8, cursor:"pointer", fontSize:12, color:form.type==="public"?C.gold:C.dim, fontWeight:700 }}>
-            <input type="radio" name="expType" value="public" checked={form.type==="public"} onChange={()=>setF("type","public")} style={{ accentColor:C.gold }} />
-            🏢 Hall Expense
-          </label>
-          {isAdmin && (
-            <label style={{ display:"flex", alignItems:"center", gap:6, padding:"7px 13px", background:form.type==="personal"?"#f5f0ff":"#fafaf9", border:`1.5px solid ${form.type==="personal"?"#9370db40":"#e5e3de"}`, borderRadius:8, cursor:"pointer", fontSize:12, color:form.type==="personal"?"#6c3483":C.dim, fontWeight:700 }}>
-              <input type="radio" name="expType" value="personal" checked={form.type==="personal"} onChange={()=>setF("type","personal")} style={{ accentColor:"#9370db" }} />
-              🔒 Personal
-            </label>
-          )}
+        {/* Business / Non-Business toggle */}
+        <div style={{ display:"flex", gap:8, marginBottom:16 }}>
+          <button type="button" onClick={()=>{ setF("type","business"); setF("cat",""); }}
+            style={{ flex:1, padding:"12px 10px", borderRadius:10, border:`2px solid ${form.type==="business"?C.maroon:"#e5e3de"}`,
+              background:form.type==="business"?"#7B1212":"#fafaf9",
+              color:form.type==="business"?"#fff":C.dim,
+              cursor:"pointer", fontFamily:"inherit", fontWeight:800, fontSize:13, transition:"all .15s" }}>
+            🏢 Business Expense
+            <div style={{ fontSize:10, fontWeight:500, marginTop:3, opacity:.85 }}>Affects profit &amp; cash</div>
+          </button>
+          <button type="button" onClick={()=>{ setF("type","nonbusiness"); setF("cat",""); }}
+            style={{ flex:1, padding:"12px 10px", borderRadius:10, border:`2px solid ${form.type==="nonbusiness"?C.orange:"#e5e3de"}`,
+              background:form.type==="nonbusiness"?"#e67e22":"#fafaf9",
+              color:form.type==="nonbusiness"?"#fff":C.dim,
+              cursor:"pointer", fontFamily:"inherit", fontWeight:800, fontSize:13, transition:"all .15s" }}>
+            💸 Non-Business Transfer
+            <div style={{ fontSize:10, fontWeight:500, marginTop:3, opacity:.85 }}>Affects cash only</div>
+          </button>
         </div>
-        {form.type==="personal" && (
-          <div style={{ background:"#f0e8ff", border:"1.5px solid #d2b4de", borderRadius:8, padding:"8px 12px", fontSize:11, color:"#6c3483", marginBottom:12 }}>
-            🔒 Personal costs are only visible to <strong>Admin</strong>.
-          </div>
-        )}
 
-        {/* Main fields row */}
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:14, marginBottom:12 }}>
+        {/* Info banner */}
+        <div style={{ background: isNonBusiness?"#fff7ed":"#fdf8ee", border:`1.5px solid ${isNonBusiness?"#fed7aa":"#f0e0b0"}`, borderRadius:8, padding:"8px 13px", fontSize:11, color: isNonBusiness?C.orange:C.gold, marginBottom:14, fontWeight:600 }}>
+          {isNonBusiness
+            ? "💸 Non-business transfers (bank, donation, lending, owner use) reduce cash in hand but do NOT affect profit."
+            : "🏢 Business expenses (salary, electricity, supplies) reduce both profit and cash in hand."}
+        </div>
+
+        {/* Main fields */}
+        <div style={{ display:"grid", gridTemplateColumns: isMobile?"1fr":"1fr 1fr 1fr", gap:14, marginBottom:12 }}>
           <div>
             <label style={lbl}>Category *</label>
             <select value={form.cat} onChange={e=>setF("cat",e.target.value)} style={inp(errors.cat?{borderColor:C.red}:{})}>
               <option value="">— Select —</option>
-              {EXP_CAT_OPTIONS.map(o=><option key={o.v} value={o.v}>{o.l}</option>)}
+              {catOptions.map(o=><option key={o.v} value={o.v}>{o.l}</option>)}
             </select>
             {errors.cat && <div style={errT}>{errors.cat}</div>}
           </div>
@@ -254,10 +318,10 @@ export default function HallExpenses() {
 
         {/* Salary extra fields */}
         {isSalary && (
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:14, marginBottom:12 }}>
+          <div style={{ display:"grid", gridTemplateColumns: isMobile?"1fr":"1fr 1fr 1fr", gap:14, marginBottom:12 }}>
             <div><label style={lbl}>Employee Name</label><input value={form.empName} onChange={e=>setF("empName",e.target.value)} style={inp()} /></div>
             <div><label style={lbl}>Role</label><input value={form.empRole} onChange={e=>setF("empRole",e.target.value)} style={inp()} /></div>
-            <div><label style={lbl}>Pay Period</label><input value={form.payPeriod} onChange={e=>setF("payPeriod",e.target.value)} placeholder="e.g. May 2026" style={inp()} /></div>
+            <div><label style={lbl}>Pay Period</label><input value={form.payPeriod} onChange={e=>setF("payPeriod",e.target.value)} placeholder="e.g. July 2026" style={inp()} /></div>
           </div>
         )}
 
@@ -270,8 +334,8 @@ export default function HallExpenses() {
         )}
 
         {/* Description + Payment */}
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14, marginBottom:12 }}>
-          <div><label style={lbl}>Description</label><input value={form.desc} onChange={e=>setF("desc",e.target.value)} style={inp()} /></div>
+        <div style={{ display:"grid", gridTemplateColumns: isMobile?"1fr":"1fr 1fr", gap:14, marginBottom:12 }}>
+          <div><label style={lbl}>Description / Note</label><input value={form.desc} onChange={e=>setF("desc",e.target.value)} placeholder="Optional details..." style={inp()} /></div>
           <div>
             <label style={lbl}>Payment Method</label>
             <select value={form.payMethod} onChange={e=>setF("payMethod",e.target.value)} style={inp()}>
@@ -283,7 +347,7 @@ export default function HallExpenses() {
         {/* File attachment */}
         <div style={{ background:"#fafaf8", border:"1.5px dashed #e0d0b0", borderRadius:10, padding:14, marginBottom:14 }}>
           <div style={{ fontSize:10, letterSpacing:1.5, textTransform:"uppercase", color:C.gold, marginBottom:9, fontWeight:700 }}>📎 Attach Invoice / Receipt</div>
-          <div className="hall-filter-bar" style={{ display:"flex", gap:8, flexWrap:"wrap", alignItems:"center" }}>
+          <div style={{ display:"flex", gap:8, flexWrap:"wrap", alignItems:"center" }}>
             <label htmlFor="expFile" style={{ display:"inline-block", padding:"7px 13px", background:"#f0ede8", border:`1.5px solid ${C.gold}80`, borderRadius:8, cursor:"pointer", fontSize:11, color:C.gold, fontWeight:600 }}>
               📁 Choose File
             </label>
@@ -301,23 +365,27 @@ export default function HallExpenses() {
           )}
         </div>
 
-        {/* Actions */}
         <div style={{ display:"flex", justifyContent:"flex-end", gap:8 }}>
           <button onClick={clearForm} style={{ padding:"9px 18px", borderRadius:9, border:"1.5px solid #e5e3de", background:"#fff", cursor:"pointer", fontFamily:"inherit", fontWeight:700, fontSize:13 }}>Cancel</button>
-          <button onClick={saveExpense} style={{ padding:"9px 20px", borderRadius:9, border:"none", background:C.maroon, color:"#fff", cursor:"pointer", fontFamily:"inherit", fontWeight:800, fontSize:13 }}>
+          <button onClick={saveExpense} style={{ padding:"9px 22px", borderRadius:9, border:"none", background:isNonBusiness?C.orange:C.maroon, color:"#fff", cursor:"pointer", fontFamily:"inherit", fontWeight:800, fontSize:13 }}>
             💾 {editId ? "Update Expense" : "Save Expense"}
           </button>
         </div>
       </div>
 
       {/* ── Filter bar ── */}
-      <div className="hall-filter-bar" style={{ display:"flex", gap:8, marginBottom:12, flexWrap:"wrap", alignItems:"center" }}>
-        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Search..." style={{ ...inp(), flex:1, minWidth:160 }} />
-        <select value={filterCat} onChange={e=>setFilterCat(e.target.value)} style={{ ...inp(), maxWidth:220 }}>
-          <option value="">All Categories</option>
-          {EXP_CAT_OPTIONS.map(o=><option key={o.v} value={o.v}>{o.l}</option>)}
+      <div style={{ display:"flex", gap:8, marginBottom:12, flexWrap:"wrap", alignItems:"center" }}>
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Search..." style={{ ...inp(), flex:1, minWidth:140 }} />
+        <select value={filterType} onChange={e=>setFilterType(e.target.value)} style={{ ...inp(), maxWidth:190 }}>
+          <option value="">All Types</option>
+          <option value="business">🏢 Business</option>
+          <option value="nonbusiness">💸 Non-Business</option>
         </select>
-        <select value={filterMonth} onChange={e=>setFilterMonth(e.target.value)} style={{ ...inp(), maxWidth:180 }}>
+        <select value={filterCat} onChange={e=>setFilterCat(e.target.value)} style={{ ...inp(), maxWidth:200 }}>
+          <option value="">All Categories</option>
+          {[...BUSINESS_CAT_OPTIONS,...NONBUSINESS_CAT_OPTIONS].map(o=><option key={o.v} value={o.v}>{o.l}</option>)}
+        </select>
+        <select value={filterMonth} onChange={e=>setFilterMonth(e.target.value)} style={{ ...inp(), maxWidth:170 }}>
           <option value="">All Months</option>
           {allMonths.map(m=>{
             const [y,mo]=m.split("-");
@@ -327,21 +395,30 @@ export default function HallExpenses() {
         <button onClick={exportCSV} style={{ padding:"9px 14px", borderRadius:8, border:"1.5px solid #e5e3de", background:"#fff", cursor:"pointer", fontFamily:"inherit", fontWeight:700, fontSize:11, whiteSpace:"nowrap" }}>⬇ CSV</button>
       </div>
 
+      {/* ── Filtered total bar ── */}
+      <div style={{ display:"flex", gap:12, marginBottom:10, flexWrap:"wrap" }}>
+        <div style={{ fontSize:12, color:C.dim }}>
+          <strong style={{ color:"#333" }}>{filtered.length}</strong> records &nbsp;·&nbsp;
+          Total: <strong style={{ color:C.red }}>{money(filteredTotal)}</strong>
+        </div>
+      </div>
+
       {/* ── Expenses table ── */}
       <div style={{ background:"#fff", border:`1.5px solid ${C.border}`, borderRadius:12, overflowX:"auto" }}>
-        <table style={{ width:"100%", borderCollapse:"collapse", minWidth:620 }}>
+        <table style={{ width:"100%", borderCollapse:"collapse", minWidth:640 }}>
           <thead>
             <tr style={{ background:"#fafaf8" }}>
-              {["Date","Category","Description","Amount","Payment","Receipt","Actions"].map(h=>(
+              {["Date","Type","Category","Description","Amount","Payment","Receipt","Actions"].map(h=>(
                 <th key={h} style={{ padding:"10px 12px", fontSize:10, color:C.dim, fontWeight:800, textTransform:"uppercase", letterSpacing:.5, borderBottom:`1.5px solid ${C.border}`, textAlign:"left" }}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 ? (
-              <tr><td colSpan={7} style={{ textAlign:"center", padding:28, color:C.dim, fontSize:13 }}>No expenses found.</td></tr>
+              <tr><td colSpan={8} style={{ textAlign:"center", padding:32, color:C.dim, fontSize:13 }}>No expenses found.</td></tr>
             ) : filtered.map(e => {
-              const cd = EXP_CATS[e.cat]||EXP_CATS["Other"];
+              const isBiz = e.expType === "business";
+              const cd = EXP_CATS[e.cat] || EXP_CATS["Other"];
               return (
                 <tr key={e.id} style={{ borderBottom:"1px solid #f0ede8" }}>
                   <td style={{ padding:"10px 12px", fontSize:12 }}>
@@ -349,18 +426,24 @@ export default function HallExpenses() {
                     {e.payPeriod && <div style={{ fontSize:10, color:C.dim }}>{e.payPeriod}</div>}
                   </td>
                   <td style={{ padding:"10px 12px" }}>
+                    <span style={{ fontSize:10, fontWeight:800, padding:"3px 8px", borderRadius:6,
+                      background: isBiz?"#fee2e2":"#fff7ed",
+                      color: isBiz?C.red:C.orange, whiteSpace:"nowrap" }}>
+                      {isBiz ? "🏢 Business" : "💸 Non-Business"}
+                    </span>
+                  </td>
+                  <td style={{ padding:"10px 12px" }}>
                     <div style={{ display:"flex", alignItems:"center", gap:7 }}>
-                      <span style={{ width:28, height:28, borderRadius:7, background:cd.bg, display:"flex", alignItems:"center", justifyContent:"center", fontSize:14, flexShrink:0 }}>{cd.i}</span>
+                      <span style={{ width:28, height:28, borderRadius:7, background:cd?.bg||"#f5f5f5", display:"flex", alignItems:"center", justifyContent:"center", fontSize:14, flexShrink:0 }}>{cd?.i||"📌"}</span>
                       <div>
                         <div style={{ fontWeight:700, fontSize:12 }}>{e.cat}</div>
                         {e.empName && <div style={{ fontSize:10, color:C.dim }}>{e.empName}{e.empRole?" · "+e.empRole:""}</div>}
-                        {e.expType==="personal" && <span style={{ fontSize:9, fontWeight:700, color:"#6c3483", background:"#f0e8ff", padding:"1px 5px", borderRadius:4 }}>Personal</span>}
                       </div>
                     </div>
                   </td>
                   <td style={{ padding:"10px 12px", fontSize:12, color:C.dim }}>{e.desc || "—"}</td>
                   <td style={{ padding:"10px 12px" }}>
-                    <div style={{ fontWeight:800, color:C.red, fontFamily:"'Playfair Display',serif", fontSize:14 }}>৳{(e.amount||0).toLocaleString()}</div>
+                    <div style={{ fontWeight:800, color:isBiz?C.red:C.orange, fontFamily:"'Playfair Display',serif", fontSize:14 }}>৳{(e.amount||0).toLocaleString()}</div>
                   </td>
                   <td style={{ padding:"10px 12px", fontSize:12 }}>{e.payMethod || "Cash"}</td>
                   <td style={{ padding:"10px 12px" }}>
