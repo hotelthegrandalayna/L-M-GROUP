@@ -2186,6 +2186,55 @@ function InvForm({
               style={inputStyle()}
             />
           </Field>
+
+          <SubSection label="🪑 TABLES & WAITERS">
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit,minmax(120px,1fr))",
+                gap: 12,
+              }}
+            >
+              <Field label="Tables">
+                <input
+                  type="number"
+                  value={d.wTables || ""}
+                  onChange={(e) => set("wTables", e.target.value)}
+                  placeholder="0"
+                  style={inputStyle()}
+                />
+              </Field>
+              <Field label="Waiters">
+                <input
+                  type="number"
+                  value={d.wWaiters || ""}
+                  onChange={(e) => set("wWaiters", e.target.value)}
+                  placeholder="0"
+                  style={inputStyle()}
+                />
+              </Field>
+              <Field label="Price / Waiter (৳)">
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={d.wWaiterPrice || ""}
+                  onChange={(e) => set("wWaiterPrice", e.target.value.replace(/[^\d.]/g, ""))}
+                  placeholder="0"
+                  style={inputStyle()}
+                />
+              </Field>
+              <Field label="Waiters Total (auto)">
+                <input
+                  readOnly
+                  value={
+                    wWaiterTotal > 0 ? "৳" + wWaiterTotal.toLocaleString() : ""
+                  }
+                  placeholder="0"
+                  style={inputStyle({ background: "#f8f8f8" })}
+                />
+              </Field>
+            </div>
+          </SubSection>
         </Section>
       )}
 
@@ -2988,7 +3037,7 @@ function InvForm({
                     </span>
                   </div>
                 )}
-                {isWedding && wWaiterTotal > 0 && (
+                {(isWedding || isGeneric) && wWaiterTotal > 0 && (
                   <div
                     style={{
                       fontSize: 12,
@@ -3714,6 +3763,7 @@ function InvDetail({
 
     const isWedding = et?.g === "wedding" || et?.v === "Wedding + Holud";
     const isHolud = et?.v === "Holud" || et?.v === "Wedding + Holud";
+    const isGenericEv = et?.g === "generic";
 
     const extras = calcExtras(inv);
 
@@ -3751,7 +3801,7 @@ function InvDetail({
       isHolud && extras.hWaiters > 0
         ? ["Holud", inv.hWaiters, inv.hWaiterPrice, extras.hWaiters]
         : null,
-      isWedding && extras.wWaiters > 0
+      (isWedding || isGenericEv) && extras.wWaiters > 0
         ? [wLabel, inv.wWaiters, inv.wWaiterPrice, extras.wWaiters]
         : null,
     ].filter(Boolean);

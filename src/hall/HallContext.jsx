@@ -37,6 +37,7 @@ export const EV_TYPES = [
   { v:"Wedding + Holud",i:"💒🌼",g:"wh",    bg:"#f5f0ff", border:"#9370DB", accent:"#6030b0" },
   { v:"Reception",      i:"🎊", g:"wedding", bg:"#f0f8ff", border:"#4a90d9", accent:"#1a5fa0" },
   { v:"Engagement",     i:"💍", g:"wedding", bg:"#fff0f8", border:"#d060a0", accent:"#a03070" },
+  { v:"Mazbani",        i:"🍛", g:"generic", bg:"#fdf4e8", border:"#c98a3a", accent:"#8a5a10" },
   { v:"Birthday",       i:"🎂", g:"generic", bg:"#fff5ee", border:"#e0803a", accent:"#b05010" },
   { v:"Corporate Event",i:"🏢", g:"generic", bg:"#f0f4ff", border:"#4060c8", accent:"#204090" },
   { v:"Others",         i:"🎉", g:"generic", bg:"#f0fff4", border:"#30a060", accent:"#1a7040" },
