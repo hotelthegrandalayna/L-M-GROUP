@@ -102,15 +102,18 @@ export function buildInvoiceHTML(b, rooms, invExtras, mode) {
       + '<div style="padding-right:18px;">'
         + '<div style="font-size:10px;font-weight:800;letter-spacing:2px;text-transform:uppercase;color:#C9A84C;margin-bottom:6px;">Bill To</div>'
         + '<div style="font-size:18px;font-weight:700;color:#000;font-family:Georgia,serif;margin-bottom:2px;">'+b.guest+'</div>'
+        + '<div style="font-size:10px;color:#555;margin-bottom:2px;">'+b.phone+'</div>'
         + (b.spouseName ? '<div style="font-size:12px;color:#555;margin-bottom:3px;">& '+b.spouseName+(b.spousePhone ? ' · '+b.spousePhone : '')+'</div>' : '')
         + ((b.groupMembers && b.groupMembers.length)
-            ? '<div style="font-size:10px;color:#555;margin-bottom:3px;line-height:1.6;">Members: '
+            ? '<div style="font-size:10px;color:#555;margin:4px 0 3px;line-height:1.7;">'
+              + '<div style="font-size:8.5px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:#C9A84C;margin-bottom:2px;">Group Members</div>'
               + b.groupMembers
-                  .map(m => typeof m === 'string' ? m : ((m.name||'') + (m.phone ? ' ('+m.phone+')' : '')))
-                  .filter(Boolean).join(', ')
+                  .map(m => typeof m === 'string' ? m : ((m.name||'') + (m.phone ? ' — '+m.phone : '')))
+                  .filter(Boolean)
+                  .map(line => '<div>• '+line+'</div>')
+                  .join('')
               + '</div>'
             : '')
-        + '<div style="font-size:10px;color:#555;margin-bottom:2px;">'+b.phone+'</div>'
         + (b.idNum ? '<div style="font-size:9.5px;color:#aaa;">'+b.idType+': '+b.idNum+'</div>' : '')
       + '</div>'
       + '<div style="padding-left:18px;border-left:1px solid #e8e4dc;">'
