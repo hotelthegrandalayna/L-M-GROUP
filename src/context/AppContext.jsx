@@ -77,6 +77,8 @@ export function AppProvider({ children }) {
   const [revenues,     setRevenues]   = useState(() => ls('ga_revenues', []));
   const [expenses,     setExpenses]   = useState(() => ls('ga_expenses', []));
   const [expTypes,     setExpTypesRaw] = useState(() => ls('ga_exp_types', {}));
+  // Companions (spouse/group members with phones) per booking id — synced via app_config
+  const [companionsMap, setCompanionsMap] = useState(() => ls('ga_companions', {}));
   const [loyaltyData,  setLoyalty]    = useState(() => ls('ga_loyalty', {}));
   const [surveyData,   setSurveys]    = useState(() => ls('ga_surveys', []));
   const [guestProfiles,setGuests]     = useState(() => ls('ga_guests', {}));
@@ -195,25 +197,30 @@ export function AppProvider({ children }) {
         });
         // Preserve fields not in Supabase schema by merging with local version.
         const localSnap = (() => { try { return JSON.parse(localStorage.getItem('ga_bookings') || '[]'); } catch { return []; } })();
+        // Companions synced via app_config — lets other devices restore spouse/group members
+        const compSnap = (() => { try { return JSON.parse(localStorage.getItem('ga_companions') || '{}'); } catch { return {}; } })();
         const merged = filtered.map(sb => {
           const loc = localSnap.find(l => l.id === sb.id);
-          if (!loc) return sb;
+          const comp = compSnap[String(sb.id)] || null;
+          if (!loc && !comp) return sb;
+          const l = loc || {};
           return {
             ...sb,
-            discAmt:          sb.discAmt        || loc.discAmt        || 0,
-            discType:         sb.discType       || loc.discType       || "",
-            discReason:       sb.discReason     || loc.discReason     || "",
-            baseAmount:       sb.baseAmount     || loc.baseAmount     || 0,
+            discAmt:          sb.discAmt        || l.discAmt        || 0,
+            discType:         sb.discType       || l.discType       || "",
+            discReason:       sb.discReason     || l.discReason     || "",
+            baseAmount:       sb.baseAmount     || l.baseAmount     || 0,
             // No Supabase column — always restore from local
-            invoiceExtras:    loc.invoiceExtras?.length  ? loc.invoiceExtras  : (sb.invoiceExtras  || []),
-            extrasAdvance:    loc.extrasAdvance != null  ? loc.extrasAdvance  : (sb.extrasAdvance  || 0),
-            paymentHistory:   loc.paymentHistory?.length ? loc.paymentHistory : (sb.paymentHistory || []),
-            extraPersonCharge: loc.extraPersonCharge || sb.extraPersonCharge || null,
-            invoiceDate:      loc.invoiceDate    || sb.invoiceDate    || "",
-            tcPrinted:        loc.tcPrinted      || sb.tcPrinted      || false,
-            guestType:        loc.guestType      || sb.guestType      || "single",
-            spouseName:       loc.spouseName     || sb.spouseName     || "",
-            groupMembers:     loc.groupMembers?.length ? loc.groupMembers : (sb.groupMembers || []),
+            invoiceExtras:    l.invoiceExtras?.length  ? l.invoiceExtras  : (sb.invoiceExtras  || []),
+            extrasAdvance:    l.extrasAdvance != null  ? l.extrasAdvance  : (sb.extrasAdvance  || 0),
+            paymentHistory:   l.paymentHistory?.length ? l.paymentHistory : (sb.paymentHistory || []),
+            extraPersonCharge: l.extraPersonCharge || sb.extraPersonCharge || null,
+            invoiceDate:      l.invoiceDate    || sb.invoiceDate    || "",
+            tcPrinted:        l.tcPrinted      || sb.tcPrinted      || false,
+            guestType:        l.guestType      || sb.guestType      || comp?.guestType || "single",
+            spouseName:       l.spouseName     || sb.spouseName     || comp?.spouseName || "",
+            spousePhone:      l.spousePhone    || sb.spousePhone    || comp?.spousePhone || "",
+            groupMembers:     l.groupMembers?.length ? l.groupMembers : (sb.groupMembers?.length ? sb.groupMembers : (comp?.groupMembers || [])),
           };
         });
         setBookings(merged);
@@ -263,7 +270,7 @@ export function AppProvider({ children }) {
     const sbUrl = (import.meta.env?.VITE_SUPABASE_URL || '').trim();
     const sbKey = ((import.meta.env?.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env?.VITE_SUPABASE_ANON_KEY) || '').trim();
     if (sbUrl && sbKey) {
-      const configKeys = ['hotel_guest_profiles','hotel_sms_tpl','hotel_pricing','hotel_loyalty_rules','hotel_loyalty_data','hotel_inv_items','hotel_extra_person','hotel_surveys','hotel_staff','hotel_login_monitor','hotel_recovery_emails','hotel_exp_types','hall_staff_renames','hall_sms_config'];
+      const configKeys = ['hotel_guest_profiles','hotel_sms_tpl','hotel_pricing','hotel_loyalty_rules','hotel_loyalty_data','hotel_inv_items','hotel_extra_person','hotel_surveys','hotel_staff','hotel_login_monitor','hotel_recovery_emails','hotel_exp_types','hotel_booking_companions','hall_staff_renames','hall_sms_config'];
       fetch(sbUrl.replace(/\/$/, '') + '/rest/v1/app_config?key=in.(' + configKeys.join(',') + ')', {
         headers: { apikey: sbKey, Authorization: 'Bearer ' + sbKey },
       })
@@ -313,6 +320,15 @@ export function AppProvider({ children }) {
                     // Merge: cloud wins for existing keys, keep local-only keys
                     const merged = { ...prev, ...v };
                     localStorage.setItem('ga_exp_types', JSON.stringify(merged));
+                    return merged;
+                  });
+                }
+                break;
+              case 'hotel_booking_companions':
+                if (typeof v === 'object') {
+                  setCompanionsMap(prev => {
+                    const merged = { ...prev, ...v };
+                    localStorage.setItem('ga_companions', JSON.stringify(merged));
                     return merged;
                   });
                 }
@@ -462,6 +478,29 @@ export function AppProvider({ children }) {
       return val; // React state always has full data
     });
   }, []);
+
+  // Push companion info (spouse/group members) to Supabase app_config whenever
+  // bookings change — there's no bookings column for it, and it must reach all devices.
+  useEffect(() => {
+    const comp = {};
+    bookings.forEach(b => {
+      if (b.spouseName || b.spousePhone || (b.groupMembers && b.groupMembers.length)) {
+        comp[String(b.id)] = {
+          guestType: b.guestType || "single",
+          spouseName: b.spouseName || "", spousePhone: b.spousePhone || "",
+          groupMembers: b.groupMembers || [],
+        };
+      }
+    });
+    if (!Object.keys(comp).length) return;
+    setCompanionsMap(prev => {
+      const merged = { ...prev, ...comp };
+      if (JSON.stringify(merged) === JSON.stringify(prev)) return prev;
+      try { localStorage.setItem('ga_companions', JSON.stringify(merged)); } catch { /* quota */ }
+      if (hasSupabase()) saveConfig('hotel_booking_companions', merged).catch(() => {});
+      return merged;
+    });
+  }, [bookings]);
 
   const updateRevenues = useCallback((next) => {
     setRevenues(prev => {

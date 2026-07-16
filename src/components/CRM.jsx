@@ -302,6 +302,28 @@ export default function CRM() {
       map[key].totalSpent  += (b.invoiceTotal ?? b.amount) || 0;
       map[key].totalNights += b.nights || 0;
       map[key].name = b.guest; // keep latest name
+
+      // Companions — spouse and group members with their own phone numbers
+      // become CRM guests too (stay recorded, but spend stays on the payer).
+      const companions = [
+        ...(b.spouseName && b.spousePhone ? [{ name: b.spouseName, phone: b.spousePhone }] : []),
+        ...((b.groupMembers || []).map(m => typeof m === "string" ? { name: m, phone: "" } : m)),
+      ].filter(m => m && m.name && m.phone);
+      companions.forEach(m => {
+        const mkey = m.phone.replace(/\D/g, "");
+        if (!mkey || mkey === key) return;
+        if (!map[mkey]) map[mkey] = {
+          key: mkey, phone: m.phone, name: m.name, nationality: "",
+          idType: "", idNum: "",
+          stays: [], totalSpent: 0, totalNights: 0,
+          savedProfile: (guestProfiles || {})[mkey] || {} };
+        map[mkey].stays.push({
+          id: b.id, checkin: b.checkin, checkout: b.checkout,
+          room: b.room, amount: 0,
+          nights: b.nights || 0, status: b.status, source: "Companion of " + b.guest });
+        map[mkey].totalNights += b.nights || 0;
+        map[mkey].name = m.name;
+      });
     });
     return map;
   }, [bookings, guestProfiles]);
