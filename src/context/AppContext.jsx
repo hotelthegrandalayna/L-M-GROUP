@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
-import { hasHotelSupabaseConfig, loadHotelBookingsFromSupabase, loadRoomsFromSupabase, saveRoomsToSupabase } from "../lib/hotelSupabase";
+import { hasHotelSupabaseConfig, loadHotelBookingsFromSupabase, loadRoomsFromSupabase, saveRoomsToSupabase, persistHotelBookingBundle } from "../lib/hotelSupabase";
 import { hasSupabase, upsertRows, loadRows, saveConfig, loadConfig } from "../utils/supabaseSync";
 import { syncNtfyConfigFromSupabase } from "../utils/ntfy";
 import { supabase } from "../lib/supabaseClient";
@@ -223,10 +223,23 @@ export function AppProvider({ children }) {
             groupMembers:     l.groupMembers?.length ? l.groupMembers : (sb.groupMembers?.length ? sb.groupMembers : (comp?.groupMembers || [])),
           };
         });
-        setBookings(merged);
+        // Never drop local bookings that haven't reached Supabase (failed insert) —
+        // keep them visible and retry the push, so a save failure can't silently
+        // lose a booking on the next sync.
+        const remoteIds2 = new Set(filtered.map(b => String(b.id)));
+        const localOnly = localSnap.filter(l =>
+          l && l.id != null && l.guest &&
+          !remoteIds2.has(String(l.id)) &&
+          !remoteIds2.has(String(l.supabaseBookingId ?? '')) &&
+          !deletedIds.has(String(l.id)) &&
+          !deletedIds.has(String(l.supabaseBookingId ?? ''))
+        );
+        localOnly.forEach(b => { persistHotelBookingBundle(b).catch(() => {}); });
+        const withLocalOnly = [...merged, ...localOnly];
+        setBookings(withLocalOnly);
         const cutoff2 = new Date(); cutoff2.setMonth(cutoff2.getMonth() - 6);
         const cutoffStr2 = cutoff2.toISOString().slice(0, 10);
-        const trimmed2 = merged.filter(b => ['confirmed','checked-in'].includes(b.status) || (b.checkout && b.checkout >= cutoffStr2));
+        const trimmed2 = withLocalOnly.filter(b => ['confirmed','checked-in'].includes(b.status) || (b.checkout && b.checkout >= cutoffStr2));
         try { localStorage.setItem('ga_bookings', JSON.stringify(trimmed2)); } catch { /* quota full */ }
       })
       .catch((err) => {

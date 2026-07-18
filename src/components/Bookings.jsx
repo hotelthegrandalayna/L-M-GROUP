@@ -742,7 +742,7 @@ function NewBookingModal({ onClose, prefill }) {
       })
       .catch((err) => {
         console.error("Failed to sync hotel booking to Supabase:", err);
-        notify("Booking saved locally, but Supabase sync failed", "error");
+        notify("⚠ CLOUD SAVE FAILED — " + (err?.message || "network error") + ". Booking kept on this device and will retry automatically.", "error");
       });
     sendWhatsAppAlert(buildHotelWaMessage(finalBk)).catch(() => {});
     sendNtfyAlert(
