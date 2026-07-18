@@ -1,8 +1,9 @@
 
 import { createContext, useContext, useState, useCallback, useEffect } from "react";
-import { hasHallSupabaseConfig, loadHallInvoicesFromSupabase } from "./lib/hallSupabase";
+import { hasHallSupabaseConfig, loadHallInvoicesFromSupabase, persistHallInvoiceBundle } from "./lib/hallSupabase";
 import { hasSupabase, upsertRow, upsertRows, deleteRow, loadRows } from "../utils/supabaseSync";
 import { syncNtfyConfigFromSupabase } from "../utils/ntfy";
+import { runDailyBackup } from "../utils/dailyBackup";
 import { supabase } from "../lib/supabaseClient";
 
 const Ctx = createContext(null);
@@ -30,6 +31,29 @@ function resolveUsers() {
 }
 
 function loadLS(key, def) { try { return JSON.parse(localStorage.getItem(key) || "null") || def; } catch { return def; } }
+
+// ── Deleted-ID ledger — a record deleted on this device can never be
+// re-pushed to the cloud from a stale cache (prevents resurrection).
+const DELETED_IDS_KEY = "a_deleted_ids_v1";
+export function loadDeletedIds() {
+  try { return JSON.parse(localStorage.getItem(DELETED_IDS_KEY) || "{}"); } catch { return {}; }
+}
+export function recordDeletedId(kind, id) {
+  try {
+    const m = loadDeletedIds();
+    m[kind] = [...new Set([...(m[kind] || []), String(id)])].slice(-500);
+    localStorage.setItem(DELETED_IDS_KEY, JSON.stringify(m));
+  } catch {}
+}
+// Local rows missing from the cloud (failed save) are KEPT and re-pushed —
+// a sync must never erase data that only exists on this device.
+function localOnlyRows(remote, cacheKey, kind) {
+  let local = []; try { local = JSON.parse(localStorage.getItem(cacheKey) || "[]"); } catch {}
+  if (!Array.isArray(local)) return [];
+  const del = new Set(loadDeletedIds()[kind] || []);
+  const rIds = new Set(remote.map(x => String(x.id)));
+  return local.filter(x => x && x.id != null && !rIds.has(String(x.id)) && !del.has(String(x.id)));
+}
 
 export const EV_TYPES = [
   { v:"Wedding",        i:"💒", g:"wedding", bg:"#fff0f0", border:"#e07070", accent:"#9B1212" },
@@ -128,8 +152,21 @@ export function HallProvider({ children }) {
     try {
       const remoteInvoices = await loadHallInvoicesFromSupabase();
       if (remoteInvoices.length) {
-        setInvoicesRaw(remoteInvoices);
-        localStorage.setItem("a_inv", JSON.stringify(remoteInvoices));
+        const localOnly = localOnlyRows(remoteInvoices, "a_inv", "inv");
+        // Re-push invoices that never reached the cloud (failed save)
+        localOnly.forEach(inv => {
+          persistHallInvoiceBundle(inv).then(res => {
+            if (res?.skipped || !res?.invoice) return;
+            setInvoicesRaw(prev => {
+              const v = prev.map(x => (x.id === inv.id ? res.invoice : x));
+              localStorage.setItem("a_inv", JSON.stringify(v));
+              return v;
+            });
+          }).catch(() => {});
+        });
+        const mergedInv = [...remoteInvoices, ...localOnly];
+        setInvoicesRaw(mergedInv);
+        localStorage.setItem("a_inv", JSON.stringify(mergedInv));
       }
     } catch (err) {
       console.error("Failed to load hall invoices from Supabase:", err);
@@ -146,8 +183,20 @@ export function HallProvider({ children }) {
           invoiceId: r.invoice_id, invoiceNum: r.invoice_num,
           createdAt: r.created_at, updatedAt: r.updated_at,
         }));
-        setLeadsRaw(leads);
-        localStorage.setItem("a_crm_leads", JSON.stringify(leads));
+        const localOnly = localOnlyRows(leads, "a_crm_leads", "lead");
+        if (localOnly.length) {
+          upsertRows("crm_leads", localOnly.map(l => ({
+            id: String(l.id), num: l.num || "", name: l.name || "", phone: l.phone || "",
+            ev_type: l.evType || "", ev_date: l.evDate || "", guests: l.guests || "",
+            source: l.source || "", stage: l.stage || "New Enquiry",
+            follow_date: l.followDate || null, assigned: l.assigned || "admin",
+            notes: l.notes || "", invoice_id: l.invoiceId || null, invoice_num: l.invoiceNum || null,
+            updated_at: new Date().toISOString(),
+          }))).catch(() => {});
+        }
+        const mergedLeads = [...leads, ...localOnly];
+        setLeadsRaw(mergedLeads);
+        localStorage.setItem("a_crm_leads", JSON.stringify(mergedLeads));
       }
     } catch {}
 
@@ -178,8 +227,16 @@ export function HallProvider({ children }) {
       const rows = await loadRows("hall_expenses");
       if (rows && rows.length) {
         const exps = rows.map(r => ({ id: r.id, date: r.date, cat: r.category, desc: r.note, amount: r.amount, by: r.by }));
-        setExpensesRaw(exps);
-        localStorage.setItem("a_exp", JSON.stringify(exps));
+        const localOnly = localOnlyRows(exps, "a_exp", "exp");
+        if (localOnly.length) {
+          upsertRows("hall_expenses", localOnly.map(e => ({
+            id: String(e.id), date: e.date, category: e.cat || e.category || "",
+            amount: e.amount || 0, note: e.desc || e.note || "", by: e.by || "",
+          }))).catch(() => {});
+        }
+        const mergedExps = [...exps, ...localOnly];
+        setExpensesRaw(mergedExps);
+        localStorage.setItem("a_exp", JSON.stringify(mergedExps));
       }
     } catch {}
 
@@ -190,10 +247,23 @@ export function HallProvider({ children }) {
           id: r.id, date: r.date, source: r.source,
           amount: r.amount, note: r.note, by: r.by,
         }));
-        setRevenuesRaw(revs);
-        localStorage.setItem("a_hall_rev", JSON.stringify(revs));
+        const localOnly = localOnlyRows(revs, "a_hall_rev", "rev");
+        if (localOnly.length) {
+          upsertRows("hall_revenues", localOnly.map(r => ({
+            id: String(r.id), date: r.date, source: r.source || "",
+            amount: r.amount || 0, note: r.note || "", by: r.by || "",
+          }))).catch(() => {});
+        }
+        const mergedRevs = [...revs, ...localOnly];
+        setRevenuesRaw(mergedRevs);
+        localStorage.setItem("a_hall_rev", JSON.stringify(mergedRevs));
       }
     } catch {}
+  }, []);
+
+  useEffect(() => {
+    const t = setTimeout(() => runDailyBackup(), 90_000);
+    return () => clearTimeout(t);
   }, []);
 
   useEffect(() => {
@@ -220,16 +290,18 @@ export function HallProvider({ children }) {
           loadRows("hall_expenses").then(rows => {
             if (!rows?.length) return;
             const exps = rows.map(r => ({ id: r.id, date: r.date, cat: r.category, desc: r.note, amount: r.amount, by: r.by }));
-            setExpensesRaw(exps);
-            localStorage.setItem("a_exp", JSON.stringify(exps));
+            const merged = [...exps, ...localOnlyRows(exps, "a_exp", "exp")];
+            setExpensesRaw(merged);
+            localStorage.setItem("a_exp", JSON.stringify(merged));
           }).catch(() => {});
         })
         .on("postgres_changes", { event: "*", schema: "public", table: "hall_revenues" }, () => {
           loadRows("hall_revenues").then(rows => {
             if (!rows?.length) return;
             const revs = rows.map(r => ({ id: r.id, date: r.date, source: r.source, amount: r.amount, note: r.note, by: r.by }));
-            setRevenuesRaw(revs);
-            localStorage.setItem("a_hall_rev", JSON.stringify(revs));
+            const merged = [...revs, ...localOnlyRows(revs, "a_hall_rev", "rev")];
+            setRevenuesRaw(merged);
+            localStorage.setItem("a_hall_rev", JSON.stringify(merged));
           }).catch(() => {});
         })
         .on("postgres_changes", { event: "*", schema: "public", table: "invoices" }, () => {
@@ -239,8 +311,9 @@ export function HallProvider({ children }) {
           loadRows("crm_leads").then(rows => {
             if (!rows?.length) return;
             const leads = rows.map(r => ({ id: r.id, num: r.num, name: r.name, phone: r.phone, evType: r.ev_type, evDate: r.ev_date, guests: r.guests, source: r.source, stage: r.stage, followDate: r.follow_date, assigned: r.assigned, notes: r.notes, invoiceId: r.invoice_id, invoiceNum: r.invoice_num, createdAt: r.created_at, updatedAt: r.updated_at }));
-            setLeadsRaw(leads);
-            localStorage.setItem("a_crm_leads", JSON.stringify(leads));
+            const merged = [...leads, ...localOnlyRows(leads, "a_crm_leads", "lead")];
+            setLeadsRaw(merged);
+            localStorage.setItem("a_crm_leads", JSON.stringify(merged));
           }).catch(() => {});
         })
         .subscribe();
@@ -272,6 +345,7 @@ export function HallProvider({ children }) {
   }, [expenses]);
 
   const deleteExpense = useCallback((id) => {
+    recordDeletedId("exp", id);
     setExpensesRaw(prev => {
       const next = prev.filter(e => String(e.id) !== String(id));
       localStorage.setItem("a_exp", JSON.stringify(next));

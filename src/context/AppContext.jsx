@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import { hasHotelSupabaseConfig, loadHotelBookingsFromSupabase, loadRoomsFromSupabase, saveRoomsToSupabase, persistHotelBookingBundle } from "../lib/hotelSupabase";
 import { hasSupabase, upsertRows, loadRows, saveConfig, loadConfig } from "../utils/supabaseSync";
+import { runDailyBackup } from "../utils/dailyBackup";
 import { syncNtfyConfigFromSupabase } from "../utils/ntfy";
 import { supabase } from "../lib/supabaseClient";
 
@@ -58,6 +59,20 @@ function initRooms() {
 }
 
 const AppContext = createContext(null);
+
+// ── Hotel deleted-ID ledger — a record deleted here can never be re-pushed
+// from a stale cache on this or another sync cycle (prevents resurrection).
+const GA_DELETED_KEY = 'ga_deleted_ids_v1';
+export function gaLoadDeleted() {
+  try { return JSON.parse(localStorage.getItem(GA_DELETED_KEY) || '{}'); } catch { return {}; }
+}
+export function gaRecordDeleted(kind, id) {
+  try {
+    const m = gaLoadDeleted();
+    m[kind] = [...new Set([...(m[kind] || []), String(id)])].slice(-500);
+    localStorage.setItem(GA_DELETED_KEY, JSON.stringify(m));
+  } catch {}
+}
 
 export function AppProvider({ children }) {
   // Auth — restore session from localStorage so page refresh keeps you logged in
@@ -270,13 +285,22 @@ export function AppProvider({ children }) {
         }
       }).catch(() => {});
 
-    // Sync expenses — always pull so all devices stay in sync
+    // Sync expenses — pull remote, but NEVER drop local rows that failed to
+    // reach Supabase; keep them and re-push (a sync must never lose data).
     loadRows("expenses", "&order=date.desc")
       .then(rows => {
         if (!rows || !rows.length) return;
         const exps = rows.map(r => ({ id: r.id, date: r.date, category: r.category, amount: r.amount, note: r.note, by: r.by }));
-        setExpenses(exps);
-        localStorage.setItem('ga_expenses', JSON.stringify(exps));
+        const localExps = (() => { try { return JSON.parse(localStorage.getItem('ga_expenses') || '[]'); } catch { return []; } })();
+        const delExp = new Set(gaLoadDeleted().exp || []);
+        const remoteIds = new Set(exps.map(e => String(e.id)));
+        const localOnly = localExps.filter(e => e && e.id != null && !remoteIds.has(String(e.id)) && !delExp.has(String(e.id)));
+        if (localOnly.length) {
+          upsertRows("expenses", localOnly.map(e => ({ id: String(e.id), date: e.date, category: e.category || "", amount: e.amount || 0, note: e.note || "", by: e.by || "" }))).catch(() => {});
+        }
+        const mergedExps = [...exps, ...localOnly];
+        setExpenses(mergedExps);
+        localStorage.setItem('ga_expenses', JSON.stringify(mergedExps));
       }).catch(() => {});
 
     // Sync all config from app_config in one request
@@ -403,8 +427,13 @@ export function AppProvider({ children }) {
           loadRows("expenses", "&order=date.desc").then(rows => {
             if (!rows?.length) return;
             const exps = rows.map(r => ({ id: r.id, date: r.date, category: r.category, amount: r.amount, note: r.note, by: r.by }));
-            setExpenses(exps);
-            try { localStorage.setItem('ga_expenses', JSON.stringify(exps)); } catch {}
+            const localExps = (() => { try { return JSON.parse(localStorage.getItem('ga_expenses') || '[]'); } catch { return []; } })();
+            const delExp = new Set(gaLoadDeleted().exp || []);
+            const remoteIds = new Set(exps.map(e => String(e.id)));
+            const localOnly = localExps.filter(e => e && e.id != null && !remoteIds.has(String(e.id)) && !delExp.has(String(e.id)));
+            const mergedExps = [...exps, ...localOnly];
+            setExpenses(mergedExps);
+            try { localStorage.setItem('ga_expenses', JSON.stringify(mergedExps)); } catch {}
           }).catch(() => {});
         })
         .on("postgres_changes", { event: "*", schema: "public", table: "app_config" }, () => {
@@ -490,6 +519,13 @@ export function AppProvider({ children }) {
       try { localStorage.setItem('ga_bookings', JSON.stringify(trimmed)); } catch { /* quota full */ }
       return val; // React state always has full data
     });
+  }, []);
+
+  // Daily rolling cloud backup — runs once per day, 90s after load so the
+  // initial sync has settled and the snapshot reflects fresh data.
+  useEffect(() => {
+    const t = setTimeout(() => runDailyBackup(), 90_000);
+    return () => clearTimeout(t);
   }, []);
 
   // Push companion info (spouse/group members) to Supabase app_config whenever

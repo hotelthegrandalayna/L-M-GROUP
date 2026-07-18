@@ -2,6 +2,7 @@ import { useState, useMemo, useRef } from "react";
 import { useApp } from "../context/AppContext";
 import { todayStr, money } from "../utils/helpers";
 import { deleteRow, hasSupabase } from "../utils/supabaseSync";
+import { gaRecordDeleted } from "../context/AppContext";
 import { hotelExpenseType } from "../utils/expenseType";
 import CostAnalysis from "./CostAnalysis";
 
@@ -229,6 +230,7 @@ export default function Expenses() {
   }
 
   function confirmDelete() {
+    gaRecordDeleted("exp", delTarget.id);
     removeExpenseType(delTarget.id);
     updateExpenses(expenses.filter(e => e.id !== delTarget.id));
     if (hasSupabase()) deleteRow("expenses", delTarget.id).catch(() => {});

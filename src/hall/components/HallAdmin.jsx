@@ -1,6 +1,6 @@
 
 import { useState, useMemo, useEffect } from "react";
-import { useHall, EV_TYPES, checkHallAdminPass, invBilled, invCollected, invOutstanding, invInMonth, sumBy, businessExpensesOnly } from "../HallContext";
+import { useHall, EV_TYPES, checkHallAdminPass, invBilled, invCollected, invOutstanding, invInMonth, sumBy, businessExpensesOnly, recordDeletedId } from "../HallContext";
 import useIsMobile from "../useIsMobile";
 import { loadWaConfig, saveWaConfig, sendWhatsAppAlert } from "../../utils/whatsapp";
 import { loadNtfyConfig, saveNtfyConfig, sendNtfyAlert } from "../../utils/ntfy";
@@ -160,6 +160,7 @@ export default function HallAdmin() {
   function bulkDelete() {
     if (!selectedIds.length) return;
     if (!window.confirm(`Delete ${selectedIds.length} invoice(s)? This cannot be undone.`)) return;
+    selectedIds.forEach(id => recordDeletedId("inv", id));
     void deleteHallInvoicesFromSupabase(selectedIds).catch(err => console.error(err));
     setInvoices(prev => prev.filter(i => !selectedIds.includes(i.id)));
     setSelectedIds([]);
@@ -323,6 +324,7 @@ export default function HallAdmin() {
     if (!window.confirm("Permanently delete ALL invoices? This cannot be undone.")) return;
     const backup = { invoices, at: new Date().toISOString() };
     localStorage.setItem("a_inv_backup", JSON.stringify(backup));
+    invoices.forEach(i => recordDeletedId("inv", i.id));
     void deleteHallInvoicesFromSupabase(invoices.map(i => i.id)).catch(err => {
       console.error("Failed to clear hall invoices from Supabase:", err);
     });
@@ -639,7 +641,7 @@ export default function HallAdmin() {
                       </td>
                       <td style={{ padding:"10px 12px" }} onClick={e=>e.stopPropagation()}>
                         {isAdmin && (
-                          <button onClick={()=>{ if(window.confirm("Delete invoice "+inv.num+"?")){ setInvoices(prev=>prev.filter(i=>i.id!==inv.id)); void deleteHallInvoiceFromSupabase(inv.id).catch(err => { console.error("Failed to delete hall invoice from Supabase:", err); }); notify("Invoice deleted","success"); } }}
+                          <button onClick={()=>{ if(window.confirm("Delete invoice "+inv.num+"?")){ recordDeletedId("inv", inv.id); setInvoices(prev=>prev.filter(i=>i.id!==inv.id)); void deleteHallInvoiceFromSupabase(inv.id).catch(err => { console.error("Failed to delete hall invoice from Supabase:", err); }); notify("Invoice deleted","success"); } }}
                             style={{ padding:"4px 8px", borderRadius:7, border:`1.5px solid ${C.red}40`, background:"#fff0f0", cursor:"pointer", fontSize:12 }}>🗑</button>
                         )}
                       </td>
@@ -651,7 +653,7 @@ export default function HallAdmin() {
           </div>
 
           {/* Invoice detail modal */}
-          {viewInv && <InvoiceDetailModal inv={viewInv} onClose={()=>setViewInv(null)} isAdmin={isAdmin} onDelete={id=>{ setInvoices(prev=>prev.filter(i=>i.id!==id)); void deleteHallInvoiceFromSupabase(id).catch(()=>{}); notify("Invoice deleted","success"); setViewInv(null); }} />}
+          {viewInv && <InvoiceDetailModal inv={viewInv} onClose={()=>setViewInv(null)} isAdmin={isAdmin} onDelete={id=>{ recordDeletedId("inv", id); setInvoices(prev=>prev.filter(i=>i.id!==id)); void deleteHallInvoiceFromSupabase(id).catch(()=>{}); notify("Invoice deleted","success"); setViewInv(null); }} />}
         </div>
       )}
 

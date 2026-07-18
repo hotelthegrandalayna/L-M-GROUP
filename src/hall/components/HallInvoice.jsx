@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef, useEffect } from "react";
-import { useHall, EV_TYPES, checkHallAdminPass, invBilled, invCollected, invOutstanding, invInMonth, sumBy } from "../HallContext";
+import { useHall, EV_TYPES, checkHallAdminPass, invBilled, invCollected, invOutstanding, invInMonth, sumBy, recordDeletedId } from "../HallContext";
 import useIsMobile from "../useIsMobile";
 import { sendSmsForInvoice } from "./HallAdmin";
 import { sendWhatsAppAlert, buildHallWaMessage } from "../../utils/whatsapp";
@@ -540,6 +540,7 @@ export default function HallInvoice() {
       notify("Incorrect password", "error");
       return;
     }
+    recordDeletedId("inv", deleteModal.id);
     setInvoices((prev) => prev.filter((i) => i.id !== deleteModal.id));
     void deleteHallInvoiceFromSupabase(deleteModal.id).catch((err) => {
       console.error("Failed to delete hall invoice from Supabase:", err);
