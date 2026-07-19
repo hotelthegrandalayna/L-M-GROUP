@@ -2,6 +2,8 @@
 import { createContext, useContext, useState, useCallback, useEffect } from "react";
 import { hasHallSupabaseConfig, loadHallInvoicesFromSupabase, persistHallInvoiceBundle } from "./lib/hallSupabase";
 import { hasSupabase, upsertRow, upsertRows, deleteRow, loadRows } from "../utils/supabaseSync";
+import { restoreUserPasswords } from "../utils/userPass";
+import { onRemoteChange } from "../utils/realtimeSync";
 import { syncNtfyConfigFromSupabase } from "../utils/ntfy";
 import { runDailyBackup } from "../utils/dailyBackup";
 import { supabase } from "../lib/supabaseClient";
@@ -149,6 +151,9 @@ export function HallProvider({ children }) {
 
     syncNtfyConfigFromSupabase().catch(() => {});
 
+    // Pull password changes made on other devices
+    restoreUserPasswords().catch(() => {});
+
     try {
       const remoteInvoices = await loadHallInvoicesFromSupabase();
       if (remoteInvoices.length) {
@@ -281,6 +286,14 @@ export function HallProvider({ children }) {
     // Poll every 60s as fallback
     const interval = setInterval(() => syncHallFromSupabase(), 60_000);
 
+    // Instant broadcast ping from other devices (works even when the
+    // postgres_changes publication is not enabled on the project)
+    let pingTimer = null;
+    const offPing = onRemoteChange(() => {
+      clearTimeout(pingTimer);
+      pingTimer = setTimeout(() => syncHallFromSupabase(), 500);
+    });
+
     // Realtime — instant push on any hall data change
     let realtimeChannel = null;
     if (supabase) {
@@ -322,6 +335,8 @@ export function HallProvider({ children }) {
     return () => {
       document.removeEventListener('visibilitychange', onVisibility);
       clearInterval(interval);
+      clearTimeout(pingTimer);
+      offPing();
       if (realtimeChannel) supabase.removeChannel(realtimeChannel);
     };
   }, [syncHallFromSupabase]);

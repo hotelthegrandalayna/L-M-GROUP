@@ -9,6 +9,7 @@ import { getUnusualLogins } from "../../utils/loginLog";
 import { deleteHallInvoiceFromSupabase, deleteHallInvoicesFromSupabase } from "../lib/hallSupabase";
 import { loadPricingRules, savePricingRules, syncPricingRulesFromSupabase } from "../lib/pricingRules";
 import { hasSupabase, upsertRows, saveConfig } from "../../utils/supabaseSync";
+import { setUserPass } from "../../utils/userPass";
 
 const DEFAULT_RECOVERY_EMAILS = ["mainulhasan86@gmail.com","mainulhasan86@yahoo.com"];
 function loadRecoveryEmails() {
@@ -21,7 +22,7 @@ function saveRecoveryEmails(list) {
 
 const BASE_STAFF = { staff:"staff123", staff2:"staff456" };
 function getStaffPass(user) { return localStorage.getItem("a_pass_"+user) || BASE_STAFF[user] || ""; }
-function setStaffPass(user, pw) { localStorage.setItem("a_pass_"+user, pw); }
+function setStaffPass(user, pw) { setUserPass(user, pw); }
 function getStaffRenames() { try { return JSON.parse(localStorage.getItem("a_renames")||"{}"); } catch { return {}; } }
 
 const C = { maroon:"#7B1212", gold:"#c9a84c", dim:"#666", border:"#e0d0b0", green:"#1a7040", red:"#c0392b", navy:"#1e3a5f", blue:"#1a56cb" };
@@ -265,13 +266,17 @@ export default function HallAdmin() {
   }, [invoices]);
 
   // ── Password change ───────────────────────────────────────────────────────────
-  function changePass() {
+  async function changePass() {
     setPwErr("");
     if (!checkHallAdminPass(pwCurrent)) { setPwErr("Current password is incorrect."); return; }
     if (pwNew.length < 6) { setPwErr("New password must be at least 6 characters."); return; }
     if (pwNew !== pwConfirm) { setPwErr("Passwords do not match."); return; }
-    localStorage.setItem("a_pass_admin", pwNew);
-    notify("Password changed successfully ✅", "success");
+    try {
+      await setUserPass("admin", pwNew);
+      notify("Password changed & synced to all devices ✅☁️", "success");
+    } catch {
+      notify("Password changed on THIS device only — cloud sync failed. Check internet and change it again.", "error");
+    }
     setPwCurrent(""); setPwNew(""); setPwConfirm("");
   }
 

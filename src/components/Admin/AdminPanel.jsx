@@ -9,6 +9,7 @@ import AdminInvoices  from "./AdminInvoices";
 import AuditLogViewer from "../AuditLogViewer";
 import { checkAdminPassword } from "../../utils/auth";
 import { hasSupabase, upsertRows, saveConfig } from "../../utils/supabaseSync";
+import { collectLocalPasswords } from "../../utils/userPass";
 
 const TABS = [
   { key:"finance",  label:"Finance",  icon:"ti-currency-taka"  },
@@ -75,9 +76,10 @@ function HotelSyncPanel({ notify }) {
   const [syncing, setSyncing] = useState(false);
 
   const steps = [
-    { key:"revenues", label:"Hotel Revenues",  count: revenues.length },
-    { key:"expenses", label:"Hotel Expenses",  count: expenses.length },
-    { key:"config",   label:"App Config (ntfy/WhatsApp)", count: 2 },
+    { key:"revenues",  label:"Hotel Revenues",  count: revenues.length },
+    { key:"expenses",  label:"Hotel Expenses",  count: expenses.length },
+    { key:"config",    label:"App Config (ntfy/WhatsApp)", count: 2 },
+    { key:"passwords", label:"Login Passwords (all devices)", count: Object.keys(collectLocalPasswords()).length },
   ];
 
   async function syncAll() {
@@ -104,6 +106,12 @@ function HotelSyncPanel({ notify }) {
       await saveConfig("wa_config",   wa);
       setStatus(s => ({ ...s, config:"✅" }));
     } catch { setStatus(s => ({ ...s, config:"❌" })); }
+
+    try {
+      const passMap = collectLocalPasswords();
+      if (Object.keys(passMap).length) await saveConfig("user_passwords", passMap);
+      setStatus(s => ({ ...s, passwords:"✅" }));
+    } catch { setStatus(s => ({ ...s, passwords:"❌" })); }
 
     setSyncing(false);
     notify("Hotel data pushed to Supabase ☁️", "success");

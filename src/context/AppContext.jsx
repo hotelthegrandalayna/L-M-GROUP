@@ -1,6 +1,8 @@
 import { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import { hasHotelSupabaseConfig, loadHotelBookingsFromSupabase, loadRoomsFromSupabase, saveRoomsToSupabase, persistHotelBookingBundle } from "../lib/hotelSupabase";
 import { hasSupabase, upsertRows, loadRows, saveConfig, loadConfig } from "../utils/supabaseSync";
+import { restoreUserPasswords } from "../utils/userPass";
+import { onRemoteChange } from "../utils/realtimeSync";
 import { runDailyBackup } from "../utils/dailyBackup";
 import { syncNtfyConfigFromSupabase } from "../utils/ntfy";
 import { supabase } from "../lib/supabaseClient";
@@ -183,6 +185,9 @@ export function AppProvider({ children }) {
 
     // Always sync ntfy config so notifications work from any device
     syncNtfyConfigFromSupabase().catch(() => {});
+
+    // Pull password changes made on other devices
+    restoreUserPasswords().catch(() => {});
 
     // Sync rooms — but skip if edited locally within last 30s to avoid overwriting a save in progress
     const roomsRecentlyEdited = Date.now() - roomsEditedAt.current < 30_000;
@@ -398,6 +403,14 @@ export function AppProvider({ children }) {
     // Poll every 60s as fallback
     const interval = setInterval(() => syncFromSupabase(), 60_000);
 
+    // Instant broadcast ping from other devices (works even when the
+    // postgres_changes publication is not enabled on the project)
+    let pingTimer = null;
+    const offPing = onRemoteChange(() => {
+      clearTimeout(pingTimer);
+      pingTimer = setTimeout(() => syncFromSupabase(), 500);
+    });
+
     // Realtime — instant push from Supabase on any data change (< 1 second)
     let realtimeChannel = null;
     if (supabase) {
@@ -445,6 +458,8 @@ export function AppProvider({ children }) {
     return () => {
       document.removeEventListener('visibilitychange', onVisibility);
       clearInterval(interval);
+      clearTimeout(pingTimer);
+      offPing();
       if (realtimeChannel) supabase.removeChannel(realtimeChannel);
     };
   }, [syncFromSupabase]);

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useApp } from '../context/AppContext';
+import { setUserPass } from '../utils/userPass';
 
 const BASE_USERS = {
   admin:  { pass: 'amelia2024', role: 'admin' },
@@ -81,14 +82,17 @@ export default function Login({ onSwitchApp }) {
     setFpStep(2);
   }
 
-  function fpResetPass() {
+  async function fpResetPass() {
     if (!fpNewPass || fpNewPass.length < 4) { setFpPassErr('Password must be at least 4 characters.'); return; }
     if (fpNewPass !== fpConfPass) { setFpPassErr('Passwords do not match.'); return; }
-    localStorage.setItem('a_pass_admin', fpNewPass);
+    let synced = true;
+    try { await setUserPass('admin', fpNewPass); } catch { synced = false; }
     setShowForgot(false);
     setFpStep(1);
     setFpEmail(''); setFpNewPass(''); setFpConfPass('');
-    setError('Password reset! You can now log in.');
+    setError(synced
+      ? 'Password reset & synced to all devices! You can now log in.'
+      : 'Password reset on THIS device only — cloud sync failed. Reset again when online.');
   }
 
   const focusIn  = e => { e.target.style.borderColor='#c9a84c'; e.target.style.background='rgba(255,255,255,.11)'; e.target.style.boxShadow='0 0 0 3px rgba(201,168,76,.12)'; };

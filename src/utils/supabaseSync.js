@@ -1,4 +1,6 @@
 // Shared Supabase sync utility — used by all modules
+import { pingRemoteChange } from "./realtimeSync";
+
 const SUPABASE_URL = import.meta.env?.VITE_SUPABASE_URL?.trim() || "";
 const SUPABASE_KEY =
   import.meta.env?.VITE_SUPABASE_PUBLISHABLE_KEY?.trim() ||
@@ -29,6 +31,7 @@ export async function upsertRow(table, row, conflictCol = "id") {
     headers: headers({ Prefer: `resolution=merge-duplicates,return=minimal` }),
     body: JSON.stringify(row),
   });
+  pingRemoteChange();
 }
 
 // Upsert many rows in one request
@@ -39,6 +42,7 @@ export async function upsertRows(table, rows) {
     headers: headers({ Prefer: "resolution=merge-duplicates,return=minimal" }),
     body: JSON.stringify(rows),
   });
+  pingRemoteChange();
 }
 
 // Delete a row by id
@@ -48,6 +52,7 @@ export async function deleteRow(table, id) {
     method: "DELETE",
     headers: headers(),
   });
+  pingRemoteChange();
 }
 
 // Load all rows from a table
@@ -62,14 +67,17 @@ export async function loadRows(table, query = "") {
   } catch { return null; }
 }
 
-// Upsert a config value (key-value store)
+// Upsert a config value (key-value store). Throws if the write did not
+// reach Supabase so callers can distinguish "synced" from "local only".
 export async function saveConfig(key, value) {
-  if (!hasSupabase()) return;
-  await fetch(base("app_config"), {
+  if (!hasSupabase()) throw new Error("Supabase not configured");
+  const res = await fetch(base("app_config"), {
     method: "POST",
     headers: headers({ Prefer: "resolution=merge-duplicates,return=minimal" }),
     body: JSON.stringify({ key, value, updated_at: new Date().toISOString() }),
   });
+  if (!res.ok) throw new Error("saveConfig failed: " + res.status);
+  pingRemoteChange();
 }
 
 // Load a config value
