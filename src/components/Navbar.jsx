@@ -1,5 +1,6 @@
 
 import { useApp } from '../context/AppContext';
+import useIsMobile from '../hall/useIsMobile';
 
 const TABS = [
   { id: 'desk',      icon: 'ti-layout-dashboard', label: 'Desk'      },
@@ -13,9 +14,78 @@ const TABS = [
 
 export default function Navbar({ onSwitchApp }) {
   const { curUser, curRole, activeTab, setActiveTab, logout } = useApp();
+  const isMobile = useIsMobile();
   const visibleTabs = TABS.filter(t =>
     curRole === 'staff' ? ['desk','bookings','expenses'].includes(t.id) : true
   );
+
+  // ── Mobile: compact brand row + full-width scrollable tab strip below ──
+  if (isMobile) {
+    return (
+      <nav style={{
+        background: 'linear-gradient(135deg, #0f0628 0%, #1a0a42 50%, #220d54 100%)',
+        borderBottom: '1px solid rgba(201,168,76,.18)',
+        flexShrink: 0, position: 'sticky', top: 0, zIndex: 100,
+        boxShadow: '0 4px 24px rgba(10,2,30,.6)',
+      }}>
+        {/* Row 1: brand + user + actions */}
+        <div style={{ display:'flex', alignItems:'center', gap:10, height:54, padding:'0 12px',
+          borderBottom:'1px solid rgba(255,255,255,.06)' }}>
+          <div style={{
+            width:34, height:34, borderRadius:9, flexShrink:0,
+            background:'linear-gradient(145deg,#5c35c8 0%,#3a1f8a 100%)',
+            display:'flex', alignItems:'center', justifyContent:'center',
+            fontFamily:'Georgia,serif', fontWeight:800, fontSize:13, color:'#E8C96A',
+          }}>GA</div>
+          <div style={{ lineHeight:1.25, flex:1, minWidth:0 }}>
+            <div style={{ fontSize:13, fontWeight:700, color:'#fff', fontFamily:'Georgia,serif',
+              whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>Hotel The Grand Alayna</div>
+            <div style={{ fontSize:9, color:'#C9A84C', letterSpacing:1, textTransform:'uppercase',
+              fontWeight:700 }}>{curUser} · {curRole}</div>
+          </div>
+          {onSwitchApp && (
+            <button onClick={onSwitchApp} aria-label="Switch to Hall" style={{
+              padding:'8px 9px', borderRadius:8, border:'1px solid rgba(201,168,76,.3)',
+              background:'rgba(201,168,76,.07)', color:'#E8C96A', cursor:'pointer',
+              display:'flex', alignItems:'center', flexShrink:0,
+            }}>
+              <i className="ti ti-switch-horizontal" style={{ fontSize:16 }} />
+            </button>
+          )}
+          <button onClick={logout} aria-label="Sign out" style={{
+            background:'rgba(255,255,255,.05)', border:'1px solid rgba(255,255,255,.1)',
+            cursor:'pointer', color:'rgba(255,255,255,.6)', padding:'8px 9px', borderRadius:8,
+            display:'flex', alignItems:'center', flexShrink:0,
+          }}>
+            <i className="ti ti-power" style={{ fontSize:16 }} />
+          </button>
+        </div>
+
+        {/* Row 2: scrollable tab strip */}
+        <div style={{ display:'flex', overflowX:'auto', WebkitOverflowScrolling:'touch',
+          scrollbarWidth:'none', height:50 }}>
+          {visibleTabs.map(t => {
+            const active = activeTab === t.id;
+            return (
+              <button key={t.id} onClick={() => setActiveTab(t.id)} style={{
+                display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
+                gap:3, padding:'0 16px', height:'100%', minWidth:64,
+                background: active ? 'rgba(201,168,76,.10)' : 'transparent',
+                border:'none',
+                borderBottom: active ? '2.5px solid #C9A84C' : '2.5px solid transparent',
+                cursor:'pointer', fontFamily:'inherit', flexShrink:0,
+              }}>
+                <i className={'ti ' + t.icon} style={{ fontSize:18,
+                  color: active ? '#E8C96A' : 'rgba(255,255,255,.4)' }} />
+                <span style={{ fontSize:10, fontWeight: active?700:500,
+                  color: active ? '#fff' : 'rgba(255,255,255,.5)', whiteSpace:'nowrap' }}>{t.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </nav>
+    );
+  }
 
   return (
     <nav style={{

@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { todayStr, formatDate } from '../utils/helpers';
+import useIsMobile from '../hall/useIsMobile';
 
 function Panel({ title, icon, right, children }) {
   return (
@@ -27,6 +28,7 @@ function StatBadge({ label, value, icon, color }) {
 export default function Insights() {
   const { bookings, rooms, loyaltyRules, setLoyaltyRules, surveyData, setSurveys,
           pricingRules, setPricing, notify, curUser } = useApp();
+  const isMobile = useIsMobile();
 
   const today = todayStr();
   const thisMonth = today.slice(0,7);
@@ -181,7 +183,7 @@ export default function Insights() {
     <div style={{ padding:'20px 24px 32px' }}>
 
       {/* ── Top stats row ── */}
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(5,1fr)', gap:12, marginBottom:20 }}>
+      <div style={{ display:'grid', gridTemplateColumns:isMobile?'repeat(2,minmax(0,1fr))':'repeat(5,1fr)', gap:12, marginBottom:20 }}>
         <StatBadge label="In-House Now"   value={inHouse.length}     icon="ti-home"          color="var(--navy)" />
         <StatBadge label="Rooms Available" value={availableCount}    icon="ti-door-enter"    color="var(--green)" />
         <StatBadge label="Rooms Occupied"  value={occupiedCount}     icon="ti-bed"           color="#5b3fa0" />
@@ -190,7 +192,7 @@ export default function Insights() {
       </div>
 
       {/* ── Two-column layout ── */}
-      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16, marginBottom:16 }}>
+      <div style={{ display:'grid', gridTemplateColumns:isMobile?'minmax(0,1fr)':'1fr 1fr', gap:16, marginBottom:16 }}>
 
         {/* LEFT col */}
         <div>

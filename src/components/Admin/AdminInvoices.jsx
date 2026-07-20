@@ -128,7 +128,10 @@ function exportPDF(rows, label) {
 
 // ── Invoice detail modal ──────────────────────────────────────────────────────
 function InvoiceDetail({ bk, onClose }) {
-  const paid    = (bk.paymentHistory || []).reduce((s, p) => s + p.amount, 0);
+  // Use the shared calcPaid so this modal matches the list, the summary,
+  // the invoice and the rest of the app (advance + restPayment counts as
+  // paid, not only paymentHistory entries).
+  const paid    = calcPaid(bk);
   const total   = bk.invoiceTotal ?? bk.amount ?? 0;
   const balance = Math.max(0, total - paid);
 
@@ -513,7 +516,7 @@ export default function AdminInvoices() {
         )}
 
         {filtered.map(bk => {
-          const paid    = (bk.paymentHistory || []).reduce((s, p) => s + p.amount, 0);
+          const paid    = calcPaid(bk);
           const total   = bk.invoiceTotal ?? bk.amount ?? 0;
           const balance = Math.max(0, total - paid);
           const checked = selectedIds.has(bk.id);

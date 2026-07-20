@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, Fragment, useMemo } from "react";
 import { useApp } from "../context/AppContext";
+import useIsMobile from "../hall/useIsMobile";
 import { todayStr, money, bookingConflicts, getRoomDisplayStatus, maxId, formatDate } from "../utils/helpers";
 import { buildInvoiceHTML, buildTCHtml, hotelPrint } from "./Invoice";
 import { sendNtfyAlert } from "../utils/ntfy";
@@ -812,6 +813,7 @@ function CheckInPreviewModal({ booking, rooms, onConfirm, onEdit, onClose }) {
 
 export default function Desk() {
   const { curRole, curUser, rooms, bookings, revenues, expenses, expTypes, updateBookings, updateRevenues, notify, setActiveTab, setPendingInvoiceId } = useApp();
+  const isMobile = useIsMobile();
   const [sel, setSel] = useState(null);
   const [checkoutTarget, setCheckoutTarget] = useState(null);
   const [postCheckout, setPostCheckout] = useState(null);
@@ -1089,7 +1091,7 @@ export default function Desk() {
       )}
 
       {/* ── Stat bar ── */}
-      <div style={{ display:"grid", gridTemplateColumns:curRole==="admin" ? "repeat(8,1fr)" : "repeat(6,1fr)", gap:6, marginBottom:14 }}>
+      <div style={{ display:"grid", gridTemplateColumns:isMobile ? "repeat(2,1fr)" : (curRole==="admin" ? "repeat(8,1fr)" : "repeat(6,1fr)"), gap:6, marginBottom:14 }}>
         {[
           { label:"Occupancy",    value:occPct+"%",           sub:occ+" of "+rooms.length+" rooms", icon:"ti-percentage",    color:"var(--navy)" },
           { label:"In-House",     value:inhouse.length,       sub:"guests staying",                  icon:"ti-users",         color:"#5b3fa0" },
@@ -1104,10 +1106,10 @@ export default function Desk() {
             { label:"This Month Profit", value:money(mRev-mExp), sub:"month to date",               icon:"ti-trending-up",   color:(mRev-mExp)>=0?"var(--green)":"var(--red2)" },
           ] : []),
         ].map(s => (
-          <div key={s.label} onClick={s.onClick} style={{ background:"var(--bg2)", border:"1.5px solid var(--border)", borderRadius:10, padding:curRole==="admin"?"7px 9px":"9px 12px", display:"flex", alignItems:"center", gap:curRole==="admin"?6:9, cursor:s.onClick?"pointer":"default" }}>
-            <i className={"ti "+s.icon} style={{ fontSize:curRole==="admin"?16:19, color:s.color, flexShrink:0 }} />
-            <div>
-              <div style={{ fontSize:curRole==="admin"?12:14, fontWeight:800, color:s.color, lineHeight:1.1 }}>{s.value}</div>
+          <div key={s.label} onClick={s.onClick} style={{ background:"var(--bg2)", border:"1.5px solid var(--border)", borderRadius:10, padding:(curRole==="admin"&&!isMobile)?"7px 9px":"9px 12px", display:"flex", alignItems:"center", gap:(curRole==="admin"&&!isMobile)?6:9, cursor:s.onClick?"pointer":"default" }}>
+            <i className={"ti "+s.icon} style={{ fontSize:(curRole==="admin"&&!isMobile)?16:19, color:s.color, flexShrink:0 }} />
+            <div style={{ minWidth:0 }}>
+              <div style={{ fontSize:(curRole==="admin"&&!isMobile)?12:14, fontWeight:800, color:s.color, lineHeight:1.1 }}>{s.value}</div>
               <div style={{ fontSize:8, color:"var(--text3)", fontWeight:600, textTransform:"uppercase", letterSpacing:.5, marginTop:2 }}>{s.label}</div>
               <div style={{ fontSize:7.5, color:"var(--text3)", marginTop:1 }}>{s.sub}</div>
             </div>
@@ -1116,10 +1118,10 @@ export default function Desk() {
       </div>
 
       {/* ── Main grid: room map left, action panels right ── */}
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 290px", gap:14, alignItems:"start" }}>
+      <div style={{ display:"grid", gridTemplateColumns:isMobile ? "minmax(0,1fr)" : "minmax(0,1fr) 290px", gap:14, alignItems:"start" }}>
 
         {/* Left: Room map + In-House below */}
-        <div>
+        <div style={{ minWidth:0 }}>
           {/* Room map */}
           <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:9 }}>
             <span style={{ fontSize:10, fontWeight:800, color:"var(--text3)", textTransform:"uppercase", letterSpacing:.8 }}>Room Map</span>
@@ -1131,7 +1133,7 @@ export default function Desk() {
               ))}
             </div>
           </div>
-          <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:10, marginBottom:14 }}>
+          <div style={{ display:"grid", gridTemplateColumns:isMobile ? "repeat(2,minmax(0,1fr))" : "repeat(3,minmax(0,1fr))", gap:10, marginBottom:14 }}>
             {rooms.map(r => {
               const ds = getRoomDisplayStatus(r, bookings, today);
               const st = STATUS_STYLE[ds] || STATUS_STYLE.vacant;
