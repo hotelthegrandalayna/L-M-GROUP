@@ -942,8 +942,10 @@ export default function Desk() {
     }
     void persistHotelBookingBundle(updated).catch(() => {});
     sendNtfyAlert(
-      `🏨 Stay Extended — ${b.guest}`,
-      `Room: ${b.room}\nNew Check-out: ${newCheckout}\nExtra Nights: ${extraNights}\nExtension Total: ৳${extTotal.toLocaleString()}${advance > 0 ? `\nCollected: ৳${advance.toLocaleString()} (${method})` : ""}`
+      `STAY EXTENDED — ${b.guest}`,
+      `${b.guest}\nRoom ${b.room}\n\nNew Check-out: ${newCheckout}\nExtra Nights: ${extraNights}\nExtension Total: ৳${extTotal.toLocaleString()}${advance > 0 ? `\nCollected: ৳${advance.toLocaleString()} (${method})` : ""}`,
+      undefined,
+      { tags: "orange_circle", priority: "default" }
     ).catch(() => {});
     notify(b.guest + " extended to " + newCheckout + (advance > 0 ? " · Advance ৳" + advance.toLocaleString() : ""), "success");
     setExtendTarget(null);
@@ -1014,8 +1016,10 @@ export default function Desk() {
       notify("Checkout saved locally, but Supabase sync failed", "error");
     });
     sendNtfyAlert(
-      `🏨 Checkout — ${b.guest}`,
-      `Room: ${b.room}\nCheck-in: ${b.checkin}\nCheck-out: ${today}\nTotal: ৳${((b.invoiceTotal ?? b.amount) || 0).toLocaleString()}${collectBalance && out > 0 ? `\nCollected at checkout: ৳${out.toLocaleString()}` : ""}`
+      `CHECK-OUT — ${b.guest}`,
+      `${b.guest}\nRoom ${b.room}\n\nCheck-in: ${b.checkin}\nCheck-out: ${today}\nTotal: ৳${((b.invoiceTotal ?? b.amount) || 0).toLocaleString()}${collectBalance && out > 0 ? `\nCollected at checkout: ৳${out.toLocaleString()}` : ""}`,
+      undefined,
+      { tags: "red_circle", priority: "high" }
     ).catch(() => {});
     notify(b.guest + " checked out successfully", "success");
     setCheckoutTarget(null);

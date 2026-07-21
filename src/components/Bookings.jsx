@@ -746,8 +746,10 @@ function NewBookingModal({ onClose, prefill }) {
       });
     sendWhatsAppAlert(buildHotelWaMessage(finalBk)).catch(() => {});
     sendNtfyAlert(
-      `🏨 New Hotel Booking — ${finalBk.guest}`,
-      `Room: ${finalBk.room}\nCheck-in: ${finalBk.checkin}\nCheck-out: ${finalBk.checkout}\nNights: ${finalBk.nights}\nTotal: ৳${(finalBk.amount||0).toLocaleString()}\nAdvance: ৳${(finalBk.advance||0).toLocaleString()}`
+      (status === "checked-in" ? "CHECK-IN — " : "NEW RESERVATION — ") + finalBk.guest,
+      `${finalBk.guest}\nRoom ${finalBk.room}\n\nCheck-in: ${finalBk.checkin}\nCheck-out: ${finalBk.checkout}\nNights: ${finalBk.nights}\nTotal: ৳${(finalBk.amount||0).toLocaleString()}\nAdvance: ৳${(finalBk.advance||0).toLocaleString()}`,
+      undefined,
+      { tags: status === "checked-in" ? "green_circle" : "blue_circle", priority: "high" }
     ).catch(() => {});
     if (finalBk.advance > 0) updateRevenues(prev => [...prev, {
       id: maxId(prev), source: "Room Rent", amount: finalBk.advance, date: today,

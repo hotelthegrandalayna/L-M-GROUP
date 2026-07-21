@@ -21,21 +21,25 @@ export async function syncNtfyConfigFromSupabase() {
   } catch {}
 }
 
-export async function sendNtfyAlert(title, message, topicOverride) {
+// opts: { tags, priority }
+//   tags — comma-separated ntfy emoji shortcodes (e.g. "green_circle") that
+//          render as the notification icon; used here as a color code per event.
+//   priority — ntfy priority (max/high/default/low/min).
+export async function sendNtfyAlert(title, message, topicOverride, opts = {}) {
   const cfg = loadNtfyConfig();
   const topic = topicOverride || cfg.topic;
   if (!topic) return;
   if (!topicOverride && !cfg.enabled) return;
   // Strip non-ASCII from title for header safety, replace Bengali taka sign
-  const safeTitle = title.replace(/৳/g, "BDT").replace(/[^\x00-\x7F]/g, "");
+  const safeTitle = title.replace(/৳/g, "BDT").replace(/[^\x00-\x7F]/g, "").replace(/\s+/g, " ").trim();
   const safeBody  = message.replace(/৳/g, "BDT");
   await fetch(`https://ntfy.sh/${encodeURIComponent(topic)}`, {
     method: "POST",
     mode: "no-cors",
     headers: {
       "Title": safeTitle,
-      "Priority": "high",
-      "Tags": "bell",
+      "Priority": opts.priority || "high",
+      "Tags": opts.tags || "bell",
     },
     body: safeBody,
   });

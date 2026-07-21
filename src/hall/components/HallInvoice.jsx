@@ -3719,8 +3719,10 @@ function InvDetail({
       .catch(() => {});
     sendWhatsAppAlert(buildHallWaMessage(updated)).catch(() => {});
     sendNtfyAlert(
-      `🏛 New Hall Booking — ${updated.client}`,
-      `Event: ${updated.evType}\nDate: ${updated.evDate || "—"}\nTotal: ৳${(updated.grand||0).toLocaleString()}\nAdvance: ৳${(parseFloat(updated.adv)||0).toLocaleString()}\nBalance: ৳${Math.max(0,(updated.grand||0)-(parseFloat(updated.adv)||0)).toLocaleString()}\nInvoice: ${updated.num}\nPhone: ${updated.phone||"—"}`
+      `HALL BOOKING — ${updated.client}`,
+      `${updated.client}\n${updated.evType}\n\nDate: ${updated.evDate || "—"}\nTotal: ৳${(updated.grand||0).toLocaleString()}\nAdvance: ৳${(parseFloat(updated.adv)||0).toLocaleString()}\nBalance: ৳${Math.max(0,(updated.grand||0)-(parseFloat(updated.adv)||0)).toLocaleString()}\nInvoice: ${updated.num}\nPhone: ${updated.phone||"—"}`,
+      undefined,
+      { tags: "purple_circle", priority: "high" }
     ).catch(() => {});
 
     setTimeout(() => {
