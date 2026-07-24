@@ -60,6 +60,21 @@ function initRooms() {
   return DEFAULT_ROOMS.map(r => ({ ...r }));
 }
 
+// Strip heavy base64 ID photos before writing bookings to the localStorage
+// cache. Those photos are huge and were overflowing the browser's storage
+// limit — the save failed silently, so the app loaded BLANK on every refresh
+// and had to slowly re-download from the cloud. Photos still live in Supabase
+// and reload on sync. Un-synced bookings keep everything so nothing is lost
+// before upload.
+function slimForCache(list) {
+  if (!Array.isArray(list)) return list;
+  return list.map(b => {
+    if (!b || !b.supabaseBookingId) return b;
+    const { idFront, idBack, idDocs, ...rest } = b;
+    return rest;
+  });
+}
+
 const AppContext = createContext(null);
 
 // ── Hotel deleted-ID ledger — a record deleted here can never be re-pushed
@@ -263,7 +278,7 @@ export function AppProvider({ children }) {
         const cutoff2 = new Date(); cutoff2.setMonth(cutoff2.getMonth() - 6);
         const cutoffStr2 = cutoff2.toISOString().slice(0, 10);
         const trimmed2 = withLocalOnly.filter(b => ['confirmed','checked-in'].includes(b.status) || (b.checkout && b.checkout >= cutoffStr2));
-        try { localStorage.setItem('ga_bookings', JSON.stringify(trimmed2)); } catch { /* quota full */ }
+        try { localStorage.setItem('ga_bookings', JSON.stringify(slimForCache(trimmed2))); } catch { /* quota full */ }
       })
       .catch((err) => {
         console.error("Failed to load hotel bookings from Supabase:", err);
@@ -429,7 +444,7 @@ export function AppProvider({ children }) {
             setBookings(filtered);
             const cutoff = new Date(); cutoff.setMonth(cutoff.getMonth() - 6);
             const cutoffStr = cutoff.toISOString().slice(0, 10);
-            try { localStorage.setItem('ga_bookings', JSON.stringify(filtered.filter(b => ['confirmed','checked-in'].includes(b.status) || (b.checkout && b.checkout >= cutoffStr)))); } catch {}
+            try { localStorage.setItem('ga_bookings', JSON.stringify(slimForCache(filtered.filter(b => ['confirmed','checked-in'].includes(b.status) || (b.checkout && b.checkout >= cutoffStr))))); } catch {}
           }).catch(() => {});
         })
         .on("postgres_changes", { event: "*", schema: "public", table: "revenues" }, () => {
@@ -491,7 +506,7 @@ export function AppProvider({ children }) {
     const rm = nextRooms ?? rooms;
     localStorage.setItem('ga_rooms_ver', GA_ROOMS_VER);
     localStorage.setItem('ga_rooms', JSON.stringify(rm));
-    localStorage.setItem('ga_bookings', JSON.stringify(b));
+    try { localStorage.setItem('ga_bookings', JSON.stringify(slimForCache(b))); } catch { /* quota full */ }
     localStorage.setItem('ga_revenues', JSON.stringify(r));
     localStorage.setItem('ga_expenses', JSON.stringify(e));
   }, [bookings, revenues, expenses, rooms]);
@@ -536,7 +551,7 @@ export function AppProvider({ children }) {
         ['confirmed','checked-in'].includes(b.status) ||
         (b.checkout && b.checkout >= cutoffStr)
       );
-      try { localStorage.setItem('ga_bookings', JSON.stringify(trimmed)); } catch { /* quota full */ }
+      try { localStorage.setItem('ga_bookings', JSON.stringify(slimForCache(trimmed))); } catch { /* quota full */ }
       return val; // React state always has full data
     });
   }, []);
