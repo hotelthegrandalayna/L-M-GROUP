@@ -70,3 +70,11 @@ export function getRoomDisplayStatus(room, bookings, today) {
 export function maxId(arr) {
   return arr.length ? Math.max(...arr.map(x => x.id)) + 1 : 1;
 }
+
+// Collision-proof client-side id. Based on the timestamp (always far larger
+// than Supabase's small serial ids) plus randomness, so an offline booking can
+// NEVER accidentally share an id with a different booking from the cloud or
+// another device. Fixes the maxId() id-collision data-loss bug.
+export function newLocalId() {
+  return Date.now() * 1000 + Math.floor(Math.random() * 1000);
+}

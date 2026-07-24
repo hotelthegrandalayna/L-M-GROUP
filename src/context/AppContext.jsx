@@ -220,7 +220,10 @@ export function AppProvider({ children }) {
         // Companions synced via app_config — lets other devices restore spouse/group members
         const compSnap = (() => { try { return JSON.parse(localStorage.getItem('ga_companions') || '{}'); } catch { return {}; } })();
         const merged = filtered.map(sb => {
-          const loc = localSnap.find(l => l.id === sb.id);
+          // Match by Supabase id (local ids are now collision-proof and differ
+          // from the cloud serial id), falling back to a plain id match for
+          // legacy bookings created before the id-collision fix.
+          const loc = localSnap.find(l => String(l.supabaseBookingId ?? l.id) === String(sb.id));
           const comp = compSnap[String(sb.id)] || null;
           if (!loc && !comp) return sb;
           const l = loc || {};

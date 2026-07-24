@@ -16,7 +16,7 @@ function DateInput({ value, onChange, min, style, className }) {
     </div>
   );
 }
-import { todayStr, money, nightsBetween, bookingConflicts, maxId, formatDate } from "../utils/helpers";
+import { todayStr, money, nightsBetween, bookingConflicts, maxId, newLocalId, formatDate } from "../utils/helpers";
 import { sendWhatsAppAlert, buildHotelWaMessage } from "../utils/whatsapp";
 import { sendNtfyAlert } from "../utils/ntfy";
 import { logEvent } from "../utils/auditLog";
@@ -135,7 +135,7 @@ function BookingModal({ booking, onClose }) {
       txnNumber: needsTxn ? payTxn : (x.txnNumber || x.transactionNumber || ""),
       paymentMethod: payMtd,
     } : x));
-    updateRevenues(prev => [...prev, { id: maxId(prev), source: "Room Rent", amount: amt, date: today,
+    updateRevenues(prev => [...prev, { id: newLocalId(), source: "Room Rent", amount: amt, date: today,
       note: b.guest + " Rm " + b.room + " - " + (payNote || "payment") + " (" + payMtd + ")", bookingId: b.id }]);
     notify("Payment of " + money(amt) + " recorded", "success");
     logEvent("hotel", "room_payment_collected", { num:String(b.id), guest:b.guest, amount:amt, note:`Rm ${b.room} · via ${payMtd}` }, curUser);
@@ -163,7 +163,7 @@ function BookingModal({ booking, onClose }) {
     const updatedB  = { ...b, checkout: newCo, nights: newNights, amount: newAmt };
     updateBookings(prev => prev.map(x => x.id === b.id ? updatedB : x));
     void persistHotelBookingBundle(updatedB).catch(err => console.error("Supabase extend sync failed:", err));
-    if (extCost > 0) updateRevenues(prev => [...prev, { id: maxId(prev), source: "Room Rent", amount: extCost, date: today,
+    if (extCost > 0) updateRevenues(prev => [...prev, { id: newLocalId(), source: "Room Rent", amount: extCost, date: today,
       note: b.guest + " Rm " + b.room + " - stay extended " + extDays + "d", bookingId: b.id }]);
     notify("Stay extended to " + newCo, "success");
     onClose();
@@ -624,7 +624,7 @@ function NewBookingModal({ onClose, prefill }) {
         notify(`Room ${er.number} is already booked for those dates`, "error"); return null;
       }
     }
-    const id  = maxId(bookings);
+    const id  = newLocalId();
     const rn  = refName.trim();
     const rph = refPhone.trim();
     const a   = adv;
@@ -680,7 +680,7 @@ function NewBookingModal({ onClose, prefill }) {
     if (new Set(nums).size !== nums.length) { notify("Each room can only be added once", "error"); return null; }
     if ((parseFloat(advance) || 0) <= 0 && !payLater) { notify("Enter payment amount or select Pay Later", "error"); return null; }
 
-    const id = maxId(bookings);
+    const id = newLocalId();
     const a  = multiAdv;
     const t  = needsTxn ? txnNum.trim() : "";
     const minCi = multiRoomData.reduce((mn, c) => c.ci < mn ? c.ci : mn, multiRoomData[0].ci);
@@ -752,7 +752,7 @@ function NewBookingModal({ onClose, prefill }) {
       { tags: status === "checked-in" ? "green_circle" : "blue_circle", priority: "high" }
     ).catch(() => {});
     if (finalBk.advance > 0) updateRevenues(prev => [...prev, {
-      id: maxId(prev), source: "Room Rent", amount: finalBk.advance, date: today,
+      id: newLocalId(), source: "Room Rent", amount: finalBk.advance, date: today,
       note: finalBk.guest + " Rm " + finalBk.room + (status === "confirmed" ? " — reservation deposit" : " — advance payment") + " (" + finalBk.paymentMethod + ")",
       bookingId: finalBk.id }]);
     const _disc = finalBk.isMultiRoomBooking ? (finalBk.multiRooms||[]).reduce((s,r)=>s+(r.discAmt||0),0) : (finalBk.discAmt ?? discAmt);
