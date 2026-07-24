@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { setUserPass } from '../utils/userPass';
+import { setUserPass, restoreUserPasswords } from '../utils/userPass';
 
 const BASE_USERS = {
   admin:  { pass: 'amelia2024', role: 'admin' },
@@ -26,6 +26,18 @@ function resolveUsers() {
       delete users[oldName];
       const sn = localStorage.getItem('a_pass_' + newName);
       if (sn) users[newName].pass = sn;
+    });
+  } catch {}
+  // Also include accounts created in Admin → Staff (ga_staff / hotel_staff) so
+  // whoever the admin adds there can actually log in. Additive only — never
+  // overrides the base admin/staff accounts above. Non-admin roles map to staff.
+  try {
+    const staff = JSON.parse(localStorage.getItem('ga_staff') || '[]');
+    if (Array.isArray(staff)) staff.forEach(s => {
+      const uname = (s.username || '').trim();
+      if (!uname || s.active === false || users[uname]) return;
+      const pw = localStorage.getItem('a_pass_' + uname) || localStorage.getItem('ga_pw_' + uname);
+      if (pw) users[uname] = { pass: pw, role: s.role === 'admin' ? 'admin' : 'staff' };
     });
   } catch {}
   return users;
@@ -56,20 +68,31 @@ export default function Login({ onSwitchApp }) {
   const [fpConfPass, setFpConfPass] = useState('');
   const [fpPassErr, setFpPassErr] = useState('');
 
-  function doLogin(e) {
-    e?.preventDefault();
-    if (!username.trim()) { setError('Please enter your username.'); return; }
+  // Refresh the shared password list from the cloud when the login screen opens,
+  // so a password changed on another device is already accepted.
+  useEffect(() => { restoreUserPasswords().catch(() => {}); }, []);
+
+  function tryLogin() {
     const users = resolveUsers();
     const key = Object.keys(users).find(k => k.toLowerCase() === username.trim().toLowerCase());
-    if (!key) { setError('Invalid username or password.'); return; }
-    const usr = users[key];
+    if (!key) return false;
     const stored = localStorage.getItem('a_pass_' + key);
-    const checkPass = stored || usr.pass;
-    if (checkPass === password) {
-      login(key, usr.role);
-    } else {
-      setError('Invalid username or password.');
-    }
+    const checkPass = stored || users[key].pass;
+    if (checkPass === password) { login(key, users[key].role); return true; }
+    return false;
+  }
+
+  async function doLogin(e) {
+    e?.preventDefault();
+    if (!username.trim()) { setError('Please enter your username.'); return; }
+    if (tryLogin()) return;
+    // Local check failed — the password may have been changed on another device.
+    // Pull the latest passwords from the cloud and try once more before rejecting,
+    // so a correct current password always works when online.
+    setError('');
+    try { await restoreUserPasswords(); } catch {}
+    if (tryLogin()) return;
+    setError('Invalid username or password.');
   }
 
   function fpVerifyEmail() {

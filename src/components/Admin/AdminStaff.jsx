@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useApp } from "../../context/AppContext";
 import { saveConfig, loadConfig } from "../../utils/supabaseSync";
+import { setUserPass } from "../../utils/userPass";
 
 const ROLES = ["admin","manager","receptionist","accountant"];
 const DEFAULT_USERS = [
@@ -48,12 +49,17 @@ export default function AdminStaff() {
       const next = [...users, { id:Date.now(), username:uname.trim(), role:urole, active:true }];
       save(next);
       localStorage.setItem("ga_pw_"+uname.trim(), pw1);
+      // Also store via the synced password system so login works on every device
+      setUserPass(uname.trim(), pw1).catch(() => {});
       notify("Staff account created","success");
     } else {
       if (pw1 && pw1!==pw2) { notify("Passwords do not match","error"); return; }
       const next = users.map(u=>u.id===modal.id?{...u,username:uname.trim(),role:urole}:u);
       save(next);
-      if (pw1) localStorage.setItem("ga_pw_"+uname.trim(), pw1);
+      if (pw1) {
+        localStorage.setItem("ga_pw_"+uname.trim(), pw1);
+        setUserPass(uname.trim(), pw1).catch(() => {});
+      }
       notify("Staff account updated","success");
     }
     setModal(null);
