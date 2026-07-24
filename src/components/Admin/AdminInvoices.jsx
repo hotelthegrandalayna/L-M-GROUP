@@ -1,7 +1,7 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useApp } from "../../context/AppContext";
 import { checkAdminPassword } from "../../utils/auth";
-import { deleteHotelBooking, deleteHotelBookings } from "../../lib/hotelSupabase";
+import { deleteHotelBooking, deleteHotelBookings, loadHotelGuestImages } from "../../lib/hotelSupabase";
 
 const STATUS_OPTS = ["All", "checked-in", "reserved", "checked-out", "cancelled"];
 
@@ -135,11 +135,29 @@ function InvoiceDetail({ bk, onClose }) {
   const total   = bk.invoiceTotal ?? bk.amount ?? 0;
   const balance = Math.max(0, total - paid);
 
-  // Normalise documents into per-person groups
+  // ID photos are no longer downloaded on every sync (keeps sync fast). Fetch
+  // this booking's photos on demand, only now that its details are open.
+  const [fetchedImgs, setFetchedImgs] = useState(null);
+  const [imgLoading, setImgLoading] = useState(false);
+  const hasLocalImages = (bk.idDocs || []).length > 0 || bk.idFront || bk.idBack;
+
+  useEffect(() => {
+    let alive = true;
+    const gid = bk.guest_id ?? bk.guestId;
+    if (hasLocalImages || !gid) return;
+    setImgLoading(true);
+    loadHotelGuestImages(gid).then(res => {
+      if (alive) { setFetchedImgs(res); setImgLoading(false); }
+    }).catch(() => { if (alive) setImgLoading(false); });
+    return () => { alive = false; };
+  }, [bk.guest_id, bk.guestId, hasLocalImages]);
+
+  // Normalise documents into per-person groups (local images, or fetched ones)
   const persons = useMemo(() => {
+    const src = hasLocalImages ? bk : { ...bk, ...(fetchedImgs || {}) };
     const list = [];
-    if ((bk.idDocs || []).length > 0) {
-      bk.idDocs.forEach((doc, i) => list.push({
+    if ((src.idDocs || []).length > 0) {
+      src.idDocs.forEach((doc, i) => list.push({
         label: `Guest ${i + 1}`,
         idNum: doc.idNum || "",
         images: [
@@ -149,12 +167,12 @@ function InvoiceDetail({ bk, onClose }) {
       }));
     } else {
       const imgs = [];
-      if (bk.idFront) imgs.push({ img: bk.idFront, side: "Front" });
-      if (bk.idBack)  imgs.push({ img: bk.idBack,  side: "Back"  });
-      if (imgs.length) list.push({ label: "Guest 1", idNum: bk.idNum || "", images: imgs });
+      if (src.idFront) imgs.push({ img: src.idFront, side: "Front" });
+      if (src.idBack)  imgs.push({ img: src.idBack,  side: "Back"  });
+      if (imgs.length) list.push({ label: "Guest 1", idNum: src.idNum || "", images: imgs });
     }
     return list;
-  }, [bk]);
+  }, [bk, fetchedImgs, hasLocalImages]);
 
   const statusColor = {
     "checked-out": { bg: "#d1fae5", color: "#065f46" },
@@ -233,6 +251,13 @@ function InvoiceDetail({ bk, onClose }) {
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* ID photos loading on demand */}
+          {imgLoading && persons.length === 0 && (
+            <div style={{ marginBottom: 16, padding: "12px 14px", background: "var(--bg4)", borderRadius: 8, fontSize: 12, color: "var(--text3)", display: "flex", alignItems: "center", gap: 8 }}>
+              <i className="ti ti-loader ti-spin" /> Loading ID photos from cloud…
             </div>
           )}
 

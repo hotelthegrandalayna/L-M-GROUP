@@ -373,10 +373,14 @@ export async function loadHotelBookingsFromSupabase() {
 
   if (!Array.isArray(bookingRows) || bookingRows.length === 0) return [];
 
-  // Only fetch the guests we actually need
+  // Only fetch the guests we actually need — and EXCLUDE the heavy base64 ID
+  // photo columns (image_front, image_back, id_docs). Those made every sync
+  // slow. Photos are loaded on demand only when a booking's details are opened
+  // (loadHotelGuestImages below).
   const guestIds = [...new Set(bookingRows.map(r => r.guest_id).filter(Boolean))];
+  const GUEST_COLS = "id,full_name,phone,nationality,email,ref_name,ref_phone,id_type,id_number";
   const guestRows = guestIds.length
-    ? await request("guests", { query: { id: `in.(${guestIds.join(",")})` } })
+    ? await request("guests", { query: { id: `in.(${guestIds.join(",")})`, select: GUEST_COLS } })
     : [];
 
   const guestById = new Map(
@@ -386,4 +390,24 @@ export async function loadHotelBookingsFromSupabase() {
   return bookingRows.map((row) =>
     fromDbBooking(row, guestById.get(row.guest_id)),
   );
+}
+
+// Fetch a single guest's ID photos on demand (only when a booking's details are
+// opened), so the regular sync stays fast. Returns { idFront, idBack, idDocs }.
+export async function loadHotelGuestImages(guestId) {
+  if (!hasHotelSupabaseConfig() || !guestId) return null;
+  try {
+    const rows = await request("guests", {
+      query: { id: `eq.${guestId}`, select: "image_front,image_back,id_docs" },
+    });
+    const g = Array.isArray(rows) ? rows[0] : rows;
+    if (!g) return null;
+    return {
+      idFront: g.image_front || "",
+      idBack: g.image_back || "",
+      idDocs: (() => { try { return g.id_docs ? JSON.parse(g.id_docs) : []; } catch { return []; } })(),
+    };
+  } catch {
+    return null;
+  }
 }
