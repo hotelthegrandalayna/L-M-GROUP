@@ -23,6 +23,27 @@ function base(table) {
   return SUPABASE_URL.replace(/\/$/, "") + "/rest/v1/" + table;
 }
 
+// Real reachability check: is the cloud database actually reachable RIGHT NOW?
+// navigator.onLine only knows if WiFi is connected — not whether the database
+// can be reached. This actually contacts Supabase, so it catches "WiFi is on
+// but the server can't be reached" (the exact case that lost the booking).
+export async function pingSupabase() {
+  if (!hasSupabase()) return true; // no cloud configured — don't false-alarm
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 8000);
+    const res = await fetch(base("bookings") + "?select=id&limit=1", {
+      headers: headers(),
+      signal: ctrl.signal,
+      cache: "no-store",
+    });
+    clearTimeout(t);
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 // Upsert a single row (insert or update by primary key)
 export async function upsertRow(table, row, conflictCol = "id") {
   if (!hasSupabase()) return;

@@ -403,8 +403,10 @@ export function AppProvider({ children }) {
     };
     document.addEventListener('visibilitychange', onVisibility);
 
-    // Poll every 60s as fallback
-    const interval = setInterval(() => syncFromSupabase(), 60_000);
+    // Poll every 8s for fast cross-device updates (internet cost is not a
+    // concern — both sites are on WiFi). Realtime/broadcast below makes most
+    // updates near-instant; this is the safety net.
+    const interval = setInterval(() => syncFromSupabase(), 8_000);
 
     // Instant broadcast ping from other devices (works even when the
     // postgres_changes publication is not enabled on the project)
