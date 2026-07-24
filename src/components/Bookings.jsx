@@ -1559,26 +1559,38 @@ function NewBookingModal({ onClose, prefill }) {
       </div>
     </div>
     {previewBkObj && (
-      <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && setPreviewBkObj(null)} style={{ zIndex:10001 }}>
+      <div className="modal-overlay open" style={{ zIndex:10001 }}>
         <div className="modal-box" style={{ maxWidth:860, padding:0, overflow:"hidden" }}>
+          {/* NOT-SAVED warning — the #1 safeguard against printing a preview and
+              walking away thinking the booking was saved. */}
+          <div style={{ background:"#c0392b", color:"#fff", padding:"9px 20px", fontSize:13, fontWeight:800, textAlign:"center", letterSpacing:.2 }}>
+            ⚠ NOT SAVED YET — this is only a preview. You MUST press "Confirm Check In" below to save this booking.
+          </div>
           <div style={{ background:"#1a1a2e", padding:"14px 20px", display:"flex", justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:8 }}>
             <div>
               <div style={{ color:"#C9A84C", fontWeight:800, fontSize:16 }}>
                 <i className="ti ti-file-invoice" /> Invoice Preview — {previewBkObj.guest} · Rm {previewBkObj.room}
               </div>
-              <div style={{ color:"rgba(255,255,255,.6)", fontSize:12, marginTop:2 }}>Review the invoice before confirming check-in</div>
+              <div style={{ color:"rgba(255,255,255,.6)", fontSize:12, marginTop:2 }}>Review, then confirm — do not print until you have confirmed</div>
             </div>
             <div style={{ display:"flex", gap:8 }}>
               <button className="btn" onClick={() => setPreviewBkObj(null)} style={{ fontSize:13 }}>
-                <i className="ti ti-edit" /> Edit
+                <i className="ti ti-arrow-left" /> Back (not saved)
               </button>
-              <button className="btn primary" onClick={() => { performSave(previewBkObj, "checked-in"); setPreviewBkObj(null); }} style={{ fontSize:13, background:"#1a7040", border:"none" }}>
-                <i className="ti ti-login" /> Confirm Check In
+              <button className="btn primary" onClick={() => { performSave(previewBkObj, "checked-in"); setPreviewBkObj(null); }} style={{ fontSize:14, fontWeight:800, background:"#1a7040", border:"none", padding:"10px 20px" }}>
+                <i className="ti ti-login" /> Confirm Check In &amp; Save
               </button>
             </div>
           </div>
-          <div style={{ maxHeight:"75vh", overflowY:"auto", background:"#fafaf8" }}>
+          <div style={{ maxHeight:"70vh", overflowY:"auto", background:"#fafaf8" }}>
             <div dangerouslySetInnerHTML={{ __html: buildInvoiceHTML(previewBkObj, rooms, [], "room") }} />
+          </div>
+          {/* Second confirm bar at the bottom so it's visible after scrolling the invoice */}
+          <div style={{ background:"#f0f7f2", borderTop:"2px solid #1a7040", padding:"12px 20px", display:"flex", justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:8 }}>
+            <span style={{ fontSize:12, fontWeight:700, color:"#7a1010" }}>Booking is NOT saved until you confirm →</span>
+            <button className="btn primary" onClick={() => { performSave(previewBkObj, "checked-in"); setPreviewBkObj(null); }} style={{ fontSize:14, fontWeight:800, background:"#1a7040", border:"none", padding:"10px 22px" }}>
+              <i className="ti ti-login" /> Confirm Check In &amp; Save
+            </button>
           </div>
         </div>
       </div>
