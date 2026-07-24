@@ -205,7 +205,7 @@ function fromDbBooking(row, guest) {
     createdAt: row.created_at || "",
     supabaseBookingId: row.id,
     by: row.created_by || "",
-    paymentHistory:    (() => { try { return row.payment_history    ? JSON.parse(row.payment_history)    : []; } catch { return []; } })(),
+    paymentHistory:    (() => { try { const v = row.payment_history ? JSON.parse(row.payment_history) : []; return Array.isArray(v) ? v : (v && typeof v === "object" ? [v] : []); } catch { return []; } })(),
     extraPersonCharge: (() => { try { return row.extra_person_charge ? JSON.parse(row.extra_person_charge) : null; } catch { return null; } })(),
     ...(() => {
       try {

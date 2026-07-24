@@ -14,7 +14,8 @@ function fmtMoney(n) { return "৳" + Number(n || 0).toLocaleString(); }
 // Use whichever is higher: paymentHistory total OR advance field
 // This handles old bookings where advance was set directly without a history entry
 function calcPaid(bk) {
-  const fromHistory = (bk.paymentHistory || []).reduce((s, p) => s + (p.amount || 0), 0);
+  const hist = Array.isArray(bk.paymentHistory) ? bk.paymentHistory : [];
+  const fromHistory = hist.reduce((s, p) => s + (p.amount || 0), 0);
   const fromAdvance = (parseFloat(bk.advance) || 0) + (parseFloat(bk.restPayment) || 0) + (parseFloat(bk.extrasAdvance) || 0);
   return Math.max(fromHistory, fromAdvance);
 }

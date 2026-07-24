@@ -251,7 +251,7 @@ export function AppProvider({ children }) {
             // No Supabase column — always restore from local
             invoiceExtras:    l.invoiceExtras?.length  ? l.invoiceExtras  : (sb.invoiceExtras  || []),
             extrasAdvance:    l.extrasAdvance != null  ? l.extrasAdvance  : (sb.extrasAdvance  || 0),
-            paymentHistory:   l.paymentHistory?.length ? l.paymentHistory : (sb.paymentHistory || []),
+            paymentHistory:   (Array.isArray(l.paymentHistory) && l.paymentHistory.length) ? l.paymentHistory : (Array.isArray(sb.paymentHistory) ? sb.paymentHistory : []),
             extraPersonCharge: l.extraPersonCharge || sb.extraPersonCharge || null,
             invoiceDate:      l.invoiceDate    || sb.invoiceDate    || "",
             tcPrinted:        l.tcPrinted      || sb.tcPrinted      || false,
