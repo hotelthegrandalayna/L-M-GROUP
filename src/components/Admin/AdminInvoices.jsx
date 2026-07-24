@@ -314,10 +314,10 @@ export default function AdminInvoices() {
       if (filterMonth && getBookingMonth(bk) !== filterMonth) return false;
       if (filterRoom && !String(bk.room || "").toLowerCase().includes(filterRoom.toLowerCase())) return false;
       if (q && !(
-        (bk.guest || "").toLowerCase().includes(q) ||
-        (bk.id    || "").toLowerCase().includes(q) ||
-        (bk.phone || "").toLowerCase().includes(q) ||
-        String(bk.room || "").toLowerCase().includes(q)
+        String(bk.guest || "").toLowerCase().includes(q) ||
+        String(bk.id    ?? "").toLowerCase().includes(q) ||
+        String(bk.phone || "").toLowerCase().includes(q) ||
+        String(bk.room  || "").toLowerCase().includes(q)
       )) return false;
       return true;
     }).sort((a, b) => (b.checkin || b.createdAt || "") > (a.checkin || a.createdAt || "") ? 1 : -1);
