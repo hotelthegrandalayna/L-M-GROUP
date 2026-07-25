@@ -86,8 +86,10 @@ function firstImage(val) {
 
 function buildGuestRow(booking) {
   const row = {
-    full_name: toText(booking.guest),
-    phone: toText(booking.phone),
+    // full_name and phone are NOT-NULL columns — never send null, use "" so a
+    // guest without a phone (e.g. restored bookings) can still be saved/checked out.
+    full_name: toText(booking.guest) || "",
+    phone: toText(booking.phone) || "",
     nationality: toText(booking.nationality),
     email: toText(booking.email),
     ref_name: toText(booking.referredByName || booking.refName),
