@@ -5,6 +5,7 @@ import { todayStr, money, bookingConflicts, getRoomDisplayStatus, maxId, formatD
 import { buildInvoiceHTML, buildTCHtml, hotelPrint } from "./Invoice";
 import { sendNtfyAlert } from "../utils/ntfy";
 import { hotelBusinessOnly } from "../utils/expenseType";
+import { pendingTasks, freqLabel } from "../utils/tasks";
 
 function addDaysIso(iso, days) {
   const d = new Date(iso + "T00:00:00");
@@ -812,7 +813,7 @@ function CheckInPreviewModal({ booking, rooms, onConfirm, onEdit, onClose }) {
 }
 
 export default function Desk() {
-  const { curRole, curUser, rooms, bookings, revenues, expenses, expTypes, updateBookings, updateRevenues, notify, setActiveTab, setPendingInvoiceId } = useApp();
+  const { curRole, curUser, rooms, bookings, revenues, expenses, expTypes, tasks, taskDone, setTaskDone, updateBookings, updateRevenues, notify, setActiveTab, setPendingInvoiceId } = useApp();
   const isMobile = useIsMobile();
   const [sel, setSel] = useState(null);
   const [checkoutTarget, setCheckoutTarget] = useState(null);
@@ -875,6 +876,11 @@ export default function Desk() {
   const inhouse    = bookings.filter(b => b.status === "checked-in");
   const arrivals   = bookings.filter(b => b.checkin === today && (b.status === "confirmed" || b.status === "checked-in"));
   const departures = bookings.filter(b => b.checkout === today && b.status === "checked-in");
+  const pendingT   = pendingTasks(tasks, taskDone, today);
+  function quickDoneTask(task, due) {
+    setTaskDone(prev => ({ ...prev, [`${task.id}_${due}`]: { by: curUser || "staff", at: new Date().toISOString(), hasPhoto: false } }));
+    notify(`"${task.title}" marked done ✓`, "success");
+  }
   const occ = rooms.filter(r => getRoomDisplayStatus(r, bookings, today) === "occupied").length;
   const occPct = rooms.length ? Math.round(occ/rooms.length*100) : 0;
 
@@ -1270,6 +1276,29 @@ export default function Desk() {
 
         {/* Right: Action panels */}
         <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+
+          {/* Today's Tasks — always visible on the front desk */}
+          <div className="panel" style={{ border:`2px solid ${pendingT.some(p=>p.overdue)?"var(--red2)":(pendingT.length?"var(--gold2)":"var(--green)")}` }}>
+            <div className="panel-header" style={{ padding:"10px 12px", background:pendingT.length?"var(--gold-bg,#fdf8ee)":"transparent" }}>
+              <div className="panel-title" style={{ fontSize:13, fontWeight:800 }}>
+                <i className="ti ti-checklist" style={{ color:"var(--gold2)" }} /> Today's Tasks
+                <span style={{ marginLeft:6, background:pendingT.length?"var(--red-bg)":"var(--green-bg)", color:pendingT.length?"var(--red2)":"var(--green)", fontWeight:800, fontSize:10, padding:"1px 7px", borderRadius:8 }}>{pendingT.length}</span>
+              </div>
+              <button onClick={()=>setActiveTab("tasks")} style={{ fontSize:10, fontWeight:700, background:"transparent", border:"none", color:"var(--gold2)", cursor:"pointer" }}>Open ▸</button>
+            </div>
+            {pendingT.length ? pendingT.slice(0,6).map(({task,due,overdue}) => (
+              <div key={task.id+"_"+due} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:8, padding:"8px 12px", borderBottom:"1px solid var(--border)", background:overdue?"var(--red-bg)":"transparent" }}>
+                <div style={{ minWidth:0 }}>
+                  <div style={{ fontWeight:700, fontSize:12.5, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{task.title}</div>
+                  <div style={{ fontSize:10, fontWeight:700, color:overdue?"var(--red2)":"var(--text3)" }}>{overdue ? "OVERDUE" : "Due today"} · {freqLabel(task)}</div>
+                </div>
+                <button onClick={()=>quickDoneTask(task,due)} style={{ flexShrink:0, padding:"6px 11px", borderRadius:8, border:"none", background:"var(--green)", color:"#fff", cursor:"pointer", fontFamily:"inherit", fontWeight:800, fontSize:11 }}>✓ Done</button>
+              </div>
+            )) : (
+              <div style={{ color:"var(--green)", fontSize:12, fontWeight:600, textAlign:"center", padding:"12px 0" }}>🎉 All tasks done for today</div>
+            )}
+            {pendingT.length > 6 && <div style={{ fontSize:10, color:"var(--text3)", textAlign:"center", padding:"6px 0" }}>+{pendingT.length-6} more — tap Open</div>}
+          </div>
 
           {/* Arrivals */}
           <div className="panel">
