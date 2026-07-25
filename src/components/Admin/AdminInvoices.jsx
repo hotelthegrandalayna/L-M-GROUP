@@ -140,6 +140,7 @@ function InvoiceDetail({ bk, onClose }) {
   // this booking's photos on demand, only now that its details are open.
   const [fetchedImgs, setFetchedImgs] = useState(null);
   const [imgLoading, setImgLoading] = useState(false);
+  const [zoomImg, setZoomImg] = useState(null);
   const hasLocalImages = (bk.idDocs || []).length > 0 || bk.idFront || bk.idBack;
 
   useEffect(() => {
@@ -288,7 +289,7 @@ function InvoiceDetail({ bk, onClose }) {
                             {item.side}
                           </div>
                           <img src={item.img} alt={`${person.label} ${item.side}`}
-                            onClick={() => window.open(item.img, "_blank")}
+                            onClick={() => setZoomImg(item.img)}
                             style={{ maxWidth: 170, maxHeight: 115, borderRadius: 8, border: "1.5px solid var(--border)", objectFit: "cover", cursor: "pointer", display: "block" }} />
                           <div style={{ fontSize: 10, color: "var(--text3)", marginTop: 4 }}>Click to enlarge</div>
                         </div>
@@ -309,6 +310,16 @@ function InvoiceDetail({ bk, onClose }) {
           )}
         </div>
       </div>
+
+      {/* Full-screen photo viewer (data-URL images can't open in a new tab) */}
+      {zoomImg && (
+        <div onClick={() => setZoomImg(null)}
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.9)", zIndex: 100000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20, cursor: "zoom-out" }}>
+          <img src={zoomImg} alt="ID document" style={{ maxWidth: "95%", maxHeight: "95%", objectFit: "contain", borderRadius: 8, boxShadow: "0 8px 40px rgba(0,0,0,.6)" }} />
+          <button onClick={() => setZoomImg(null)}
+            style={{ position: "fixed", top: 18, right: 22, background: "rgba(255,255,255,.15)", border: "1.5px solid rgba(255,255,255,.4)", color: "#fff", fontSize: 22, width: 44, height: 44, borderRadius: "50%", cursor: "pointer", lineHeight: 1 }}>✕</button>
+        </div>
+      )}
     </div>
   );
 }

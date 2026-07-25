@@ -85,7 +85,7 @@ function firstImage(val) {
 }
 
 function buildGuestRow(booking) {
-  return {
+  const row = {
     full_name: toText(booking.guest),
     phone: toText(booking.phone),
     nationality: toText(booking.nationality),
@@ -94,10 +94,20 @@ function buildGuestRow(booking) {
     ref_phone: toText(booking.referredByPhone || booking.refPhone),
     id_type: toText(booking.idType),
     id_number: toText(booking.idNum),
-    image_front: toText(firstImage(booking.idFront)),
-    image_back: toText(firstImage(booking.idBack)),
-    id_docs: booking.idDocs?.length ? JSON.stringify(booking.idDocs) : null,
   };
+  // Only touch the ID-photo columns when the booking actually carries photo
+  // data. Bookings now load WITHOUT photos (fetched on demand), so writing empty
+  // photo fields on a checkout/edit would WIPE the guest's saved photos.
+  // Omitting the columns leaves the existing cloud photos untouched.
+  const hasFront = booking.idFront && firstImage(booking.idFront);
+  const hasBack  = booking.idBack  && firstImage(booking.idBack);
+  const hasDocs  = booking.idDocs && booking.idDocs.length;
+  if (hasFront || hasBack || hasDocs) {
+    row.image_front = toText(firstImage(booking.idFront));
+    row.image_back  = toText(firstImage(booking.idBack));
+    row.id_docs     = hasDocs ? JSON.stringify(booking.idDocs) : null;
+  }
+  return row;
 }
 
 function buildBookingRow(booking, guestId) {
@@ -237,10 +247,22 @@ export async function persistHotelBookingBundle(booking) {
     const guestRows = await request("guests", {
       method: "PATCH",
       query: { id: `eq.${guestId}` },
-      body: guestRow,
+      body: { ...guestRow, id: guestId },
       extraHeaders: { Prefer: "return=representation" },
     });
     guest = Array.isArray(guestRows) ? guestRows[0] : guestRows;
+    // If the PATCH matched no row (guest was deleted or id drifted), the
+    // response is empty. Fall back to creating the guest so the save still
+    // succeeds instead of failing the whole checkout.
+    if (!guest?.id) {
+      const created = await request("guests", {
+        method: "POST",
+        body: { ...guestRow, id: guestId },
+        extraHeaders: { Prefer: "resolution=merge-duplicates,return=representation" },
+      });
+      guest = Array.isArray(created) ? created[0] : created;
+      if (!guest?.id) guest = { id: guestId };
+    }
   } else {
     const guestRows = await request("guests", {
       method: "POST",

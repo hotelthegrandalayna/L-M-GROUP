@@ -1013,7 +1013,7 @@ export default function Desk() {
     updateBookings(bookings.map(x => x.id === bid ? updatedBooking : x));
     void persistHotelBookingBundle(updatedBooking).catch((err) => {
       console.error("Failed to sync checkout to Supabase:", err);
-      notify("Checkout saved locally, but Supabase sync failed", "error");
+      notify("Checkout saved on this device — cloud sync failed: " + (err?.message || "connection issue") + ". It will retry automatically.", "error");
     });
     sendNtfyAlert(
       `CHECK-OUT — ${b.guest}`,
