@@ -247,7 +247,7 @@ export async function persistHotelBookingBundle(booking) {
     const guestRows = await request("guests", {
       method: "PATCH",
       query: { id: `eq.${guestId}` },
-      body: { ...guestRow, id: guestId },
+      body: guestRow,
       extraHeaders: { Prefer: "return=representation" },
     });
     guest = Array.isArray(guestRows) ? guestRows[0] : guestRows;
