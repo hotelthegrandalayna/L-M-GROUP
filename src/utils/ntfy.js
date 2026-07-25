@@ -29,7 +29,7 @@ const PRIORITY_NUM = { max: 5, high: 4, default: 3, low: 2, min: 1 };
 const TAG_EMOJI = {
   red_circle: "🔴", green_circle: "🟢", orange_circle: "🟠",
   blue_circle: "🔵", large_blue_circle: "🔵", purple_circle: "🟣",
-  printer: "🖨️", bell: "🔔",
+  printer: "🖨️", bell: "🔔", clipboard: "📋",
 };
 
 // opts: { tags, priority }

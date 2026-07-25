@@ -113,3 +113,25 @@ export async function loadConfig(key) {
     return rows?.[0]?.value ?? null;
   } catch { return null; }
 }
+
+// Delete a config row by key
+export async function deleteConfig(key) {
+  if (!hasSupabase()) return;
+  await fetch(`${base("app_config")}?key=eq.${encodeURIComponent(key)}`, {
+    method: "DELETE",
+    headers: headers(),
+  });
+}
+
+// List config keys matching a prefix (used to find/expire task photos)
+export async function listConfigKeys(prefix) {
+  if (!hasSupabase()) return [];
+  try {
+    const res = await fetch(`${base("app_config")}?key=like.${encodeURIComponent(prefix + "*")}&select=key`, {
+      headers: headers(),
+    });
+    if (!res.ok) return [];
+    const rows = await res.json();
+    return Array.isArray(rows) ? rows.map(r => r.key) : [];
+  } catch { return []; }
+}

@@ -4,6 +4,7 @@ import { hasSupabase, upsertRows, loadRows, saveConfig, loadConfig } from "../ut
 import { restoreUserPasswords } from "../utils/userPass";
 import { onRemoteChange } from "../utils/realtimeSync";
 import { runDailyBackup } from "../utils/dailyBackup";
+import { cleanupOldTaskPhotos } from "../utils/tasks";
 import { syncNtfyConfigFromSupabase } from "../utils/ntfy";
 import { supabase } from "../lib/supabaseClient";
 
@@ -111,6 +112,9 @@ export function AppProvider({ children }) {
   const [expTypes,     setExpTypesRaw] = useState(() => ls('ga_exp_types', {}));
   // Companions (spouse/group members with phones) per booking id — synced via app_config
   const [companionsMap, setCompanionsMap] = useState(() => ls('ga_companions', {}));
+  // Task / cleaning schedule — definitions + completion map, synced via app_config
+  const [tasks,    setTasksRaw]    = useState(() => ls('ga_tasks', []));
+  const [taskDone, setTaskDoneRaw] = useState(() => ls('ga_task_done', {}));
   const [loyaltyData,  setLoyalty]    = useState(() => ls('ga_loyalty', {}));
   const [surveyData,   setSurveys]    = useState(() => ls('ga_surveys', []));
   const [guestProfiles,setGuests]     = useState(() => ls('ga_guests', {}));
@@ -330,7 +334,7 @@ export function AppProvider({ children }) {
     const sbUrl = (import.meta.env?.VITE_SUPABASE_URL || '').trim();
     const sbKey = ((import.meta.env?.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env?.VITE_SUPABASE_ANON_KEY) || '').trim();
     if (sbUrl && sbKey) {
-      const configKeys = ['hotel_guest_profiles','hotel_sms_tpl','hotel_pricing','hotel_loyalty_rules','hotel_loyalty_data','hotel_inv_items','hotel_extra_person','hotel_surveys','hotel_staff','hotel_login_monitor','hotel_recovery_emails','hotel_exp_types','hotel_booking_companions','hall_staff_renames','hall_sms_config'];
+      const configKeys = ['hotel_guest_profiles','hotel_sms_tpl','hotel_pricing','hotel_loyalty_rules','hotel_loyalty_data','hotel_inv_items','hotel_extra_person','hotel_surveys','hotel_staff','hotel_login_monitor','hotel_recovery_emails','hotel_exp_types','hotel_booking_companions','hotel_tasks','hotel_task_done','hall_staff_renames','hall_sms_config'];
       fetch(sbUrl.replace(/\/$/, '') + '/rest/v1/app_config?key=in.(' + configKeys.join(',') + ')', {
         headers: { apikey: sbKey, Authorization: 'Bearer ' + sbKey },
       })
@@ -389,6 +393,18 @@ export function AppProvider({ children }) {
                   setCompanionsMap(prev => {
                     const merged = { ...prev, ...v };
                     localStorage.setItem('ga_companions', JSON.stringify(merged));
+                    return merged;
+                  });
+                }
+                break;
+              case 'hotel_tasks':
+                if (Array.isArray(v)) { setTasksRaw(v); localStorage.setItem('ga_tasks', JSON.stringify(v)); }
+                break;
+              case 'hotel_task_done':
+                if (typeof v === 'object') {
+                  setTaskDoneRaw(prev => {
+                    const merged = { ...prev, ...v };
+                    localStorage.setItem('ga_task_done', JSON.stringify(merged));
                     return merged;
                   });
                 }
@@ -560,7 +576,8 @@ export function AppProvider({ children }) {
   // initial sync has settled and the snapshot reflects fresh data.
   useEffect(() => {
     const t = setTimeout(() => runDailyBackup(), 90_000);
-    return () => clearTimeout(t);
+    const c = setTimeout(() => cleanupOldTaskPhotos(), 120_000);
+    return () => { clearTimeout(t); clearTimeout(c); };
   }, []);
 
   // Push companion info (spouse/group members) to Supabase app_config whenever
@@ -630,6 +647,24 @@ export function AppProvider({ children }) {
     });
   }, []);
 
+  // ── Tasks (cleaning schedule) — synced via app_config ──────────────────────
+  const setTasks = useCallback((next) => {
+    setTasksRaw(prev => {
+      const v = typeof next === 'function' ? next(prev) : next;
+      localStorage.setItem('ga_tasks', JSON.stringify(v));
+      if (hasSupabase()) saveConfig('hotel_tasks', v).catch(() => {});
+      return v;
+    });
+  }, []);
+  const setTaskDone = useCallback((next) => {
+    setTaskDoneRaw(prev => {
+      const v = typeof next === 'function' ? next(prev) : next;
+      localStorage.setItem('ga_task_done', JSON.stringify(v));
+      if (hasSupabase()) saveConfig('hotel_task_done', v).catch(() => {});
+      return v;
+    });
+  }, []);
+
   const notify = useCallback((msg, type = 'info') => {
     setNotification({ msg, type });
     setTimeout(() => setNotification(null), 3200);
@@ -657,6 +692,7 @@ export function AppProvider({ children }) {
       revenues, updateRevenues,
       expenses, updateExpenses,
       expTypes, setExpenseType, removeExpenseType,
+      tasks, setTasks, taskDone, setTaskDone,
       loyaltyData, setLoyalty: updateLoyalty,
       surveyData, setSurveys: updateSurveys,
       guestProfiles, setGuests, updateGuests,

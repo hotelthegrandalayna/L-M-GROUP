@@ -6,6 +6,8 @@ import Notification from "./components/Notification";
 import Desk         from "./components/Desk";
 import Bookings     from "./components/Bookings";
 import Expenses     from "./components/Expenses";
+import Tasks        from "./components/Tasks";
+import TaskReminderPopup from "./components/TaskReminderPopup";
 import CRM          from "./components/CRM";
 import Insights     from "./components/Insights";
 import Marketing    from "./components/Marketing";
@@ -21,11 +23,13 @@ function HotelInner({ onSwitchApp }) {
     <div id="hotelApp" style={{ display:"flex", flexDirection:"column", minHeight:"100vh" }}>
       <Navbar onSwitchApp={onSwitchApp} />
       <Notification />
+      <TaskReminderPopup />
       <main style={{ flex:1, overflowY:"auto" }}>
         <ErrorBoundary key={activeTab}>
           {activeTab === "desk"      && <Desk      />}
           {activeTab === "bookings"  && <Bookings  />}
           {activeTab === "expenses"  && <Expenses  />}
+          {activeTab === "tasks"     && <Tasks     />}
           {activeTab === "crm"       && <CRM       />}
           {activeTab === "insights"  && <Insights  />}
           {activeTab === "marketing" && <Marketing />}

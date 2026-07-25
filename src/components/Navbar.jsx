@@ -6,6 +6,7 @@ const TABS = [
   { id: 'desk',      icon: 'ti-layout-dashboard', label: 'Desk'      },
   { id: 'bookings',  icon: 'ti-calendar-check',   label: 'Bookings'  },
   { id: 'expenses',  icon: 'ti-receipt',          label: 'Expenses & Cash' },
+  { id: 'tasks',     icon: 'ti-checklist',        label: 'Tasks'     },
   { id: 'crm',       icon: 'ti-users',            label: 'CRM'       },
   { id: 'insights',  icon: 'ti-chart-bar',        label: 'Insights'  },
   { id: 'marketing', icon: 'ti-speakerphone',     label: 'Marketing' },
@@ -16,7 +17,7 @@ export default function Navbar({ onSwitchApp }) {
   const { curUser, curRole, activeTab, setActiveTab, logout } = useApp();
   const isMobile = useIsMobile();
   const visibleTabs = TABS.filter(t =>
-    curRole === 'staff' ? ['desk','bookings','expenses'].includes(t.id) : true
+    curRole === 'staff' ? ['desk','bookings','expenses','tasks'].includes(t.id) : true
   );
 
   // ── Mobile: compact brand row + full-width scrollable tab strip below ──
