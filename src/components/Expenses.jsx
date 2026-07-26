@@ -20,6 +20,7 @@ const PAY_METHODS = [
 const BUSINESS_CAT_OPTIONS = [
   { v:"Salaries",        l:"👤 Salaries" },
   { v:"Electricity",     l:"⚡ Electricity" },
+  { v:"Generator Oil",   l:"🛢️ Generator Oil" },
   { v:"Food & Beverage", l:"🍳 Food & Beverage" },
   { v:"Laundry",         l:"🧺 Laundry" },
   { v:"Maintenance",     l:"🔧 Maintenance" },
@@ -42,7 +43,7 @@ const NONBUSINESS_CAT_OPTIONS = [
 
 const CAT_EMOJI = {
   "Salaries":"👤","Electricity":"⚡","Food & Beverage":"🍳","Laundry":"🧺","Maintenance":"🔧",
-  "Utilities":"🏢","Supplies":"📦","Guest Amenities":"🧴","Marketing":"📣","Transport":"🚗","Miscellaneous":"📌",
+  "Utilities":"🏢","Supplies":"📦","Generator Oil":"🛢️","Guest Amenities":"🧴","Marketing":"📣","Transport":"🚗","Miscellaneous":"📌",
   "Bank Transfer":"🏦","Owner Withdrawal":"💸","Donation":"🤲","Lending":"🤝","Personal Use":"👤","Other Transfer":"📌",
 };
 
