@@ -1272,33 +1272,38 @@ export default function Desk() {
               )
             }
           </div>
+
+          {/* Today's Tasks — big, prominent panel under the room map & guests.
+              Flashes gold when due today, red when overdue, so it can't be missed. */}
+          <div className={pendingT.length ? (pendingT.some(p=>p.overdue) ? "task-flash-red" : "task-flash-gold") : ""}
+            style={{ background:"#fff", border:`2px solid ${pendingT.some(p=>p.overdue)?"var(--red2)":(pendingT.length?"var(--gold2)":"#86EFB0")}`, borderRadius:14, padding:"14px 16px", marginTop:14 }}>
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8, marginBottom:pendingT.length?12:0 }}>
+              <div style={{ fontSize:16, fontWeight:900, color:"var(--navy)", display:"flex", alignItems:"center", gap:8 }}>
+                <i className="ti ti-checklist" style={{ color:"var(--gold2)", fontSize:20 }} /> Today's Tasks
+                <span style={{ background:pendingT.length?"var(--red-bg)":"var(--green-bg)", color:pendingT.length?"var(--red2)":"var(--green)", fontWeight:800, fontSize:12, padding:"2px 10px", borderRadius:10 }}>{pendingT.length ? `${pendingT.length} to do` : "All done"}</span>
+              </div>
+              <button onClick={()=>setActiveTab("tasks")} style={{ fontSize:12, fontWeight:700, background:"transparent", border:"1.5px solid var(--border)", borderRadius:8, padding:"6px 12px", color:"var(--navy)", cursor:"pointer" }}>Open all ▸</button>
+            </div>
+            {pendingT.length ? (
+              <div style={{ display:"grid", gridTemplateColumns:isMobile?"1fr":"repeat(auto-fill,minmax(280px,1fr))", gap:10 }}>
+                {pendingT.map(({task,due,overdue}) => (
+                  <div key={task.id+"_"+due} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:10, padding:"11px 13px", border:`1.5px solid ${overdue?"#fca5a5":"#e5e3de"}`, background:overdue?"#fff5f5":"#fafaf9", borderRadius:10 }}>
+                    <div style={{ minWidth:0 }}>
+                      <div style={{ fontWeight:800, fontSize:14, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{task.title}</div>
+                      <div style={{ fontSize:11, fontWeight:700, color:overdue?"var(--red2)":"var(--green)", marginTop:2 }}>{overdue ? "⚠ OVERDUE" : "Due today"} <span style={{ color:"var(--text3)", fontWeight:400 }}>· {freqLabel(task)}</span></div>
+                    </div>
+                    <button onClick={()=>quickDoneTask(task,due)} style={{ flexShrink:0, padding:"9px 15px", borderRadius:9, border:"none", background:"var(--green)", color:"#fff", cursor:"pointer", fontFamily:"inherit", fontWeight:800, fontSize:13 }}>✓ Done</button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={{ color:"var(--green)", fontSize:13, fontWeight:700, padding:"6px 0 2px" }}>🎉 All tasks done for today</div>
+            )}
+          </div>
         </div>
 
         {/* Right: Action panels */}
         <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
-
-          {/* Today's Tasks — always visible on the front desk */}
-          <div className="panel" style={{ border:`2px solid ${pendingT.some(p=>p.overdue)?"var(--red2)":(pendingT.length?"var(--gold2)":"var(--green)")}` }}>
-            <div className="panel-header" style={{ padding:"10px 12px", background:pendingT.length?"var(--gold-bg,#fdf8ee)":"transparent" }}>
-              <div className="panel-title" style={{ fontSize:13, fontWeight:800 }}>
-                <i className="ti ti-checklist" style={{ color:"var(--gold2)" }} /> Today's Tasks
-                <span style={{ marginLeft:6, background:pendingT.length?"var(--red-bg)":"var(--green-bg)", color:pendingT.length?"var(--red2)":"var(--green)", fontWeight:800, fontSize:10, padding:"1px 7px", borderRadius:8 }}>{pendingT.length}</span>
-              </div>
-              <button onClick={()=>setActiveTab("tasks")} style={{ fontSize:10, fontWeight:700, background:"transparent", border:"none", color:"var(--gold2)", cursor:"pointer" }}>Open ▸</button>
-            </div>
-            {pendingT.length ? pendingT.slice(0,6).map(({task,due,overdue}) => (
-              <div key={task.id+"_"+due} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:8, padding:"8px 12px", borderBottom:"1px solid var(--border)", background:overdue?"var(--red-bg)":"transparent" }}>
-                <div style={{ minWidth:0 }}>
-                  <div style={{ fontWeight:700, fontSize:12.5, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{task.title}</div>
-                  <div style={{ fontSize:10, fontWeight:700, color:overdue?"var(--red2)":"var(--text3)" }}>{overdue ? "OVERDUE" : "Due today"} · {freqLabel(task)}</div>
-                </div>
-                <button onClick={()=>quickDoneTask(task,due)} style={{ flexShrink:0, padding:"6px 11px", borderRadius:8, border:"none", background:"var(--green)", color:"#fff", cursor:"pointer", fontFamily:"inherit", fontWeight:800, fontSize:11 }}>✓ Done</button>
-              </div>
-            )) : (
-              <div style={{ color:"var(--green)", fontSize:12, fontWeight:600, textAlign:"center", padding:"12px 0" }}>🎉 All tasks done for today</div>
-            )}
-            {pendingT.length > 6 && <div style={{ fontSize:10, color:"var(--text3)", textAlign:"center", padding:"6px 0" }}>+{pendingT.length-6} more — tap Open</div>}
-          </div>
 
           {/* Arrivals */}
           <div className="panel">

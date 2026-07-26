@@ -1598,3 +1598,15 @@ select:focus, textarea:focus {
 #hotelApp .metric.gold .metric-icon { background:var(--gold4);color:var(--gold); }
 #hotelApp .metric.green .metric-icon { background:var(--green-bg);color:var(--green2); }
 #hotelApp .metric.amber .metric-icon { background:var(--amber-bg);color:var(--amber2); }
+
+/* Today's Tasks panel — pulse to draw attention (gold = due today, red = overdue) */
+@keyframes taskPulseGold {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(201,168,76,0); }
+  50%      { box-shadow: 0 0 0 6px rgba(201,168,76,0.28); }
+}
+@keyframes taskPulseRed {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(192,57,43,0); }
+  50%      { box-shadow: 0 0 0 6px rgba(192,57,43,0.38); }
+}
+.task-flash-gold { animation: taskPulseGold 1.5s ease-in-out infinite; }
+.task-flash-red  { animation: taskPulseRed 1.05s ease-in-out infinite; }

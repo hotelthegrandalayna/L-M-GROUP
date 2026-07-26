@@ -10,6 +10,7 @@ const C = { navy:"#1e3a5f", gold:"#c9a84c", dim:"#666", border:"#cdd7e4", green:
 const FREQS = [
   { v:"daily",   l:"Daily" },
   { v:"weekly",  l:"Weekly (choose days)" },
+  { v:"every15", l:"Every 15 days" },
   { v:"monthly", l:"Monthly (choose date)" },
   { v:"once",    l:"One-time (specific date)" },
 ];

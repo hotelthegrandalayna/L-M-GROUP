@@ -25,6 +25,12 @@ export function scheduledOn(task, dateStr) {
     case "daily":   return true;
     case "weekly":  return (task.days || []).includes(d.getDay());
     case "monthly": return d.getDate() === Number(task.date || 1);
+    case "every15": {
+      // Every 15 days, counted from the day the task was created.
+      const anchor = (task.createdAt ? task.createdAt.slice(0, 10) : dateStr);
+      const diff = Math.round((d - new Date(anchor + "T00:00:00")) / 86400000);
+      return diff >= 0 && diff % 15 === 0;
+    }
     case "once":    return dateStr === task.onceDate;
     default:        return false;
   }
@@ -58,6 +64,7 @@ export function pendingTasks(tasks, taskDone, todayStr) {
 export function freqLabel(task) {
   if (task.freq === "daily")   return "Daily";
   if (task.freq === "weekly")  return "Weekly · " + (task.days || []).map(d => DAY_NAMES[d]).join(", ");
+  if (task.freq === "every15") return "Every 15 days";
   if (task.freq === "monthly") return "Monthly · day " + (task.date || 1);
   if (task.freq === "once")    return "One-time · " + (task.onceDate || "");
   return "";
