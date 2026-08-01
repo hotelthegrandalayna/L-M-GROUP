@@ -924,6 +924,13 @@ function NewBookingModal({ onClose, prefill, editBooking }) {
                   </div>
                 </div>
               )}
+              {/* Guests — kept with the room so it reads: room → AC → how many people */}
+              {selRoom && (
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:10 }}>
+                  <div className="form-group" style={{ marginBottom:0 }}><label><i className="ti ti-users" style={{ marginRight:4, color:"var(--navy)" }} />Adults</label><input type="number" value={adults} min={1} max={20} onWheel={e=>e.target.blur()} onChange={e=>{ setAdults(e.target.value); setEpAccepted(false); }} style={{ textAlign:"center", fontWeight:800 }} /></div>
+                  <div className="form-group" style={{ marginBottom:0 }}><label>Children</label><input type="number" value={children} min={0} max={15} onWheel={e=>e.target.blur()} onChange={e=>setChildren(e.target.value)} style={{ textAlign:"center" }} /></div>
+                </div>
+              )}
               {/* Multi-room: primary room discount */}
               {isMultiRoom && selRoom && (
                 <div style={{ background:"#f0f7ff", border:"1.5px solid #a8c8f0", borderRadius:9, padding:"10px 14px", marginBottom:8 }}>
@@ -1080,8 +1087,6 @@ function NewBookingModal({ onClose, prefill, editBooking }) {
           <div className="form-section" style={{ border:"1.5px solid var(--border)", borderRadius:12, padding:"16px 18px", marginBottom:12 }}>
             <div style={{ color:"var(--text3)", fontSize:10, fontWeight:800, letterSpacing:2, textTransform:"uppercase", marginBottom:10 }}>Step 3 — Guest Details</div>
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
-              <div className="form-group" style={{ marginBottom:0 }}><label>Full Name *</label><input value={name} onChange={e=>setName(e.target.value)} placeholder="As per ID" autoFocus /></div>
-              <div className="form-group" style={{ marginBottom:0 }}><label>Phone *</label><input value={phone} onChange={e=>setPhone(e.target.value)} placeholder="+880..." /></div>
               <div style={{ gridColumn:"1/-1" }}>
                 <div style={{ fontSize:11, fontWeight:800, color:"#5a2ea8", textTransform:"uppercase", letterSpacing:.5, marginBottom:7 }}>👤 Guest Type</div>
                 <div style={{ display:"flex", gap:0, borderRadius:9, overflow:"hidden", border:"2px solid #5a2ea8" }}>
@@ -1096,6 +1101,8 @@ function NewBookingModal({ onClose, prefill, editBooking }) {
                   ))}
                 </div>
               </div>
+              <div className="form-group" style={{ marginBottom:0 }}><label>Full Name *</label><input value={name} onChange={e=>setName(e.target.value)} placeholder="As per ID" autoFocus /></div>
+              <div className="form-group" style={{ marginBottom:0 }}><label>Phone *</label><input value={phone} onChange={e=>setPhone(e.target.value)} placeholder="+880..." /></div>
               {guestType === "couple" && (<>
                 <div className="form-group" style={{ marginBottom:0 }}>
                   <label>Spouse / Wife Name</label>
@@ -1138,15 +1145,14 @@ function NewBookingModal({ onClose, prefill, editBooking }) {
                 </button>
               </div>
             )}
-            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginTop: guestType === "group" ? 12 : 0 }}>
-              <div className="form-group" style={{ marginBottom:0 }}><label>Adults</label><input type="number" value={adults} min={1} max={20} onChange={e=>{ setAdults(e.target.value); setEpAccepted(false); }} style={{ textAlign:"center", fontWeight:800 }} /></div>
-              <div className="form-group" style={{ marginBottom:0 }}><label>Children</label><input type="number" value={children} min={0} max={15} onChange={e=>setChildren(e.target.value)} style={{ textAlign:"center" }} /></div>
-              <div className="form-group" style={{ marginBottom:0 }}><label>Nationality</label><input value={nat} onChange={e=>setNat(e.target.value)} placeholder="Bangladeshi" /></div>
-              <div className="form-group" style={{ marginBottom:0 }}><label>Source</label>
-                <select value={src} onChange={e=>setSrc(e.target.value)}>{SOURCES.map(s=><option key={s}>{s}</option>)}</select>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginTop:12 }}>
+              <div className="form-group" style={{ marginBottom:0 }}><label>How did the guest come?</label>
+                <select value={src} onChange={e=>{ setSrc(e.target.value); if(e.target.value!=="Referral"){ setRefName(""); setRefPhone(""); } }}>{SOURCES.map(s=><option key={s}>{s}</option>)}</select>
               </div>
-              <div className="form-group" style={{ marginBottom:0 }}><label>Referred by — Name</label><input value={refName} onChange={e=>setRefName(e.target.value)} placeholder="Referrer name" /></div>
-              <div className="form-group" style={{ marginBottom:0 }}><label>Referred by — Phone</label><input value={refPhone} onChange={e=>setRefPhone(e.target.value)} placeholder="Referrer phone" /></div>
+              {src === "Referral" && (<>
+                <div className="form-group" style={{ marginBottom:0 }}><label>Referred by — Name</label><input value={refName} onChange={e=>setRefName(e.target.value)} placeholder="Referrer name" /></div>
+                <div className="form-group" style={{ marginBottom:0 }}><label>Referred by — Phone</label><input value={refPhone} onChange={e=>setRefPhone(e.target.value)} placeholder="Referrer phone" /></div>
+              </>)}
             </div>
             {epCharge > 0 && !epAccepted && (
               <div style={{ border:"1.5px solid var(--gold)", borderRadius:9, padding:"12px 14px", background:"#fffbee", marginTop:12 }}>
