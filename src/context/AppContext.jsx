@@ -115,6 +115,9 @@ export function AppProvider({ children }) {
   // Task / cleaning schedule — definitions + completion map, synced via app_config
   const [tasks,    setTasksRaw]    = useState(() => ls('ga_tasks', []));
   const [taskDone, setTaskDoneRaw] = useState(() => ls('ga_task_done', {}));
+  // Room housekeeping — rooms awaiting cleaning after checkout + cleaning history
+  const [dirtyRooms,  setDirtyRoomsRaw]  = useState(() => ls('ga_dirty_rooms', {}));
+  const [cleaningLog, setCleaningLogRaw] = useState(() => ls('ga_cleaning_log', []));
   const [loyaltyData,  setLoyalty]    = useState(() => ls('ga_loyalty', {}));
   const [surveyData,   setSurveys]    = useState(() => ls('ga_surveys', []));
   const [guestProfiles,setGuests]     = useState(() => ls('ga_guests', {}));
@@ -334,7 +337,7 @@ export function AppProvider({ children }) {
     const sbUrl = (import.meta.env?.VITE_SUPABASE_URL || '').trim();
     const sbKey = ((import.meta.env?.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env?.VITE_SUPABASE_ANON_KEY) || '').trim();
     if (sbUrl && sbKey) {
-      const configKeys = ['hotel_guest_profiles','hotel_sms_tpl','hotel_pricing','hotel_loyalty_rules','hotel_loyalty_data','hotel_inv_items','hotel_extra_person','hotel_surveys','hotel_staff','hotel_login_monitor','hotel_recovery_emails','hotel_exp_types','hotel_booking_companions','hotel_tasks','hotel_task_done','hall_staff_renames','hall_sms_config'];
+      const configKeys = ['hotel_guest_profiles','hotel_sms_tpl','hotel_pricing','hotel_loyalty_rules','hotel_loyalty_data','hotel_inv_items','hotel_extra_person','hotel_surveys','hotel_staff','hotel_login_monitor','hotel_recovery_emails','hotel_exp_types','hotel_booking_companions','hotel_tasks','hotel_task_done','hotel_dirty_rooms','hotel_cleaning_log','hall_staff_renames','hall_sms_config'];
       fetch(sbUrl.replace(/\/$/, '') + '/rest/v1/app_config?key=in.(' + configKeys.join(',') + ')', {
         headers: { apikey: sbKey, Authorization: 'Bearer ' + sbKey },
       })
@@ -408,6 +411,12 @@ export function AppProvider({ children }) {
                     return merged;
                   });
                 }
+                break;
+              case 'hotel_dirty_rooms':
+                if (typeof v === 'object') { setDirtyRoomsRaw(v); localStorage.setItem('ga_dirty_rooms', JSON.stringify(v)); }
+                break;
+              case 'hotel_cleaning_log':
+                if (Array.isArray(v)) { setCleaningLogRaw(v); localStorage.setItem('ga_cleaning_log', JSON.stringify(v)); }
                 break;
               case 'hall_staff_renames':
                 if (typeof v === 'object') localStorage.setItem('a_renames', JSON.stringify(v));
@@ -665,6 +674,25 @@ export function AppProvider({ children }) {
     });
   }, []);
 
+  // ── Room housekeeping ──────────────────────────────────────────────────────
+  const setDirtyRooms = useCallback((next) => {
+    setDirtyRoomsRaw(prev => {
+      const v = typeof next === 'function' ? next(prev) : next;
+      localStorage.setItem('ga_dirty_rooms', JSON.stringify(v));
+      if (hasSupabase()) saveConfig('hotel_dirty_rooms', v).catch(() => {});
+      return v;
+    });
+  }, []);
+  const setCleaningLog = useCallback((next) => {
+    setCleaningLogRaw(prev => {
+      const v = typeof next === 'function' ? next(prev) : next;
+      const trimmed = Array.isArray(v) ? v.slice(-200) : v;
+      localStorage.setItem('ga_cleaning_log', JSON.stringify(trimmed));
+      if (hasSupabase()) saveConfig('hotel_cleaning_log', trimmed).catch(() => {});
+      return trimmed;
+    });
+  }, []);
+
   const notify = useCallback((msg, type = 'info') => {
     setNotification({ msg, type });
     setTimeout(() => setNotification(null), 3200);
@@ -693,6 +721,7 @@ export function AppProvider({ children }) {
       expenses, updateExpenses,
       expTypes, setExpenseType, removeExpenseType,
       tasks, setTasks, taskDone, setTaskDone,
+      dirtyRooms, setDirtyRooms, cleaningLog, setCleaningLog,
       loyaltyData, setLoyalty: updateLoyalty,
       surveyData, setSurveys: updateSurveys,
       guestProfiles, setGuests, updateGuests,

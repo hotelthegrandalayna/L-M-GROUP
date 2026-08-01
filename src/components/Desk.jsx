@@ -47,6 +47,7 @@ const STATUS_STYLE = {
   occupied:    { bg:"#FFF0F0", text:"#7a1a1a", border:"#f5a0a0", badge:"#C62828", badgeTx:"#fff" },
   reserved:    { bg:"#FFF8EC", text:"#7a4200", border:"#f5c97a", badge:"#E65100", badgeTx:"#fff" },
   vacant:      { bg:"#F0FBF2", text:"#1a5c2a", border:"#86EFB0", badge:"#1B7A33", badgeTx:"#fff" },
+  cleaning:    { bg:"#FEFCE8", text:"#7a5b00", border:"#facc15", badge:"#CA8A04", badgeTx:"#fff" },
   maintenance: { bg:"#F4F4F4", text:"#444",    border:"#ccc",    badge:"#555",    badgeTx:"#fff" },
 };
 
@@ -581,6 +582,50 @@ function DeskServiceModal({ booking, onConfirm, onClose }) {
 }
 
 // ── Extend Stay Modal ─────────────────────────────────────────────────────
+const CLEAN_CHECKLIST = [
+  "Bed made / linen changed",
+  "Toilet cleaned",
+  "Floor cleaned",
+  "TV and surfaces wiped",
+  "Fresh towels placed",
+  "Water bottles placed",
+];
+
+function CleaningModal({ room, info, onConfirm, onClose }) {
+  const [checked, setChecked] = useState(() => CLEAN_CHECKLIST.map(() => false));
+  const allDone = checked.every(Boolean);
+  const toggle = i => setChecked(prev => prev.map((v, j) => j === i ? !v : v));
+  return (
+    <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="modal-box" style={{ maxWidth: 440 }}>
+        <div className="modal-header">
+          <div>
+            <div className="modal-title"><i className="ti ti-spray" style={{ color:"#CA8A04" }} /> Clean Room {room.number}</div>
+            <div className="modal-sub">{info?.guest ? `Left by ${info.guest}` : "Awaiting cleaning"} — tick each item</div>
+          </div>
+          <button className="modal-close" onClick={onClose}><i className="ti ti-x" /></button>
+        </div>
+        <div style={{ padding:"4px 2px 10px" }}>
+          {CLEAN_CHECKLIST.map((item, i) => (
+            <label key={i} onClick={()=>toggle(i)} style={{ display:"flex", alignItems:"center", gap:11, padding:"11px 12px", border:"1.5px solid "+(checked[i]?"#86EFB0":"var(--border)"), background:checked[i]?"#F0FBF2":"transparent", borderRadius:10, marginBottom:8, cursor:"pointer" }}>
+              <span style={{ width:22, height:22, borderRadius:6, border:"2px solid "+(checked[i]?"#1B7A33":"#bbb"), background:checked[i]?"#1B7A33":"#fff", color:"#fff", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, fontSize:14, fontWeight:900 }}>{checked[i]?"✓":""}</span>
+              <span style={{ fontSize:14, fontWeight:600, color:checked[i]?"#1a5c2a":"var(--text2)" }}>{item}</span>
+            </label>
+          ))}
+        </div>
+        <div className="modal-actions">
+          <button className="btn" onClick={onClose}>Cancel</button>
+          <button className="btn primary" disabled={!allDone}
+            onClick={() => allDone && onConfirm(CLEAN_CHECKLIST.filter((_,i)=>checked[i]))}
+            style={{ background: allDone ? "#1a7040" : "#9ca3af", borderColor:"transparent", cursor: allDone?"pointer":"not-allowed" }}>
+            <i className="ti ti-circle-check" /> {allDone ? "Confirm Room Cleaned" : "Tick all items"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ExtendStayModal({ booking, rooms, onConfirm, onClose }) {
   const [newCheckout, setNewCheckout] = useState(() => addDaysIso(booking.checkout, 1));
   const [discType,   setDiscType]     = useState("none");
@@ -813,7 +858,7 @@ function CheckInPreviewModal({ booking, rooms, onConfirm, onEdit, onClose }) {
 }
 
 export default function Desk() {
-  const { curRole, curUser, rooms, bookings, revenues, expenses, expTypes, tasks, taskDone, setTaskDone, updateBookings, updateRevenues, notify, setActiveTab, setPendingInvoiceId } = useApp();
+  const { curRole, curUser, rooms, bookings, revenues, expenses, expTypes, tasks, taskDone, setTaskDone, dirtyRooms, setDirtyRooms, cleaningLog, setCleaningLog, updateBookings, updateRevenues, notify, setActiveTab, setPendingInvoiceId } = useApp();
   const isMobile = useIsMobile();
   const [sel, setSel] = useState(null);
   const [checkoutTarget, setCheckoutTarget] = useState(null);
@@ -825,6 +870,7 @@ export default function Desk() {
   const [serviceTarget, setServiceTarget] = useState(null);    // booking to add service to
   const [checkinPreview, setCheckinPreview] = useState(null);  // booking preview before check-in
   const [extendTarget, setExtendTarget] = useState(null);      // booking to extend stay for
+  const [cleanTarget, setCleanTarget] = useState(null);        // room to clean (checklist)
   const [showRevDetail, setShowRevDetail] = useState(false);
   const today = todayStr();
 
@@ -1004,6 +1050,19 @@ export default function Desk() {
     setSel(null); // close room modal if open
   }
 
+  // Called from the CleaningModal when a room's checklist is confirmed
+  function markRoomClean(room, checklist) {
+    const rn = String(room.number);
+    const info = (dirtyRooms || {})[rn] || {};
+    setDirtyRooms(prev => { const next = { ...prev }; delete next[rn]; return next; });
+    setCleaningLog(prev => [...(prev || []), {
+      room: rn, guest: info.guest || "", by: curUser || "staff",
+      at: new Date().toISOString(), checklist,
+    }]);
+    notify(`Room ${rn} marked clean ✓ — now available`, "success");
+    setCleanTarget(null);
+  }
+
   // Called from CheckoutModal when staff confirms
   function doCheckout(bid, collectBalance) {
     const b = bookings.find(x => x.id === bid); if (!b) return;
@@ -1017,6 +1076,15 @@ export default function Desk() {
       dueAmount: collectBalance ? 0 : getHotelDue(b),
     };
     updateBookings(bookings.map(x => x.id === bid ? updatedBooking : x));
+    // Mark the room(s) as needing cleaning — turns them yellow until confirmed clean
+    const roomsToClean = b.isMultiRoomBooking && b.multiRooms?.length
+      ? b.multiRooms.map(r => String(r.number))
+      : [String(b.room), ...((b.extraRooms||[]).map(r => String(r.number)))];
+    setDirtyRooms(prev => {
+      const next = { ...prev };
+      roomsToClean.forEach(rn => { if (rn) next[rn] = { since: today, guest: b.guest, bookingId: b.id }; });
+      return next;
+    });
     void persistHotelBookingBundle(updatedBooking).catch((err) => {
       console.error("Failed to sync checkout to Supabase:", err);
       notify("Checkout saved on this device — cloud sync failed: " + (err?.message || "connection issue") + ". It will retry automatically.", "error");
@@ -1136,7 +1204,7 @@ export default function Desk() {
           <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:9 }}>
             <span style={{ fontSize:10, fontWeight:800, color:"var(--text3)", textTransform:"uppercase", letterSpacing:.8 }}>Room Map</span>
             <div style={{ display:"flex", gap:10, marginLeft:"auto" }}>
-              {[["#1B7A33","#F0FBF2","Vacant"],["#C62828","#FFF0F0","Occupied"],["#E65100","#FFF8EC","Reserved"]].map(([c,bg,l])=>(
+              {[["#1B7A33","#F0FBF2","Vacant"],["#C62828","#FFF0F0","Occupied"],["#E65100","#FFF8EC","Reserved"],["#CA8A04","#FEFCE8","Cleaning"]].map(([c,bg,l])=>(
                 <span key={l} style={{ display:"flex", alignItems:"center", gap:5, fontSize:10, color:"var(--text3)", fontWeight:600 }}>
                   <span style={{ width:14, height:14, borderRadius:4, background:bg, border:"1.5px solid "+c, display:"inline-block" }} />{l}
                 </span>
@@ -1145,13 +1213,16 @@ export default function Desk() {
           </div>
           <div style={{ display:"grid", gridTemplateColumns:isMobile ? "repeat(2,minmax(0,1fr))" : "repeat(3,minmax(0,1fr))", gap:10, marginBottom:14 }}>
             {rooms.map(r => {
-              const ds = getRoomDisplayStatus(r, bookings, today);
+              const rawDs = getRoomDisplayStatus(r, bookings, today);
+              // A vacant room that was just checked out shows yellow "needs cleaning"
+              const needsClean = dirtyRooms && dirtyRooms[String(r.number)];
+              const ds = (rawDs === "vacant" && needsClean) ? "cleaning" : rawDs;
               const st = STATUS_STYLE[ds] || STATUS_STYLE.vacant;
               const fc = bookings.filter(b => b.room === r.number && b.status === "confirmed" && b.checkin > today).length;
               const bIn  = bookings.find(b => b.room === r.number && b.status === "checked-in");
               const bRes = bookings.find(b => b.room === r.number && b.status === "confirmed" && b.checkin <= today && b.checkout > today);
               return (
-                <div key={r.id} onClick={() => setSel(r)} style={{
+                <div key={r.id} onClick={() => ds === "cleaning" ? setCleanTarget(r) : setSel(r)} style={{
                   background:st.bg, color:st.text, border:"1.5px solid "+st.border,
                   borderRadius:12, padding:"12px 14px", cursor:"pointer", position:"relative",
                   transition:"transform .15s, box-shadow .15s", boxShadow:"0 1px 4px rgba(0,0,0,.07)",
@@ -1166,10 +1237,14 @@ export default function Desk() {
                   <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginTop:9 }}>
                     <span style={{ fontSize:13, fontWeight:800, color:st.badge }}>{money(r.rate)}<span style={{ fontSize:8, opacity:.6 }}>/n</span></span>
                     <span style={{ fontSize:9, fontWeight:800, background:st.badge, color:st.badgeTx, padding:"2px 8px", borderRadius:6, textTransform:"uppercase" }}>
-                      {ds === "occupied" ? "IN" : ds === "reserved" ? "RSVD" : "FREE"}
+                      {ds === "occupied" ? "IN" : ds === "reserved" ? "RSVD" : ds === "cleaning" ? "🧹 CLEAN" : "FREE"}
                     </span>
                   </div>
-                  {(bIn || bRes) && (
+                  {ds === "cleaning" ? (
+                    <div style={{ marginTop:6, fontSize:10, color:st.badge, fontWeight:800 }}>
+                      Needs cleaning — tap to start
+                    </div>
+                  ) : (bIn || bRes) && (
                     <div style={{ marginTop:6, fontSize:10, color:st.badge, fontWeight:600, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
                       {(bIn || bRes).guest}
                     </div>
@@ -1363,6 +1438,26 @@ export default function Desk() {
               <div style={{ display:"flex", justifyContent:"space-between", padding:"8px 0 2px", fontSize:14, fontWeight:800 }}><span>Net</span><span style={{ color:dRev-dExp>=0?"var(--green)":"var(--red2)" }}>{money(dRev-dExp)}</span></div>
             </div>
           </div>
+
+          {/* Cleaning log — admin oversight of who cleaned which room, when */}
+          {curRole === "admin" && (
+            <div className="panel">
+              <div className="panel-header" style={{ padding:"9px 12px" }}>
+                <div className="panel-title" style={{ fontSize:12 }}><i className="ti ti-spray" style={{ color:"#CA8A04" }} /> Cleaning Log</div>
+              </div>
+              {(!cleaningLog || cleaningLog.length === 0) ? (
+                <div style={{ color:"var(--text3)", fontSize:12, textAlign:"center", padding:"10px 0" }}>No cleanings recorded yet</div>
+              ) : [...cleaningLog].slice(-6).reverse().map((c,i) => (
+                <div key={i} style={{ padding:"7px 12px", borderBottom:"1px solid var(--border)", fontSize:11.5 }}>
+                  <div style={{ display:"flex", justifyContent:"space-between" }}>
+                    <span style={{ fontWeight:800 }}>Room {c.room}</span>
+                    <span style={{ color:"var(--text3)" }}>{c.at ? new Date(c.at).toLocaleString("en-GB",{ day:"2-digit", month:"short", hour:"2-digit", minute:"2-digit" }) : ""}</span>
+                  </div>
+                  <div style={{ color:"var(--text3)", marginTop:1 }}>by {c.by} · {(c.checklist||[]).length}/6 items</div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
@@ -1423,6 +1518,7 @@ export default function Desk() {
       {sel && <RoomModal room={sel} onClose={() => setSel(null)} onCheckout={chkOut} />}
       {checkoutTarget && <CheckoutModal b={checkoutTarget} onConfirm={doCheckout} onClose={() => setCheckoutTarget(null)} />}
       {extendTarget && <ExtendStayModal booking={extendTarget} rooms={rooms} onClose={() => setExtendTarget(null)} onConfirm={(data) => handleExtendStay(extendTarget, data)} />}
+      {cleanTarget && <CleaningModal room={cleanTarget} info={dirtyRooms[String(cleanTarget.number)]} onClose={() => setCleanTarget(null)} onConfirm={(checklist) => markRoomClean(cleanTarget, checklist)} />}
       {checkinPreview && <CheckInPreviewModal booking={checkinPreview} rooms={rooms} onConfirm={() => { confirmCheckin(checkinPreview); setCheckinPreview(null); }} onEdit={() => setCheckinPreview(null)} onClose={() => setCheckinPreview(null)} />}
       {invoiceTarget && <DeskInvoiceModal booking={invoiceTarget} rooms={rooms} onClose={() => setInvoiceTarget(null)} onPrint={() => handlePrintInvoice(invoiceTarget)} onPrintTC={() => handlePrintWithTC(invoiceTarget)} />}
       {collectTarget && <DeskCollectPayModal booking={collectTarget} onClose={() => setCollectTarget(null)} onConfirm={(amt, mtd, txn, note) => { handleCollectPayment(collectTarget, amt, mtd, txn, note); setCollectTarget(null); }} />}
