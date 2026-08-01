@@ -54,14 +54,19 @@ export function getRoomDisplayStatus(room, bookings, today) {
     return allRooms.includes(num) && b.checkout >= today;
   });
   if (active) return 'occupied';
+  // Only paint the room "reserved" once the reservation has actually started
+  // (check-in date reached). A purely FUTURE reservation leaves the room vacant
+  // today — it's still sellable tonight — and the "N ahead" badge flags the
+  // upcoming booking instead.
   const reserved = bookings.find(b => {
     if (b.status !== 'confirmed') return false;
-    // New multi-room: check per-room checkout
+    // New multi-room: check per-room check-in/checkout window
     if (b.multiRooms && b.multiRooms.length) {
-      return b.multiRooms.some(mr => String(mr.number) === num && (mr.checkout || b.checkout) > today);
+      return b.multiRooms.some(mr => String(mr.number) === num
+        && (mr.checkin || b.checkin) <= today && (mr.checkout || b.checkout) > today);
     }
     const allRooms = [b.room, ...(b.extraRooms || []).map(r => r.number)].map(String);
-    return allRooms.includes(num) && b.checkout > today;
+    return allRooms.includes(num) && b.checkin <= today && b.checkout > today;
   });
   if (reserved) return 'reserved';
   return 'vacant';
