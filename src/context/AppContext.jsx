@@ -522,6 +522,7 @@ export function AppProvider({ children }) {
   const [notification,   setNotification]   = useState(null);
   const [modal,          setModal]          = useState(null); // { content: JSX }
   const [pendingInvoiceId, setPendingInvoiceId] = useState(null);
+  const [pendingCompleteId, setPendingCompleteId] = useState(null); // reservation id to reopen & complete in Bookings
 
   // Persist helpers
   const save = useCallback((nextBookings, nextRevenues, nextExpenses, nextRooms) => {
@@ -738,6 +739,7 @@ export function AppProvider({ children }) {
       notify,
       modal, setModal,
       pendingInvoiceId, setPendingInvoiceId,
+      pendingCompleteId, setPendingCompleteId,
     }}>
       {children}
     </AppContext.Provider>

@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, Fragment } from "react";
+import { useState, useMemo, useRef, useEffect, Fragment } from "react";
 import { useApp } from "../context/AppContext";
 
 function DateInput({ value, onChange, min, style, className }) {
@@ -23,8 +23,9 @@ import { logEvent } from "../utils/auditLog";
 import { persistHotelBookingBundle } from "../lib/hotelSupabase";
 import { buildInvoiceHTML, buildTCHtml, hotelPrint } from "./Invoice";
 
-function InvoicePreviewModal({ booking, rooms, onClose }) {
+function InvoicePreviewModal({ booking, rooms, onClose, onComplete }) {
   const html = buildInvoiceHTML(booking, rooms, booking.extras || [], "room");
+  const isReservation = booking.status === "confirmed";
   const print = () => {
     const w = window.open("", "_blank");
     w.document.write(`<html><head><title>Invoice</title></head><body>${html}</body></html>`);
@@ -46,6 +47,12 @@ function InvoicePreviewModal({ booking, rooms, onClose }) {
             Invoice — {booking.guest} · Rm {booking.room}
           </span>
           <div style={{ display:"flex", gap:8 }}>
+            {isReservation && onComplete && (
+              <button onClick={() => onComplete(booking)} style={{ background:"#1a7040", color:"#fff", border:"none",
+                borderRadius:8, padding:"7px 18px", fontWeight:800, cursor:"pointer", fontSize:13 }}>
+                <i className="ti ti-login" style={{ marginRight:6 }} />Complete Check-In
+              </button>
+            )}
             <button onClick={print} style={{ background:"var(--gold)", color:"#fff", border:"none",
               borderRadius:8, padding:"7px 18px", fontWeight:700, cursor:"pointer", fontSize:13 }}>
               <i className="ti ti-printer" style={{ marginRight:6 }} />Print
@@ -458,50 +465,70 @@ function SMSSendModal({ booking, refName, refPhone, status, onClose }) {
   );
 }
 
-function NewBookingModal({ onClose, prefill }) {
+function NewBookingModal({ onClose, prefill, editBooking }) {
   const { curUser, rooms, bookings, updateBookings, revenues, updateRevenues, notify, extraPersonRules } = useApp();
   const today = todayStr();
   const yesterday = addDaysIso(today, -1);
   const tmr   = addDaysIso(today, 1);
 
-  // Guest — pre-fill from prefill prop if provided (Add Another Room)
-  const [name,     setName]     = useState(prefill?.name     || "");
-  const [phone,    setPhone]    = useState(prefill?.phone    || "");
-  const [nat,      setNat]      = useState(prefill?.nat      || "");
-  const [src,      setSrc]      = useState(prefill?.src      || "Walk-in");
-  const [refName,  setRefName]  = useState(prefill?.refName  || "");
-  const [refPhone, setRefPhone] = useState(prefill?.refPhone || "");
+  // Edit / Complete mode — reopen an existing reservation prefilled with all its data
+  const eb = editBooking || null;
+  const isEdit = !!eb;
+  const ebMulti = !!(eb && eb.isMultiRoomBooking && (eb.multiRooms || []).length);
+  const priorPaid = eb ? getHotelPaidAmount(eb) : 0;
+
+  // Guest — pre-fill from prefill prop (Add Another Room) or editBooking (Complete reservation)
+  const [name,     setName]     = useState(eb ? (eb.guest || "") : (prefill?.name     || ""));
+  const [phone,    setPhone]    = useState(eb ? (eb.phone || "") : (prefill?.phone    || ""));
+  const [nat,      setNat]      = useState(eb ? (eb.nationality || "") : (prefill?.nat || ""));
+  const [src,      setSrc]      = useState(eb ? (eb.source || "Walk-in") : (prefill?.src || "Walk-in"));
+  const [refName,  setRefName]  = useState(eb ? (eb.referredByName  || "") : (prefill?.refName  || ""));
+  const [refPhone, setRefPhone] = useState(eb ? (eb.referredByPhone || "") : (prefill?.refPhone || ""));
   // ID
-  const [persons,  setPersons]  = useState([{ idType:"", idNum:"", front:[], back:[] }]);
+  const [persons,  setPersons]  = useState(
+    eb && (eb.idDocs || []).length
+      ? eb.idDocs.map(d => ({ idType:d.idType||"", idNum:d.idNum||"", front:d.front||(d.idFront?[d.idFront]:[]), back:d.back||(d.idBack?[d.idBack]:[]) }))
+      : eb
+        ? [{ idType:eb.idType||"", idNum:eb.idNum||"", front:eb.idFront?[eb.idFront]:[], back:eb.idBack?[eb.idBack]:[] }]
+        : [{ idType:"", idNum:"", front:[], back:[] }]
+  );
   // Stay
-  const [room,     setRoom]     = useState("");
-  const [acChoice, setAcChoice] = useState("AC");
-  const [ci,       setCi]       = useState(prefill?.ci || today);
-  const [co,       setCo]       = useState(prefill?.co || tmr);
+  const [room,     setRoom]     = useState(eb ? String(eb.room || "") : "");
+  const [acChoice, setAcChoice] = useState(eb ? (eb.acChoice || "AC") : "AC");
+  const [ci,       setCi]       = useState(eb ? (eb.checkin || today) : (prefill?.ci || today));
+  const [co,       setCo]       = useState(eb ? (eb.checkout || tmr) : (prefill?.co || tmr));
   // Extra rooms (multi-room booking)
-  const [extraRooms, setExtraRooms] = useState([]); // [{ number, acChoice, discAmt }]
-  const [primaryDiscAmt, setPrimaryDiscAmt] = useState(0); // per-room discount for primary room in multi-room mode
+  const [extraRooms, setExtraRooms] = useState(
+    eb && (eb.extraRooms || []).length
+      ? eb.extraRooms.map(r => ({ number:String(r.number), acChoice:r.acChoice||"AC", discAmt:r.discAmt||"" }))
+      : []
+  ); // [{ number, acChoice, discAmt }]
+  const [primaryDiscAmt, setPrimaryDiscAmt] = useState(eb ? (eb.primaryDiscAmt || 0) : 0); // per-room discount for primary room in multi-room mode
   // Multi-room mode
-  const [bookingMode, setBookingMode] = useState("single"); // "single" | "multi"
-  const [multiRoomCards, setMultiRoomCards] = useState([{ id:1, number:"", acChoice:"AC", ci:today, co:tmr, adults:2, children:0, discAmt:"" }]);
-  const [adults,   setAdults]   = useState(2);
-  const [children, setChildren] = useState(0);
+  const [bookingMode, setBookingMode] = useState(ebMulti ? "multi" : "single"); // "single" | "multi"
+  const [multiRoomCards, setMultiRoomCards] = useState(
+    ebMulti
+      ? eb.multiRooms.map((r, i) => ({ id:i+1, number:String(r.number), acChoice:r.acChoice||"AC", ci:r.checkin||eb.checkin||today, co:r.checkout||eb.checkout||tmr, adults:r.adults||2, children:r.children||0, discAmt:r.discAmt||"" }))
+      : [{ id:1, number:"", acChoice:"AC", ci:today, co:tmr, adults:2, children:0, discAmt:"" }]
+  );
+  const [adults,   setAdults]   = useState(eb ? (eb.adults || 2) : 2);
+  const [children, setChildren] = useState(eb ? (eb.children || 0) : 0);
   // Extra person
-  const [epAccepted, setEpAccepted] = useState(false);
+  const [epAccepted, setEpAccepted] = useState(!!(eb && eb.extraPersonCharge));
   // Discount
-  const [discType, setDiscType] = useState("none");
-  const [discVal,  setDiscVal]  = useState(0);
-  const [discReason, setDiscReason] = useState("");
-  // Payment
-  const [method,   setMethod]   = useState("Cash");
+  const [discType, setDiscType] = useState(eb ? (eb.discType || "none") : "none");
+  const [discVal,  setDiscVal]  = useState(eb && eb.discType === "flat" ? (eb.discAmt || 0) : 0);
+  const [discReason, setDiscReason] = useState(eb ? (eb.discReason || "") : "");
+  // Payment — in edit/complete mode this field is the ADDITIONAL payment taken at check-in
+  const [method,   setMethod]   = useState(eb ? (eb.paymentMethod || "Cash") : "Cash");
   const [advance,  setAdvance]  = useState('');
   const [txnNum,   setTxnNum]   = useState("");
   const [payLater, setPayLater] = useState(false);
-  const [notes,       setNotes]       = useState("");
-  const [guestType,   setGuestType]   = useState("single"); // "single" | "couple" | "group"
-  const [spouseName,  setSpouseName]  = useState("");
-  const [spousePhone, setSpousePhone] = useState("");
-  const [groupMembers, setGroupMembers] = useState([{ name: "", phone: "" }]);
+  const [notes,       setNotes]       = useState(eb ? (eb.notes || "") : "");
+  const [guestType,   setGuestType]   = useState(eb ? (eb.guestType || "single") : "single"); // "single" | "couple" | "group"
+  const [spouseName,  setSpouseName]  = useState(eb ? (eb.spouseName || "") : "");
+  const [spousePhone, setSpousePhone] = useState(eb ? (eb.spousePhone || "") : "");
+  const [groupMembers, setGroupMembers] = useState(eb && (eb.groupMembers || []).length ? eb.groupMembers.map(m => ({ name:m.name||"", phone:m.phone||"" })) : [{ name: "", phone: "" }]);
   const [smsData,     setSmsData]     = useState(null); // { booking, refName, refPhone }
   const [previewBkObj, setPreviewBkObj] = useState(null);
 
@@ -571,10 +598,10 @@ function NewBookingModal({ onClose, prefill }) {
   const adv       = Math.min(parseFloat(advance) || 0, grand);
   const balance   = Math.max(0, grand - adv);
 
-  // available rooms for selected dates
+  // available rooms for selected dates (exclude the reservation being completed from conflicts)
   const availRooms = rooms.filter(r => {
     if (!ci || !co) return true;
-    return !bookingConflicts(r.number, ci, co, null, bookings);
+    return !bookingConflicts(r.number, ci, co, eb ? eb.id : null, bookings);
   });
 
   function handlePhotoUpload(idx, side, files) {
@@ -615,20 +642,24 @@ function NewBookingModal({ onClose, prefill }) {
     if (!phone.trim()) { notify("Phone required", "error"); return null; }
     if (!selRoom)      { notify("Select a room", "error"); return null; }
     if (!nights)       { notify("Check-out must be after check-in", "error"); return null; }
-    if ((parseFloat(advance) || 0) <= 0 && !payLater) { notify("Enter payment amount or select Pay Later", "error"); return null; }
-    if (bookingConflicts(selRoom.number, ci, co, null, bookings)) {
+    if (!isEdit && (parseFloat(advance) || 0) <= 0 && !payLater) { notify("Enter payment amount or select Pay Later", "error"); return null; }
+    if (bookingConflicts(selRoom.number, ci, co, eb ? eb.id : null, bookings)) {
       notify(`Room ${selRoom.number} is already booked for those dates`, "error"); return null;
     }
     for (const er of extraRoomsData) {
-      if (bookingConflicts(er.number, ci, co, null, bookings)) {
+      if (bookingConflicts(er.number, ci, co, eb ? eb.id : null, bookings)) {
         notify(`Room ${er.number} is already booked for those dates`, "error"); return null;
       }
     }
-    const id  = newLocalId();
+    const id  = eb ? eb.id : newLocalId();
     const rn  = refName.trim();
     const rph = refPhone.trim();
-    const a   = adv;
+    // In complete mode: additional payment now, on top of the deposit already paid
+    const newPay = isEdit ? Math.min(parseFloat(advance) || 0, Math.max(0, grand - priorPaid)) : adv;
+    const a   = isEdit ? (priorPaid + newPay) : adv;
     const t   = needsTxn ? txnNum.trim() : "";
+    const priorHistory = isEdit ? (eb.paymentHistory || []) : [];
+    const newHistoryEntry = newPay > 0 ? [{ ts: new Date().toISOString(), amount: newPay, method, txnNumber: t, note: isEdit ? "Payment at check-in" : "Advance paid", type: "room", by: curUser || "staff" }] : [];
     return {
       id, guest: name.trim(), phone: phone.trim(), email: "",
       room: selRoom.number, type: selRoom.type,
@@ -654,13 +685,15 @@ function NewBookingModal({ onClose, prefill }) {
       adults: parseInt(adults) || 2, children: parseInt(children) || 0,
       advance: a, paymentMethod: method, txnNumber: t, transactionNumber: t,
       restPayment: 0, dueAmount: Math.max(0, grand - a),
-      paymentHistory: a > 0 ? [{ ts: new Date().toISOString(), amount: a, method, txnNumber: t, note: "Advance paid", type: "room", by: curUser || "staff" }] : [],
+      paymentHistory: [...priorHistory, ...newHistoryEntry],
       extraPersonCharge: (epAccepted && epCharge > 0) ? { qty: epCount, rate: epRate, total: epCharge } : null,
       guestType: guestType || "single",
       spouseName: guestType === "couple" ? spouseName.trim() : "",
       spousePhone: guestType === "couple" ? spousePhone.trim() : "",
       groupMembers: guestType === "group" ? groupMembers.filter(m=>m.name.trim()||m.phone.trim()) : [],
-      createdAt: new Date().toISOString(), by: curUser || "staff",
+      createdAt: isEdit ? (eb.createdAt || new Date().toISOString()) : new Date().toISOString(), by: curUser || "staff",
+      // Preserve cloud-sync identity so the existing rows are updated, not duplicated
+      ...(isEdit ? { guest_id: eb.guest_id, supabaseBookingId: eb.supabaseBookingId ?? eb.dbBookingId, dbBookingId: eb.dbBookingId, tcPrinted: eb.tcPrinted } : {}),
     };
   }
 
@@ -671,18 +704,21 @@ function NewBookingModal({ onClose, prefill }) {
     for (const c of multiRoomData) {
       if (!c.room) { notify("Select a room for each card", "error"); return null; }
       if (!c.nights) { notify("Check-out must be after check-in for each room", "error"); return null; }
-      if (bookingConflicts(c.number, c.ci, c.co, null, bookings)) {
+      if (bookingConflicts(c.number, c.ci, c.co, eb ? eb.id : null, bookings)) {
         notify(`Room ${c.number} is already booked for those dates`, "error"); return null;
       }
     }
     // Check for duplicate room numbers within the booking
     const nums = multiRoomData.map(c => String(c.number));
     if (new Set(nums).size !== nums.length) { notify("Each room can only be added once", "error"); return null; }
-    if ((parseFloat(advance) || 0) <= 0 && !payLater) { notify("Enter payment amount or select Pay Later", "error"); return null; }
+    if (!isEdit && (parseFloat(advance) || 0) <= 0 && !payLater) { notify("Enter payment amount or select Pay Later", "error"); return null; }
 
-    const id = newLocalId();
-    const a  = multiAdv;
+    const id = eb ? eb.id : newLocalId();
+    const newPay = isEdit ? Math.min(parseFloat(advance) || 0, Math.max(0, multiTotal - priorPaid)) : multiAdv;
+    const a  = isEdit ? (priorPaid + newPay) : multiAdv;
     const t  = needsTxn ? txnNum.trim() : "";
+    const priorHistory = isEdit ? (eb.paymentHistory || []) : [];
+    const newHistoryEntry = newPay > 0 ? [{ ts: new Date().toISOString(), amount: newPay, method, txnNumber: t, note: isEdit ? "Payment at check-in" : "Advance paid", type: "room", by: curUser || "staff" }] : [];
     const minCi = multiRoomData.reduce((mn, c) => c.ci < mn ? c.ci : mn, multiRoomData[0].ci);
     const maxCo = multiRoomData.reduce((mx, c) => c.co > mx ? c.co : mx, "");
     const maxNights = multiRoomData.reduce((mx, c) => c.nights > mx ? c.nights : mx, 0);
@@ -712,15 +748,18 @@ function NewBookingModal({ onClose, prefill }) {
       children: multiRoomData.reduce((s, c) => s + (parseInt(c.children) || 0), 0),
       advance: a, paymentMethod: method, txnNumber: t, transactionNumber: t,
       restPayment: 0, dueAmount: Math.max(0, multiTotal - a),
-      paymentHistory: a > 0 ? [{ ts: new Date().toISOString(), amount: a, method, txnNumber: t, note: "Advance paid", type: "room", by: curUser || "staff" }] : [],
+      paymentHistory: [...priorHistory, ...newHistoryEntry],
       guestType: guestType || "single", spouseName: "", spousePhone: "", groupMembers: [],
-      createdAt: new Date().toISOString(), by: curUser || "staff",
+      createdAt: isEdit ? (eb.createdAt || new Date().toISOString()) : new Date().toISOString(), by: curUser || "staff",
+      ...(isEdit ? { guest_id: eb.guest_id, supabaseBookingId: eb.supabaseBookingId ?? eb.dbBookingId, dbBookingId: eb.dbBookingId, tcPrinted: eb.tcPrinted } : {}),
     };
   }
 
   function performSave(bkObj, status) {
     const finalBk = { ...bkObj, status };
-    updateBookings([...bookings, finalBk]);
+    updateBookings(isEdit
+      ? bookings.map(x => x.id === finalBk.id ? finalBk : x)
+      : [...bookings, finalBk]);
     void persistHotelBookingBundle(finalBk)
       .then(({ guest, booking }) => {
         if (!booking) return;
@@ -751,9 +790,12 @@ function NewBookingModal({ onClose, prefill }) {
       undefined,
       { tags: status === "checked-in" ? "green_circle" : "blue_circle", priority: "high" }
     ).catch(() => {});
-    if (finalBk.advance > 0) updateRevenues(prev => [...prev, {
-      id: newLocalId(), source: "Room Rent", amount: finalBk.advance, date: today,
-      note: finalBk.guest + " Rm " + finalBk.room + (status === "confirmed" ? " — reservation deposit" : " — advance payment") + " (" + finalBk.paymentMethod + ")",
+    // Only book NEW money as revenue. In complete mode the deposit was already recorded
+    // when the reservation was made, so add just the additional payment taken now.
+    const revenueAmount = isEdit ? Math.max(0, (finalBk.advance || 0) - priorPaid) : finalBk.advance;
+    if (revenueAmount > 0) updateRevenues(prev => [...prev, {
+      id: newLocalId(), source: "Room Rent", amount: revenueAmount, date: today,
+      note: finalBk.guest + " Rm " + finalBk.room + (status === "confirmed" ? " — reservation deposit" : (isEdit ? " — check-in payment" : " — advance payment")) + " (" + finalBk.paymentMethod + ")",
       bookingId: finalBk.id }]);
     const _disc = finalBk.isMultiRoomBooking ? (finalBk.multiRooms||[]).reduce((s,r)=>s+(r.discAmt||0),0) : (finalBk.discAmt ?? discAmt);
     const _total = finalBk.isMultiRoomBooking ? (finalBk.invoiceTotal ?? finalBk.amount ?? 0) : (finalBk.invoiceTotal ?? roomTotal);
@@ -790,9 +832,16 @@ function NewBookingModal({ onClose, prefill }) {
 
         {/* Header */}
         <div className="modal-header">
-          <div className="modal-title"><i className="ti ti-calendar-plus" style={{ color:"var(--gold)", marginRight:6 }} />New Booking</div>
+          <div className="modal-title"><i className={"ti " + (isEdit ? "ti-calendar-check" : "ti-calendar-plus")} style={{ color:"var(--gold)", marginRight:6 }} />{isEdit ? "Complete Reservation — Check-In" : "New Booking"}</div>
           <button className="modal-close" onClick={onClose}><i className="ti ti-x" /></button>
         </div>
+
+        {isEdit && (
+          <div style={{ background:"#eef6ff", border:"1.5px solid #90c2f0", borderRadius:10, padding:"10px 14px", marginBottom:12, fontSize:12.5, color:"#1a4a7a", display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
+            <i className="ti ti-info-circle" style={{ fontSize:16 }} />
+            <span>Reopened reservation <strong>#{eb.id}</strong>. Fill in any remaining details below. <strong>Deposit already paid: {money(priorPaid)}</strong> — the Payment field is the <strong>additional amount</strong> collected now at check-in (leave blank if none).</span>
+          </div>
+        )}
 
         {/* ── BOOKING MODE TOGGLE ── */}
         <div style={{ display:"flex", gap:0, marginBottom:14, borderRadius:10, overflow:"hidden", border:"2px solid var(--navy)" }}>
@@ -934,7 +983,7 @@ function NewBookingModal({ onClose, prefill }) {
                   if (num === String(card.number)) return true;
                   if (multiRoomCards.some((c,j) => j!==idx && String(c.number)===num)) return false;
                   if (!card.ci || !card.co) return true;
-                  return !bookingConflicts(r.number, card.ci, card.co, null, bookings);
+                  return !bookingConflicts(r.number, card.ci, card.co, eb ? eb.id : null, bookings);
                 });
                 return (
                 <div key={card.id} style={{ border:"2px solid var(--navy)", borderRadius:12, padding:"14px 16px", marginBottom:10, background:"var(--bg4)" }}>
@@ -1293,7 +1342,8 @@ function NewBookingModal({ onClose, prefill }) {
               </div>
             )}
             {!payLater && (bookingMode === "single" ? (adv > 0 && selRoom) : (multiAdv > 0)) && (() => {
-              const bal = bookingMode === "multi" ? multiBalance : balance;
+              // In complete mode the deposit already paid counts toward the balance
+              const bal = Math.max(0, (bookingMode === "multi" ? multiBalance : balance) - (isEdit ? priorPaid : 0));
               return (
                 <div style={{ display:"flex", justifyContent:"space-between", fontSize:13, fontWeight:700, padding:"10px 14px", background: bal===0 ? "#f0fdf4" : "#fff8e1", borderRadius:8, marginTop:10, color: bal===0 ? "var(--green)" : "#7a5500" }}>
                   <span>{bal===0 ? "✓ Fully Paid" : "Balance Due after payment:"}</span>
@@ -1342,7 +1392,7 @@ function NewBookingModal({ onClose, prefill }) {
                 if (num === String(card.number)) return true;
                 // Exclude rooms selected by other cards
                 if (multiRoomCards.some((c,j) => j!==idx && String(c.number)===num)) return false;
-                return !bookingConflicts(r.number, ci, card.co, null, bookings);
+                return !bookingConflicts(r.number, ci, card.co, eb ? eb.id : null, bookings);
               });
               return (
               <div key={card.id} style={{ border:"2px solid var(--navy)", borderRadius:12, padding:"14px 16px", marginBottom:10, background:"var(--bg4)" }}>
@@ -1482,12 +1532,15 @@ function NewBookingModal({ onClose, prefill }) {
                 <input value={txnNum} onChange={e=>setTxnNum(e.target.value)} placeholder="e.g. 01X-XXXXXXXXXX" />
               </div>
             )}
-            {multiAdv > 0 && !payLater && (
-              <div style={{ display:"flex", justifyContent:"space-between", fontSize:13, fontWeight:700, padding:"10px 14px", background: multiBalance===0?"#f0fdf4":"#fff8e1", borderRadius:8, marginTop:10, color: multiBalance===0?"var(--green)":"#7a5500" }}>
-                <span>{multiBalance===0 ? "✓ Fully Paid" : "Balance Due after payment:"}</span>
-                <span>৳{multiBalance.toLocaleString()}</span>
+            {multiAdv > 0 && !payLater && (() => {
+              const bal = Math.max(0, multiBalance - (isEdit ? priorPaid : 0));
+              return (
+              <div style={{ display:"flex", justifyContent:"space-between", fontSize:13, fontWeight:700, padding:"10px 14px", background: bal===0?"#f0fdf4":"#fff8e1", borderRadius:8, marginTop:10, color: bal===0?"var(--green)":"#7a5500" }}>
+                <span>{bal===0 ? "✓ Fully Paid" : "Balance Due after payment:"}</span>
+                <span>৳{bal.toLocaleString()}</span>
               </div>
-            )}
+              );
+            })()}
             <div style={{ marginTop:14, padding:"12px 16px", borderRadius:10, background: payLater?"#fff8e1":"#f5f5f5", border: payLater?"1.5px solid #f0c040":"1.5px solid #e0e0e0", cursor:"pointer" }}
               onClick={() => { setPayLater(p=>!p); if (!payLater) setAdvance(''); }}>
               <div style={{ display:"flex", alignItems:"center", gap:10 }}>
@@ -1516,7 +1569,7 @@ function NewBookingModal({ onClose, prefill }) {
         {/* Actions */}
         <div className="modal-actions">
           <button className="btn" onClick={onClose}>Cancel</button>
-          {bookingMode === "single" && name.trim() && phone.trim() && (
+          {!isEdit && bookingMode === "single" && name.trim() && phone.trim() && (
             <button className="btn" style={{ background:"#fff8e1", borderColor:"#f0c040", color:"#7a5c00" }}
               onClick={() => {
                 onClose({ addAnother: true, prefill: { name: name.trim(), phone: phone.trim(), nat, src, refName, refPhone, ci, co } });
@@ -1525,12 +1578,12 @@ function NewBookingModal({ onClose, prefill }) {
             </button>
           )}
           {bookingMode === "single" ? (<>
-            <button className="btn" onClick={()=>doSave("confirmed")}><i className="ti ti-calendar" /> Save Reservation</button>
+            <button className="btn" onClick={()=>doSave("confirmed")}><i className="ti ti-calendar" /> {isEdit ? "Save Changes (keep reserved)" : "Save Reservation"}</button>
             {ci <= today ? (
               <button className="btn primary" onClick={() => {
                 const bk = buildAndValidate();
                 if (bk) setPreviewBkObj(bk);
-              }}><i className="ti ti-eye" /> Preview & Check In</button>
+              }}><i className="ti ti-eye" /> {isEdit ? "Preview & Complete Check-In" : "Preview & Check In"}</button>
             ) : (
               <div style={{ display:"flex", alignItems:"center", gap:8, background:"#fff8e1", border:"1.5px solid #f0c040", borderRadius:9, padding:"8px 14px", fontSize:12, color:"#7a5c00", fontWeight:600 }}>
                 <i className="ti ti-info-circle" style={{ fontSize:16, color:"#f0a000" }} />
@@ -1539,13 +1592,13 @@ function NewBookingModal({ onClose, prefill }) {
             )}
           </>) : (<>
             <button className="btn" onClick={() => { const bk = buildAndValidateMulti(); if (bk) performSave(bk,"confirmed"); }}>
-              <i className="ti ti-calendar" /> Save Reservation
+              <i className="ti ti-calendar" /> {isEdit ? "Save Changes (keep reserved)" : "Save Reservation"}
             </button>
             {(() => {
               const earliestCi = multiRoomCards.reduce((mn, c) => (c.ci && c.ci < mn ? c.ci : mn), multiRoomCards[0]?.ci || today);
               return earliestCi <= today ? (
                 <button className="btn primary" onClick={() => { const bk = buildAndValidateMulti(); if (bk) setPreviewBkObj(bk); }}>
-                  <i className="ti ti-eye" /> Preview & Check In
+                  <i className="ti ti-eye" /> {isEdit ? "Preview & Complete Check-In" : "Preview & Check In"}
                 </button>
               ) : (
                 <div style={{ display:"flex", alignItems:"center", gap:8, background:"#fff8e1", border:"1.5px solid #f0c040", borderRadius:9, padding:"8px 14px", fontSize:12, color:"#7a5c00", fontWeight:600 }}>
@@ -1615,7 +1668,7 @@ function NewBookingModal({ onClose, prefill }) {
 
 
 export default function Bookings() {
-  const { bookings, rooms, updateBookings, updateRevenues, revenues } = useApp();
+  const { bookings, rooms, updateBookings, updateRevenues, revenues, pendingCompleteId, setPendingCompleteId } = useApp();
   const today = todayStr();
 
   // Bangladesh time past 12pm check
@@ -1635,6 +1688,15 @@ export default function Bookings() {
   const [preview, setPreview] = useState(null);
   const [showNew, setShowNew] = useState(false);
   const [newPrefill, setNewPrefill] = useState(null);
+  const [editBooking, setEditBooking] = useState(null);
+
+  // Opened from the Desk ("Complete Check-In" on a reserved room) — reopen it prefilled
+  useEffect(() => {
+    if (pendingCompleteId == null) return;
+    const bk = bookings.find(b => b.id === pendingCompleteId);
+    setPendingCompleteId(null);
+    if (bk) { setEditBooking(bk); setNewPrefill(null); setShowNew(true); }
+  }, [pendingCompleteId]);
   const [sortKey, setSortKey] = useState("id");
   const [sortDir, setSortDir] = useState("desc");
   const [showHistory, setShowHistory] = useState(false);
@@ -1871,7 +1933,9 @@ export default function Bookings() {
       </div>
 
       {showNew && <NewBookingModal
+        key={editBooking ? "edit-" + editBooking.id : "new"}
         prefill={newPrefill}
+        editBooking={editBooking}
         onClose={(result) => {
           if (result?.addAnother) {
             setNewPrefill(result.prefill);
@@ -1881,10 +1945,13 @@ export default function Bookings() {
           } else {
             setShowNew(false);
             setNewPrefill(null);
+            setEditBooking(null);
           }
         }}
       />}
-      {preview && <InvoicePreviewModal booking={preview} rooms={rooms} onClose={() => setPreview(null)} />}
+      {preview && <InvoicePreviewModal booking={preview} rooms={rooms}
+        onClose={() => setPreview(null)}
+        onComplete={(bk) => { setPreview(null); setEditBooking(bk); setNewPrefill(null); setShowNew(true); }} />}
     </div>
   );
 }

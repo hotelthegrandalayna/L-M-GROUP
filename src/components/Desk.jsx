@@ -61,7 +61,7 @@ function getHotelDue(b) {
 }
 
 function RoomModal({ room, onClose, onCheckout }) {
-  const { curUser, curRole, bookings, updateBookings, revenues, updateRevenues, notify } = useApp();
+  const { curUser, curRole, bookings, updateBookings, revenues, updateRevenues, notify, setActiveTab, setPendingCompleteId } = useApp();
   const today = todayStr();
   const tmr = new Date(today + "T00:00:00");
   tmr.setDate(tmr.getDate() + 1);
@@ -298,6 +298,10 @@ function RoomModal({ room, onClose, onCheckout }) {
               ))}
             </div>
             {bRes.notes && <div style={{ fontSize:11, color:"var(--text3)", paddingTop:6, borderTop:"1px solid rgba(201,168,76,.2)" }}>{bRes.notes}</div>}
+            <button className="btn primary" style={{ width:"100%", marginTop:12, background:"#1a7040", border:"none", fontWeight:800 }}
+              onClick={() => { setPendingCompleteId(bRes.id); setActiveTab("bookings"); onClose(); }}>
+              <i className="ti ti-login" /> Complete Check-In (add remaining details)
+            </button>
           </div>
           {future.length > 0 && <><div style={{ fontSize:10, fontWeight:800, color:"var(--text3)", textTransform:"uppercase", marginBottom:6 }}>Other Upcoming</div>{future.map(b => <FRow key={b.id} b={b} />)}</>}
           <div style={{ borderTop:"1px dashed var(--border)", margin:"12px 0 10px" }} />
