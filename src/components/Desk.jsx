@@ -42,13 +42,13 @@ function DateDMY({ value, onChange, min, style }) {
 import GuestSurveyOverlay from "./GuestSurveyOverlay";
 import { persistHotelBookingBundle } from "../lib/hotelSupabase";
 
-// ── Room status colours (soft tints) ──────────────────────────────────────
+// ── Room status colours (bold, high-visibility) ────────────────────────────
 const STATUS_STYLE = {
-  occupied:    { bg:"#FFF0F0", text:"#7a1a1a", border:"#f5a0a0", badge:"#C62828", badgeTx:"#fff" },
-  reserved:    { bg:"#FFF8EC", text:"#7a4200", border:"#f5c97a", badge:"#E65100", badgeTx:"#fff" },
-  vacant:      { bg:"#F0FBF2", text:"#1a5c2a", border:"#86EFB0", badge:"#1B7A33", badgeTx:"#fff" },
-  cleaning:    { bg:"#FEFCE8", text:"#7a5b00", border:"#facc15", badge:"#CA8A04", badgeTx:"#fff" },
-  maintenance: { bg:"#F4F4F4", text:"#444",    border:"#ccc",    badge:"#555",    badgeTx:"#fff" },
+  occupied:    { bg:"#FFD1D1", text:"#7a1010", border:"#E24B4A", badge:"#C62828", badgeTx:"#fff" },
+  reserved:    { bg:"#FFE3B3", text:"#7a4200", border:"#F59E0B", badge:"#E65100", badgeTx:"#fff" },
+  vacant:      { bg:"#C4F5D4", text:"#0f5027", border:"#22C55E", badge:"#1B7A33", badgeTx:"#fff" },
+  cleaning:    { bg:"#FDE68A", text:"#6b4a00", border:"#EAB308", badge:"#CA8A04", badgeTx:"#fff" },
+  maintenance: { bg:"#E2E5EA", text:"#374151", border:"#9CA3AF", badge:"#555",    badgeTx:"#fff" },
 };
 
 function getHotelDue(b) {
@@ -1204,7 +1204,7 @@ export default function Desk() {
           <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:9 }}>
             <span style={{ fontSize:10, fontWeight:800, color:"var(--text3)", textTransform:"uppercase", letterSpacing:.8 }}>Room Map</span>
             <div style={{ display:"flex", gap:10, marginLeft:"auto" }}>
-              {[["#1B7A33","#F0FBF2","Vacant"],["#C62828","#FFF0F0","Occupied"],["#E65100","#FFF8EC","Reserved"],["#CA8A04","#FEFCE8","Cleaning"]].map(([c,bg,l])=>(
+              {[["#22C55E","#C4F5D4","Vacant"],["#E24B4A","#FFD1D1","Occupied"],["#F59E0B","#FFE3B3","Reserved"],["#EAB308","#FDE68A","Cleaning"]].map(([c,bg,l])=>(
                 <span key={l} style={{ display:"flex", alignItems:"center", gap:5, fontSize:10, color:"var(--text3)", fontWeight:600 }}>
                   <span style={{ width:14, height:14, borderRadius:4, background:bg, border:"1.5px solid "+c, display:"inline-block" }} />{l}
                 </span>
@@ -1223,7 +1223,7 @@ export default function Desk() {
               const bRes = bookings.find(b => b.room === r.number && b.status === "confirmed" && b.checkin <= today && b.checkout > today);
               return (
                 <div key={r.id} onClick={() => ds === "cleaning" ? setCleanTarget(r) : setSel(r)} style={{
-                  background:st.bg, color:st.text, border:"1.5px solid "+st.border,
+                  background:st.bg, color:st.text, border:"2.5px solid "+st.border,
                   borderRadius:12, padding:"12px 14px", cursor:"pointer", position:"relative",
                   transition:"transform .15s, box-shadow .15s", boxShadow:"0 1px 4px rgba(0,0,0,.07)",
                 }}
