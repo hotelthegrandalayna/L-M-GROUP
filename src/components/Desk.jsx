@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, Fragment, useMemo } from "react";
 import { useApp } from "../context/AppContext";
 import useIsMobile from "../hall/useIsMobile";
-import { todayStr, money, bookingConflicts, getRoomDisplayStatus, maxId, formatDate } from "../utils/helpers";
+import { todayStr, money, bookingConflicts, getRoomDisplayStatus, bookingCoversRoom, roomBookingWindow, maxId, formatDate } from "../utils/helpers";
 import { buildInvoiceHTML, buildTCHtml, hotelPrint } from "./Invoice";
 import { sendNtfyAlert } from "../utils/ntfy";
 import { hotelBusinessOnly } from "../utils/expenseType";
@@ -44,12 +44,27 @@ import { persistHotelBookingBundle } from "../lib/hotelSupabase";
 
 // ── Room status colours (bold, high-visibility) ────────────────────────────
 const STATUS_STYLE = {
-  occupied:    { bg:"#FFD1D1", text:"#7a1010", border:"#E24B4A", badge:"#C62828", badgeTx:"#fff" },
-  reserved:    { bg:"#FFE3B3", text:"#7a4200", border:"#F59E0B", badge:"#E65100", badgeTx:"#fff" },
-  vacant:      { bg:"#C4F5D4", text:"#0f5027", border:"#22C55E", badge:"#1B7A33", badgeTx:"#fff" },
-  cleaning:    { bg:"#FDE68A", text:"#6b4a00", border:"#EAB308", badge:"#CA8A04", badgeTx:"#fff" },
-  maintenance: { bg:"#E2E5EA", text:"#374151", border:"#9CA3AF", badge:"#555",    badgeTx:"#fff" },
+  occupied:    { bg:"#FFD1D1", text:"#7a1010", border:"#E24B4A", badge:"#C62828", badgeTx:"#fff", grad:"linear-gradient(150deg,#FFE7E7 0%,#FFC2C2 55%,#FFB0B0 100%)", glow:"rgba(226,75,74,.42)" },
+  reserved:    { bg:"#E4D3FB", text:"#4a2589", border:"#8B5CF6", badge:"#6D28D9", badgeTx:"#fff", grad:"linear-gradient(150deg,#F2EAFE 0%,#DBC6FB 55%,#CAAFF9 100%)", glow:"rgba(139,92,246,.48)" },
+  vacant:      { bg:"#C4F5D4", text:"#0f5027", border:"#22C55E", badge:"#1B7A33", badgeTx:"#fff", grad:"linear-gradient(150deg,#DEFBE7 0%,#B2F1C6 55%,#9CEDB6 100%)", glow:"rgba(34,197,94,.38)" },
+  cleaning:    { bg:"#FDE68A", text:"#6b4a00", border:"#EAB308", badge:"#CA8A04", badgeTx:"#fff", grad:"linear-gradient(150deg,#FEF6CC 0%,#FCE585 55%,#FADB63 100%)", glow:"rgba(234,179,8,.5)" },
+  maintenance: { bg:"#E2E5EA", text:"#374151", border:"#9CA3AF", badge:"#555",    badgeTx:"#fff", grad:"linear-gradient(150deg,#EFF1F4 0%,#D8DCE2 100%)", glow:"rgba(156,163,175,.35)" },
 };
+
+// Injected once — keyframes for the smart, animated room-map cards
+const ROOM_MAP_CSS = `
+@keyframes rmBadgePulse { 0%,100%{ box-shadow:0 0 0 0 var(--pulse-c); } 50%{ box-shadow:0 0 10px 2px var(--pulse-c); } }
+@keyframes rmAheadZoom  { 0%,100%{ transform:scale(1); } 50%{ transform:scale(1.16); } }
+@keyframes rmGlow       { 0%,100%{ opacity:.55; } 50%{ opacity:1; } }
+.rm-card { position:relative; border-radius:14px; cursor:pointer; overflow:hidden;
+  transition:transform .18s cubic-bezier(.2,.7,.3,1), box-shadow .18s ease; will-change:transform; }
+.rm-card::before { content:""; position:absolute; inset:0; border-radius:14px; pointer-events:none;
+  background:linear-gradient(180deg,rgba(255,255,255,.55) 0%,rgba(255,255,255,0) 42%); }
+.rm-card:hover { transform:translateY(-4px) scale(1.02); }
+.rm-badge-pulse { animation:rmBadgePulse 2s ease-in-out infinite; }
+.rm-ahead { animation:rmAheadZoom 1.4s ease-in-out infinite; }
+.rm-glow-ring { animation:rmGlow 2.4s ease-in-out infinite; }
+`;
 
 function getHotelDue(b) {
   if (!b) return 0;
@@ -69,9 +84,9 @@ function RoomModal({ room, onClose, onCheckout }) {
   d2.setDate(d2.getDate() + 2);
   const tmrIso = tmr.toISOString().split("T")[0];
   const d2Iso  = d2.toISOString().split("T")[0];
-  const bIn  = bookings.find(b => b.room === room.number && b.status === "checked-in");
-  const bRes = bookings.find(b => b.room === room.number && b.status === "confirmed" && b.checkin <= today && b.checkout > today);
-  const future = bookings.filter(b => b.room === room.number && b.status === "confirmed" && b.checkin > today).sort((a,b) => a.checkin > b.checkin ? 1 : -1);
+  const bIn  = bookings.find(b => b.status === "checked-in" && bookingCoversRoom(b, room.number) && roomBookingWindow(b, room.number).checkout >= today);
+  const bRes = bookings.find(b => { if (b.status !== "confirmed" || !bookingCoversRoom(b, room.number)) return false; const w = roomBookingWindow(b, room.number); return w.checkin <= today && w.checkout > today; });
+  const future = bookings.filter(b => b.status === "confirmed" && bookingCoversRoom(b, room.number) && roomBookingWindow(b, room.number).checkin > today).sort((a,b) => a.checkin > b.checkin ? 1 : -1);
 
   const [nm,  setNm]  = useState("");
   const [ph,  setPh]  = useState("");
@@ -1208,39 +1223,42 @@ export default function Desk() {
           <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:9 }}>
             <span style={{ fontSize:10, fontWeight:800, color:"var(--text3)", textTransform:"uppercase", letterSpacing:.8 }}>Room Map</span>
             <div style={{ display:"flex", gap:10, marginLeft:"auto" }}>
-              {[["#22C55E","#C4F5D4","Vacant"],["#E24B4A","#FFD1D1","Occupied"],["#F59E0B","#FFE3B3","Reserved"],["#EAB308","#FDE68A","Cleaning"]].map(([c,bg,l])=>(
+              {[["#22C55E","#C4F5D4","Vacant"],["#E24B4A","#FFD1D1","Occupied"],["#8B5CF6","#E4D3FB","Reserved"],["#EAB308","#FDE68A","Cleaning"]].map(([c,bg,l])=>(
                 <span key={l} style={{ display:"flex", alignItems:"center", gap:5, fontSize:10, color:"var(--text3)", fontWeight:600 }}>
                   <span style={{ width:14, height:14, borderRadius:4, background:bg, border:"1.5px solid "+c, display:"inline-block" }} />{l}
                 </span>
               ))}
             </div>
           </div>
-          <div style={{ display:"grid", gridTemplateColumns:isMobile ? "repeat(2,minmax(0,1fr))" : "repeat(3,minmax(0,1fr))", gap:10, marginBottom:14 }}>
+          <style>{ROOM_MAP_CSS}</style>
+          <div style={{ display:"grid", gridTemplateColumns:isMobile ? "repeat(2,minmax(0,1fr))" : "repeat(3,minmax(0,1fr))", gap:12, marginBottom:14 }}>
             {rooms.map(r => {
               const rawDs = getRoomDisplayStatus(r, bookings, today);
               // A vacant room that was just checked out shows yellow "needs cleaning"
               const needsClean = dirtyRooms && dirtyRooms[String(r.number)];
               const ds = (rawDs === "vacant" && needsClean) ? "cleaning" : rawDs;
               const st = STATUS_STYLE[ds] || STATUS_STYLE.vacant;
-              const fc = bookings.filter(b => b.room === r.number && b.status === "confirmed" && b.checkin > today).length;
-              const bIn  = bookings.find(b => b.room === r.number && b.status === "checked-in");
-              const bRes = bookings.find(b => b.room === r.number && b.status === "confirmed" && b.checkin <= today && b.checkout > today);
+              const fc = bookings.filter(b => b.status === "confirmed" && bookingCoversRoom(b, r.number) && roomBookingWindow(b, r.number).checkin > today).length;
+              const bIn  = bookings.find(b => b.status === "checked-in" && bookingCoversRoom(b, r.number) && roomBookingWindow(b, r.number).checkout >= today);
+              const bRes = bookings.find(b => { if (b.status !== "confirmed" || !bookingCoversRoom(b, r.number)) return false; const w = roomBookingWindow(b, r.number); return w.checkin <= today && w.checkout > today; });
+              const isActive = ds !== "vacant";
               return (
-                <div key={r.id} onClick={() => ds === "cleaning" ? setCleanTarget(r) : setSel(r)} style={{
-                  background:st.bg, color:st.text, border:"2.5px solid "+st.border,
-                  borderRadius:12, padding:"12px 14px", cursor:"pointer", position:"relative",
-                  transition:"transform .15s, box-shadow .15s", boxShadow:"0 1px 4px rgba(0,0,0,.07)",
+                <div key={r.id} className="rm-card" onClick={() => ds === "cleaning" ? setCleanTarget(r) : setSel(r)} style={{
+                  background:st.grad || st.bg, color:st.text, border:"2px solid "+st.border,
+                  padding:"12px 14px",
+                  boxShadow:`0 8px 20px -6px ${st.glow}, 0 2px 5px rgba(0,0,0,.10), inset 0 1px 0 rgba(255,255,255,.55)`,
                 }}
-                  onMouseEnter={e=>{e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow="0 4px 14px rgba(0,0,0,.13)";}}
-                  onMouseLeave={e=>{e.currentTarget.style.transform="";e.currentTarget.style.boxShadow="0 1px 4px rgba(0,0,0,.07)";}}
+                  onMouseEnter={e=>{e.currentTarget.style.boxShadow=`0 16px 30px -8px ${st.glow}, 0 4px 10px rgba(0,0,0,.14), inset 0 1px 0 rgba(255,255,255,.6)`;}}
+                  onMouseLeave={e=>{e.currentTarget.style.boxShadow=`0 8px 20px -6px ${st.glow}, 0 2px 5px rgba(0,0,0,.10), inset 0 1px 0 rgba(255,255,255,.55)`;}}
                 >
-                  {fc > 0 && <div style={{ position:"absolute", top:7, right:8, background:st.badge, color:st.badgeTx, fontSize:8, fontWeight:800, borderRadius:6, padding:"1px 5px" }}>{fc} ahead</div>}
-                  <div style={{ fontSize:22, fontWeight:900, color:st.badge, letterSpacing:-.5, lineHeight:1 }}>{r.number}</div>
-                  <div style={{ fontSize:12, fontWeight:700, margin:"3px 0 1px", opacity:.85 }}>{r.name || r.type}</div>
+                  {fc > 0 && <div className="rm-ahead" style={{ position:"absolute", top:7, right:8, background:st.badge, color:st.badgeTx, fontSize:8, fontWeight:800, borderRadius:6, padding:"2px 6px", boxShadow:`0 2px 6px ${st.glow}`, zIndex:2 }}>{fc} ahead</div>}
+                  <div style={{ position:"relative", zIndex:1 }}>
+                  <div style={{ fontSize:23, fontWeight:900, color:st.badge, letterSpacing:-.5, lineHeight:1, textShadow:"0 1px 1px rgba(255,255,255,.5)" }}>{r.number}</div>
+                  <div style={{ fontSize:12, fontWeight:700, margin:"3px 0 1px", opacity:.9 }}>{r.name || r.type}</div>
                   <div style={{ fontSize:9, opacity:.55, textTransform:"uppercase", letterSpacing:.5 }}>{r.type}</div>
                   <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginTop:9 }}>
                     <span style={{ fontSize:13, fontWeight:800, color:st.badge }}>{money(r.rate)}<span style={{ fontSize:8, opacity:.6 }}>/n</span></span>
-                    <span style={{ fontSize:9, fontWeight:800, background:st.badge, color:st.badgeTx, padding:"2px 8px", borderRadius:6, textTransform:"uppercase" }}>
+                    <span className={isActive ? "rm-badge-pulse" : ""} style={{ ["--pulse-c"]:st.glow, fontSize:9, fontWeight:800, background:st.badge, color:st.badgeTx, padding:"3px 9px", borderRadius:7, textTransform:"uppercase", boxShadow:`0 2px 5px ${st.glow}` }}>
                       {ds === "occupied" ? "IN" : ds === "reserved" ? "RSVD" : ds === "cleaning" ? "🧹 CLEAN" : "FREE"}
                     </span>
                   </div>
@@ -1253,6 +1271,7 @@ export default function Desk() {
                       {(bIn || bRes).guest}
                     </div>
                   )}
+                  </div>
                 </div>
               );
             })}

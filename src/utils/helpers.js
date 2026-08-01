@@ -42,31 +42,40 @@ export function bookingConflicts(roomNum, ci, co, excludeId, bookings) {
   });
 }
 
+// Does this booking include the given room? Handles single, extra-room, and
+// multi-room bookings — so every caller agrees on which rooms a booking covers.
+export function bookingCoversRoom(b, roomNumber) {
+  const num = String(roomNumber);
+  if (b.multiRooms && b.multiRooms.length) {
+    return b.multiRooms.some(mr => String(mr.number) === num);
+  }
+  return [b.room, ...(b.extraRooms || []).map(r => r.number)].map(String).includes(num);
+}
+
+// The check-in/check-out window for a specific room within a booking. For a
+// multi-room booking each room can have its own dates; otherwise the booking's.
+export function roomBookingWindow(b, roomNumber) {
+  const num = String(roomNumber);
+  if (b.multiRooms && b.multiRooms.length) {
+    const mr = b.multiRooms.find(m => String(m.number) === num);
+    if (mr) return { checkin: mr.checkin || b.checkin, checkout: mr.checkout || b.checkout };
+  }
+  return { checkin: b.checkin, checkout: b.checkout };
+}
+
 export function getRoomDisplayStatus(room, bookings, today) {
-  const num = String(room.number);
-  const active = bookings.find(b => {
-    if (b.status !== 'checked-in') return false;
-    // New multi-room: check per-room checkout
-    if (b.multiRooms && b.multiRooms.length) {
-      return b.multiRooms.some(mr => String(mr.number) === num && (mr.checkout || b.checkout) >= today);
-    }
-    const allRooms = [b.room, ...(b.extraRooms || []).map(r => r.number)].map(String);
-    return allRooms.includes(num) && b.checkout >= today;
-  });
+  const active = bookings.find(b =>
+    b.status === 'checked-in' && bookingCoversRoom(b, room.number)
+    && roomBookingWindow(b, room.number).checkout >= today);
   if (active) return 'occupied';
   // Only paint the room "reserved" once the reservation has actually started
   // (check-in date reached). A purely FUTURE reservation leaves the room vacant
   // today — it's still sellable tonight — and the "N ahead" badge flags the
   // upcoming booking instead.
   const reserved = bookings.find(b => {
-    if (b.status !== 'confirmed') return false;
-    // New multi-room: check per-room check-in/checkout window
-    if (b.multiRooms && b.multiRooms.length) {
-      return b.multiRooms.some(mr => String(mr.number) === num
-        && (mr.checkin || b.checkin) <= today && (mr.checkout || b.checkout) > today);
-    }
-    const allRooms = [b.room, ...(b.extraRooms || []).map(r => r.number)].map(String);
-    return allRooms.includes(num) && b.checkin <= today && b.checkout > today;
+    if (b.status !== 'confirmed' || !bookingCoversRoom(b, room.number)) return false;
+    const w = roomBookingWindow(b, room.number);
+    return w.checkin <= today && w.checkout > today;
   });
   if (reserved) return 'reserved';
   return 'vacant';
