@@ -1401,32 +1401,32 @@ export default function Desk() {
         </div>
 
         {/* Right: Action panels */}
-        <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+        <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
 
-          {/* Arrivals */}
-          <div className="panel">
-            <div className="panel-header" style={{ padding:"9px 12px" }}>
-              <div className="panel-title" style={{ fontSize:12 }}>
-                <i className="ti ti-login" style={{ color:"var(--green)" }} /> Arrivals
-                <span style={{ marginLeft:6, background:"var(--green-bg)", color:"var(--green)", fontWeight:800, fontSize:10, padding:"1px 7px", borderRadius:8 }}>{arrivals.length}</span>
+          {/* Arrivals + Departures side by side to save vertical space */}
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+            <div className="panel">
+              <div className="panel-header" style={{ padding:"8px 10px" }}>
+                <div className="panel-title" style={{ fontSize:11.5 }}>
+                  <i className="ti ti-login" style={{ color:"var(--green)" }} /> Arrivals
+                  <span style={{ marginLeft:5, background:"var(--green-bg)", color:"var(--green)", fontWeight:800, fontSize:10, padding:"1px 6px", borderRadius:8 }}>{arrivals.length}</span>
+                </div>
               </div>
+              {arrivals.length ? arrivals.map(b => <GuestRow key={b.id} b={b} showIn showOut={false} />) : (
+                <div style={{ color:"var(--text3)", fontSize:11, textAlign:"center", padding:"8px 4px" }}>None today</div>
+              )}
             </div>
-            {arrivals.length ? arrivals.map(b => <GuestRow key={b.id} b={b} showIn showOut={false} />) : (
-              <div style={{ color:"var(--text3)", fontSize:12, textAlign:"center", padding:"10px 0" }}>No arrivals today</div>
-            )}
-          </div>
-
-          {/* Departures */}
-          <div className="panel">
-            <div className="panel-header" style={{ padding:"9px 12px" }}>
-              <div className="panel-title" style={{ fontSize:12 }}>
-                <i className="ti ti-logout" style={{ color:"var(--red2)" }} /> Departures
-                <span style={{ marginLeft:6, background:"var(--red-bg)", color:"var(--red2)", fontWeight:800, fontSize:10, padding:"1px 7px", borderRadius:8 }}>{departures.length}</span>
+            <div className="panel">
+              <div className="panel-header" style={{ padding:"8px 10px" }}>
+                <div className="panel-title" style={{ fontSize:11.5 }}>
+                  <i className="ti ti-logout" style={{ color:"var(--red2)" }} /> Departures
+                  <span style={{ marginLeft:5, background:"var(--red-bg)", color:"var(--red2)", fontWeight:800, fontSize:10, padding:"1px 6px", borderRadius:8 }}>{departures.length}</span>
+                </div>
               </div>
+              {departures.length ? departures.map(b => <GuestRow key={b.id} b={b} showIn={false} showOut />) : (
+                <div style={{ color:"var(--text3)", fontSize:11, textAlign:"center", padding:"8px 4px" }}>None today</div>
+              )}
             </div>
-            {departures.length ? departures.map(b => <GuestRow key={b.id} b={b} showIn={false} showOut />) : (
-              <div style={{ color:"var(--text3)", fontSize:12, textAlign:"center", padding:"10px 0" }}>No departures today</div>
-            )}
           </div>
 
           {/* Pending Balances */}
@@ -1455,10 +1455,10 @@ export default function Desk() {
             <div className="panel-header" style={{ padding:"9px 12px" }}>
               <div className="panel-title" style={{ fontSize:12 }}><i className="ti ti-chart-pie" /> Today P&amp;L</div>
             </div>
-            <div style={{ padding:"8px 12px" }}>
-              <div style={{ display:"flex", justifyContent:"space-between", padding:"4px 0", fontSize:13 }}><span style={{ color:"var(--text2)" }}>Revenue</span><span style={{ fontWeight:700, color:"var(--green)" }}>{money(dRev)}</span></div>
-              <div style={{ display:"flex", justifyContent:"space-between", padding:"4px 0", fontSize:13, borderBottom:"1.5px solid var(--border)", paddingBottom:8 }}><span style={{ color:"var(--text2)" }}>Expenses</span><span style={{ fontWeight:700, color:"var(--red)" }}>{money(dExp)}</span></div>
-              <div style={{ display:"flex", justifyContent:"space-between", padding:"8px 0 2px", fontSize:14, fontWeight:800 }}><span>Net</span><span style={{ color:dRev-dExp>=0?"var(--green)":"var(--red2)" }}>{money(dRev-dExp)}</span></div>
+            <div style={{ padding:"5px 12px 7px" }}>
+              <div style={{ display:"flex", justifyContent:"space-between", padding:"3px 0", fontSize:12.5 }}><span style={{ color:"var(--text2)" }}>Revenue</span><span style={{ fontWeight:700, color:"var(--green)" }}>{money(dRev)}</span></div>
+              <div style={{ display:"flex", justifyContent:"space-between", padding:"3px 0 6px", fontSize:12.5, borderBottom:"1.5px solid var(--border)" }}><span style={{ color:"var(--text2)" }}>Expenses</span><span style={{ fontWeight:700, color:"var(--red)" }}>{money(dExp)}</span></div>
+              <div style={{ display:"flex", justifyContent:"space-between", padding:"6px 0 1px", fontSize:14, fontWeight:800 }}><span>Net</span><span style={{ color:dRev-dExp>=0?"var(--green)":"var(--red2)" }}>{money(dRev-dExp)}</span></div>
             </div>
           </div>
 
