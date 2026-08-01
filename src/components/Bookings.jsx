@@ -1243,6 +1243,15 @@ function NewBookingModal({ onClose, prefill, editBooking }) {
                     <div style={{ display:"flex", justifyContent:"space-between", fontSize:20, fontWeight:900, color:"#c9a84c", borderTop:"1px solid rgba(255,255,255,.2)", paddingTop:8, marginTop:4 }}>
                       <span>Total</span><span>৳{multiTotal.toLocaleString()}</span>
                     </div>
+                    {isEdit && priorPaid > 0 && (() => {
+                      const addl = Math.min(parseFloat(advance) || 0, Math.max(0, multiTotal - priorPaid));
+                      const bal = Math.max(0, multiTotal - priorPaid - addl);
+                      return (<>
+                        <div style={{ display:"flex", justifyContent:"space-between", fontSize:12.5, color:"#6de8a8" }}><span>Already Paid (deposit)</span><span>−৳{priorPaid.toLocaleString()}</span></div>
+                        {addl > 0 && <div style={{ display:"flex", justifyContent:"space-between", fontSize:12.5, color:"#6de8a8" }}><span>Paying Now</span><span>−৳{addl.toLocaleString()}</span></div>}
+                        <div style={{ display:"flex", justifyContent:"space-between", fontSize:15, fontWeight:800, color: bal===0?"#6de8a8":"#ffd27a", borderTop:"1px dashed rgba(255,255,255,.25)", paddingTop:6, marginTop:2 }}><span>{bal===0 ? "✓ Fully Paid" : "Balance to Collect"}</span><span>৳{bal.toLocaleString()}</span></div>
+                      </>);
+                    })()}
                   </div>
                 </div>
               ) : (
@@ -1309,6 +1318,15 @@ function NewBookingModal({ onClose, prefill, editBooking }) {
                   <div style={{ display:"flex", justifyContent:"space-between", fontSize:20, fontWeight:900, color:"#c9a84c", borderTop:"1px solid rgba(255,255,255,.2)", paddingTop:8, marginTop:4 }}>
                     <span>Total</span><span>৳{grand.toLocaleString()}</span>
                   </div>
+                  {isEdit && priorPaid > 0 && (() => {
+                    const addl = Math.min(parseFloat(advance) || 0, Math.max(0, grand - priorPaid));
+                    const bal = Math.max(0, grand - priorPaid - addl);
+                    return (<>
+                      <div style={{ display:"flex", justifyContent:"space-between", fontSize:12.5, color:"#6de8a8" }}><span>Already Paid (deposit)</span><span>−৳{priorPaid.toLocaleString()}</span></div>
+                      {addl > 0 && <div style={{ display:"flex", justifyContent:"space-between", fontSize:12.5, color:"#6de8a8" }}><span>Paying Now</span><span>−৳{addl.toLocaleString()}</span></div>}
+                      <div style={{ display:"flex", justifyContent:"space-between", fontSize:15, fontWeight:800, color: bal===0?"#6de8a8":"#ffd27a", borderTop:"1px dashed rgba(255,255,255,.25)", paddingTop:6, marginTop:2 }}><span>{bal===0 ? "✓ Fully Paid" : "Balance to Collect"}</span><span>৳{bal.toLocaleString()}</span></div>
+                    </>);
+                  })()}
                 </div>
               </div>
             </>) : (
@@ -1508,6 +1526,15 @@ function NewBookingModal({ onClose, prefill, editBooking }) {
               <div style={{ display:"flex", justifyContent:"space-between", fontSize:20, fontWeight:900, color:"#c9a84c", borderTop:"1px solid rgba(255,255,255,.2)", paddingTop:8, marginTop:6 }}>
                 <span>Total</span><span>৳{multiTotal.toLocaleString()}</span>
               </div>
+              {isEdit && priorPaid > 0 && (() => {
+                const addl = Math.min(parseFloat(advance) || 0, Math.max(0, multiTotal - priorPaid));
+                const bal = Math.max(0, multiTotal - priorPaid - addl);
+                return (<>
+                  <div style={{ display:"flex", justifyContent:"space-between", fontSize:12.5, color:"#6de8a8", marginTop:3 }}><span>Already Paid (deposit)</span><span>−৳{priorPaid.toLocaleString()}</span></div>
+                  {addl > 0 && <div style={{ display:"flex", justifyContent:"space-between", fontSize:12.5, color:"#6de8a8", marginTop:3 }}><span>Paying Now</span><span>−৳{addl.toLocaleString()}</span></div>}
+                  <div style={{ display:"flex", justifyContent:"space-between", fontSize:15, fontWeight:800, color: bal===0?"#6de8a8":"#ffd27a", borderTop:"1px dashed rgba(255,255,255,.25)", paddingTop:6, marginTop:4 }}><span>{bal===0 ? "✓ Fully Paid" : "Balance to Collect"}</span><span>৳{bal.toLocaleString()}</span></div>
+                </>);
+              })()}
             </div>
           )}
 
