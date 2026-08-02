@@ -1406,10 +1406,11 @@ export default function Desk() {
           {/* Arrivals + Departures side by side to save vertical space */}
           <div style={{ display:"grid", gridTemplateColumns:"minmax(0,1fr) minmax(0,1fr)", gap:8 }}>
             <div className="panel">
-              <div className="panel-header" style={{ padding:"8px 10px" }}>
-                <div className="panel-title" style={{ fontSize:11.5 }}>
-                  <i className="ti ti-login" style={{ color:"var(--green)" }} /> Arrivals
-                  <span style={{ marginLeft:5, background:"var(--green-bg)", color:"var(--green)", fontWeight:800, fontSize:10, padding:"1px 6px", borderRadius:8 }}>{arrivals.length}</span>
+              <div className="panel-header" style={{ padding:"8px 9px" }}>
+                <div className="panel-title" style={{ fontSize:11.5, gap:5, minWidth:0, flex:1 }}>
+                  <i className="ti ti-login" style={{ color:"var(--green)", flexShrink:0 }} />
+                  <span style={{ minWidth:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>Arrivals</span>
+                  <span style={{ marginLeft:"auto", flexShrink:0, background:"var(--green-bg)", color:"var(--green)", fontWeight:800, fontSize:10, padding:"1px 6px", borderRadius:8 }}>{arrivals.length}</span>
                 </div>
               </div>
               {arrivals.length ? arrivals.map(b => <GuestRow key={b.id} b={b} showIn showOut={false} />) : (
@@ -1417,10 +1418,11 @@ export default function Desk() {
               )}
             </div>
             <div className="panel">
-              <div className="panel-header" style={{ padding:"8px 10px" }}>
-                <div className="panel-title" style={{ fontSize:11.5 }}>
-                  <i className="ti ti-logout" style={{ color:"var(--red2)" }} /> Departures
-                  <span style={{ marginLeft:5, background:"var(--red-bg)", color:"var(--red2)", fontWeight:800, fontSize:10, padding:"1px 6px", borderRadius:8 }}>{departures.length}</span>
+              <div className="panel-header" style={{ padding:"8px 9px" }}>
+                <div className="panel-title" style={{ fontSize:11.5, gap:5, minWidth:0, flex:1 }}>
+                  <i className="ti ti-logout" style={{ color:"var(--red2)", flexShrink:0 }} />
+                  <span style={{ minWidth:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>Departures</span>
+                  <span style={{ marginLeft:"auto", flexShrink:0, background:"var(--red-bg)", color:"var(--red2)", fontWeight:800, fontSize:10, padding:"1px 6px", borderRadius:8 }}>{departures.length}</span>
                 </div>
               </div>
               {departures.length ? departures.map(b => <GuestRow key={b.id} b={b} showIn={false} showOut />) : (
