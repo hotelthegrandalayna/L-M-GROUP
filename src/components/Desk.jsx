@@ -1404,7 +1404,7 @@ export default function Desk() {
         <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
 
           {/* Arrivals + Departures side by side to save vertical space */}
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+          <div style={{ display:"grid", gridTemplateColumns:"minmax(0,1fr) minmax(0,1fr)", gap:8 }}>
             <div className="panel">
               <div className="panel-header" style={{ padding:"8px 10px" }}>
                 <div className="panel-title" style={{ fontSize:11.5 }}>
