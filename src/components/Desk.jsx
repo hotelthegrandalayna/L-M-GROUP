@@ -1301,16 +1301,16 @@ export default function Desk() {
                       <div style={{ marginTop:6, borderTop:`1px solid ${st.border}55`, paddingTop:5 }}>
                         <div style={{ fontSize:10.5, fontWeight:800, color:st.text, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{bk.guest}</div>
                         <div style={{ fontSize:9.5, fontWeight:700, color:st.text, opacity:.85, marginTop:2 }}>{rn} night{rn>1?"s":""} · This room ৳{total.toLocaleString()}</div>
-                        {isCombined ? (
+                        {isCombined && (
                           <div style={{ fontSize:9, fontWeight:700, color:st.text, opacity:.7, marginTop:1 }}>
-                            Combined booking · Rm {roomList.join(" + ")} · ৳{(bk.invoiceTotal ?? bk.amount ?? 0).toLocaleString()} total
-                          </div>
-                        ) : (
-                          <div style={{ fontSize:9.5, fontWeight:800, marginTop:1 }}>
-                            <span style={{ color:"#0f5027" }}>Paid ৳{paid.toLocaleString()}</span>
-                            {due > 0 && <span style={{ color:"#8a1010" }}> · Due ৳{due.toLocaleString()}</span>}
+                            Combined · Rm {roomList.join(" + ")} · ৳{(bk.invoiceTotal ?? bk.amount ?? 0).toLocaleString()} total
                           </div>
                         )}
+                        <div style={{ fontSize:9.5, fontWeight:800, marginTop:1 }}>
+                          <span style={{ color:"#0f5027" }}>Paid ৳{paid.toLocaleString()}</span>
+                          {due > 0 && <span style={{ color:"#8a1010" }}> · Due ৳{due.toLocaleString()}</span>}
+                          {isCombined && <span style={{ color:st.text, opacity:.6, fontWeight:600 }}> (whole booking)</span>}
+                        </div>
                       </div>
                     );
                   })()}
