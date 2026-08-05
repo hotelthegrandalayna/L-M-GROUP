@@ -103,6 +103,19 @@ export function AppProvider({ children }) {
 
   // Track last local rooms edit so poll doesn't overwrite it before Supabase save completes
   const roomsEditedAt = useRef(0);
+  // On-demand loaded past-month bookings — kept here so every routine sync
+  // (which only pulls the last ~30 days) re-merges them instead of wiping them.
+  const pastBookingsRef = useRef([]);
+  // Merge the persistent past-month bookings into a freshly-synced recent list
+  const mergePastBookings = (recentList, deletedIds) => {
+    if (!pastBookingsRef.current.length) return recentList;
+    const have = new Set(recentList.map(b => String(b.supabaseBookingId ?? b.id)));
+    const del = deletedIds || (() => { try { return new Set(JSON.parse(localStorage.getItem('ga_deleted_booking_ids') || '[]')); } catch { return new Set(); } })();
+    const extra = pastBookingsRef.current.filter(b =>
+      !have.has(String(b.supabaseBookingId ?? b.id)) &&
+      !del.has(String(b.id ?? '')) && !del.has(String(b.supabaseBookingId ?? '')));
+    return extra.length ? [...recentList, ...extra] : recentList;
+  };
 
   // Core data
   const [rooms,        setRoomsRaw]   = useState(initRooms);
@@ -280,7 +293,8 @@ export function AppProvider({ children }) {
           !deletedIds.has(String(l.supabaseBookingId ?? ''))
         );
         localOnly.forEach(b => { persistHotelBookingBundle(b).catch(() => {}); });
-        const withLocalOnly = [...merged, ...localOnly];
+        // Keep on-demand-loaded past months alive across this 30-day poll too
+        const withLocalOnly = mergePastBookings([...merged, ...localOnly], deletedIds);
         setBookings(withLocalOnly);
         const cutoff2 = new Date(); cutoff2.setMonth(cutoff2.getMonth() - 6);
         const cutoffStr2 = cutoff2.toISOString().slice(0, 10);
@@ -466,7 +480,9 @@ export function AppProvider({ children }) {
           loadHotelBookingsFromSupabase().then(remoteBookings => {
             if (!Array.isArray(remoteBookings) || !remoteBookings.length) return;
             const deletedIds = (() => { try { return new Set(JSON.parse(localStorage.getItem('ga_deleted_booking_ids') || '[]')); } catch { return new Set(); } })();
-            const filtered = remoteBookings.filter(b => !deletedIds.has(String(b.supabaseBookingId ?? b.id ?? '')) && !deletedIds.has(String(b.id ?? '')));
+            const filteredRecent = remoteBookings.filter(b => !deletedIds.has(String(b.supabaseBookingId ?? b.id ?? '')) && !deletedIds.has(String(b.id ?? '')));
+            // Keep any on-demand-loaded past months alive across this 30-day sync
+            const filtered = mergePastBookings(filteredRecent, deletedIds);
             setBookings(filtered);
             const cutoff = new Date(); cutoff.setMonth(cutoff.getMonth() - 6);
             const cutoffStr = cutoff.toISOString().slice(0, 10);
@@ -609,12 +625,14 @@ export function AppProvider({ children }) {
       const rows = await loadHotelBookingsForMonth(ym);
       if (rows && rows.length) {
         const deleted = (() => { try { return new Set(JSON.parse(localStorage.getItem('ga_deleted_booking_ids') || '[]')); } catch { return new Set(); } })();
+        const clean = rows.filter(b => !deleted.has(String(b.id)) && !deleted.has(String(b.supabaseBookingId ?? '')));
+        // Persist in the ref so the 8s poll and realtime sync keep re-merging
+        // them — otherwise the next sync (30-day window) would wipe this month.
+        const existing = new Set(pastBookingsRef.current.map(b => String(b.supabaseBookingId ?? b.id)));
+        pastBookingsRef.current = [...pastBookingsRef.current, ...clean.filter(b => !existing.has(String(b.supabaseBookingId ?? b.id)))];
         setBookings(prev => {
           const have = new Set(prev.map(b => String(b.supabaseBookingId ?? b.id)));
-          const add = rows.filter(b =>
-            !deleted.has(String(b.id)) && !deleted.has(String(b.supabaseBookingId ?? '')) &&
-            !have.has(String(b.supabaseBookingId ?? b.id))
-          );
+          const add = clean.filter(b => !have.has(String(b.supabaseBookingId ?? b.id)));
           if (!add.length) return prev;
           const next = [...prev, ...add];
           try { localStorage.setItem('ga_bookings', JSON.stringify(slimForCache(next))); } catch { /* quota */ }

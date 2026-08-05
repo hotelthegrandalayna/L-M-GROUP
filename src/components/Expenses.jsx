@@ -162,10 +162,10 @@ export default function Expenses() {
       ...allRevEntries.map(r=>(r.date||"").slice(0,7)),
       thisMonth,
     ].filter(Boolean));
-    // Always offer the last 24 months so any past month can be picked (and its
-    // data loaded on demand), even before that month's rows are downloaded.
+    // Offer this month + the last 2, so recent months are always selectable
+    // (and load on demand). Any older month that already has data still shows.
     const d = new Date();
-    for (let i = 0; i < 24; i++) { s.add(d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')); d.setMonth(d.getMonth()-1); }
+    for (let i = 0; i < 3; i++) { s.add(d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')); d.setMonth(d.getMonth()-1); }
     return [...s].sort().reverse();
   }, [normalizedExpenses, allRevEntries, thisMonth]);
 

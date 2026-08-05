@@ -124,10 +124,15 @@ export default function AdminFinance() {
 
   // ── Monthly report ──
   const reportMonths = useMemo(()=>{
-    const ms=[];
-    for(let i=11;i>=0;i--){ const d=new Date(today); d.setMonth(d.getMonth()-i); ms.push(d.toISOString().slice(0,7)); }
-    return ms;
-  },[today]);
+    // this month + last 2, plus any month that already has booking/revenue data
+    const set = new Set([
+      ...bookings.map(b=>(b.checkin||"").slice(0,7)).filter(Boolean),
+      ...revenues.map(r=>(r.date||"").slice(0,7)).filter(Boolean),
+    ]);
+    const d=new Date(today);
+    for(let i=0;i<3;i++){ set.add(d.toISOString().slice(0,7)); d.setMonth(d.getMonth()-1); }
+    return [...set].filter(Boolean).sort().reverse();
+  },[today, bookings, revenues]);
 
   const report = useMemo(()=>{
     const bks=bookings.filter(b=>b.checkin?.startsWith(reportMonth)&&b.status!=="cancelled");

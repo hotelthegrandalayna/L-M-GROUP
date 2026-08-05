@@ -508,10 +508,10 @@ export default function AdminInvoices() {
 
   const allMonths = useMemo(() => {
     const set = new Set(bookings.map(getBookingMonth).filter(Boolean));
-    // Always offer the last 24 months so any past month is selectable and can
-    // be pulled from the cloud on demand, even before its invoices are loaded.
+    // Offer this month + the last 2, so recent months are always selectable
+    // (and load on demand). Any older month that already has data still shows.
     const d = new Date();
-    for (let i = 0; i < 24; i++) { set.add(d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')); d.setMonth(d.getMonth()-1); }
+    for (let i = 0; i < 3; i++) { set.add(d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')); d.setMonth(d.getMonth()-1); }
     return [...set].sort().reverse();
   }, [bookings]);
 
