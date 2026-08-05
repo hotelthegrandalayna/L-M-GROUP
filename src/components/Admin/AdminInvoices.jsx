@@ -1,7 +1,8 @@
 import { useState, useMemo, useEffect } from "react";
 import { useApp } from "../../context/AppContext";
 import { checkAdminPassword } from "../../utils/auth";
-import { deleteHotelBooking, deleteHotelBookings, loadHotelGuestImages } from "../../lib/hotelSupabase";
+import { deleteHotelBooking, deleteHotelBookings, loadHotelGuestImages, persistHotelBookingBundle } from "../../lib/hotelSupabase";
+import { logEvent } from "../../utils/auditLog";
 
 const STATUS_OPTS = ["All", "checked-in", "reserved", "checked-out", "cancelled"];
 
@@ -129,12 +130,82 @@ function exportPDF(rows, label) {
 
 // ── Invoice detail modal ──────────────────────────────────────────────────────
 function InvoiceDetail({ bk, onClose }) {
+  const { curRole, curUser, updateBookings, notify } = useApp();
   // Use the shared calcPaid so this modal matches the list, the summary,
   // the invoice and the rest of the app (advance + restPayment counts as
   // paid, not only paymentHistory entries).
   const paid    = calcPaid(bk);
   const total   = bk.invoiceTotal ?? bk.amount ?? 0;
   const balance = Math.max(0, total - paid);
+
+  // ── Full edit (admin only) ──────────────────────────────────────────────
+  const canEdit = curRole === "admin";
+  const [editing, setEditing] = useState(false);
+  const [ed, setEd] = useState(null);        // edit field values
+  const [pwOpen, setPwOpen] = useState(false); // password confirm before saving
+  const [savePw, setSavePw] = useState("");
+  const setF = (k, v) => setEd(p => ({ ...p, [k]: v }));
+
+  function startEdit() {
+    setEd({
+      guest: bk.guest || "", phone: bk.phone || "", room: String(bk.room || ""),
+      checkin: bk.checkin || "", checkout: bk.checkout || "",
+      status: bk.status || "confirmed",
+      total: bk.invoiceTotal ?? bk.amount ?? 0,
+      disc: bk.discAmt || 0,
+      paid: calcPaid(bk),
+      idNum: bk.idDocs?.[0]?.idNum || bk.idNum || "",
+      referrer: bk.referrer || "", purpose: bk.purpose || "", notes: bk.notes || "",
+    });
+    setEditing(true);
+  }
+
+  const edNights = (() => {
+    if (!ed?.checkin || !ed?.checkout) return bk.nights || 0;
+    const n = Math.round((new Date(ed.checkout + "T00:00:00") - new Date(ed.checkin + "T00:00:00")) / 86400000);
+    return n > 0 ? n : 0;
+  })();
+
+  function commitSave() {
+    if (!checkAdminPassword(savePw)) { notify("Incorrect admin password", "error"); return; }
+    const newTotal = parseFloat(ed.total) || 0;
+    const newPaid  = parseFloat(ed.paid)  || 0;
+    const origPaid = calcPaid(bk);
+    let advance = bk.advance, restPayment = bk.restPayment, paymentHistory = bk.paymentHistory;
+    if (newPaid !== origPaid) {
+      // Make the admin-entered paid amount authoritative
+      paymentHistory = newPaid > 0
+        ? [{ ts: new Date().toISOString(), amount: newPaid, method: bk.paymentMethod || "Cash", note: "Adjusted by admin", type: "room", by: curUser || "admin" }]
+        : [];
+      advance = newPaid; restPayment = 0;
+    }
+    let idDocs = bk.idDocs;
+    if (idDocs && idDocs.length && ed.idNum !== (bk.idDocs?.[0]?.idNum || "")) {
+      idDocs = idDocs.map((d, i) => i === 0 ? { ...d, idNum: ed.idNum } : d);
+    }
+    const updated = {
+      ...bk,
+      guest: ed.guest.trim(), phone: ed.phone.trim(), room: ed.room.trim(),
+      checkin: ed.checkin, checkout: ed.checkout, nights: edNights || bk.nights,
+      status: ed.status,
+      invoiceTotal: newTotal, amount: newTotal,
+      discAmt: parseFloat(ed.disc) || 0,
+      advance, restPayment, paymentHistory,
+      dueAmount: Math.max(0, newTotal - newPaid),
+      idNum: ed.idNum, idDocs,
+      referrer: ed.referrer.trim(), purpose: ed.purpose.trim(), notes: ed.notes.trim(),
+      editedAt: new Date().toISOString(), editedBy: curUser || "admin",
+    };
+    updateBookings(prev => prev.map(b => b.id === bk.id ? updated : b));
+    void persistHotelBookingBundle(updated).catch(err => {
+      console.error("Invoice edit sync failed:", err);
+      notify("Saved locally, but cloud sync failed — will retry", "error");
+    });
+    logEvent("hotel", "invoice_edited", { num: String(bk.id), guest: updated.guest, amount: newTotal, note: `Rm ${updated.room} · full edit by admin` }, curUser);
+    notify("Invoice updated", "success");
+    setPwOpen(false); setSavePw(""); setEditing(false);
+    onClose();
+  }
 
   // ID photos are no longer downloaded on every sync (keeps sync fast). Fetch
   // this booking's photos on demand, only now that its details are open.
@@ -191,10 +262,70 @@ function InvoiceDetail({ bk, onClose }) {
             <div style={{ fontSize: 16, fontWeight: 800 }}>Booking #{bk.id}</div>
             <div style={{ fontSize: 12, opacity: 0.7 }}>{bk.guest} · Room {bk.room}</div>
           </div>
-          <button onClick={onClose} style={{ background: "none", border: "none", color: "#fff", fontSize: 20, cursor: "pointer" }}>✕</button>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            {canEdit && !editing && (
+              <button onClick={startEdit} style={{ background: "var(--gold)", border: "none", color: "#1a1a2e", fontSize: 13, fontWeight: 800, cursor: "pointer", padding: "7px 14px", borderRadius: 8 }}>
+                <i className="ti ti-edit" style={{ marginRight: 5 }} />Edit Invoice
+              </button>
+            )}
+            <button onClick={onClose} style={{ background: "none", border: "none", color: "#fff", fontSize: 20, cursor: "pointer" }}>✕</button>
+          </div>
         </div>
 
         <div style={{ padding: 20 }}>
+          {editing ? (() => {
+            const inp = { padding: "8px 10px", border: "1.5px solid var(--border)", borderRadius: 8, fontSize: 13, fontFamily: "inherit", width: "100%", boxSizing: "border-box" };
+            const lbl = { fontSize: 10, fontWeight: 800, color: "var(--text3)", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 4, display: "block" };
+            const newTotal = parseFloat(ed.total) || 0, newPaid = parseFloat(ed.paid) || 0;
+            const F = ({ label, k, type = "text" }) => (
+              <div><label style={lbl}>{label}</label>
+                <input type={type} value={ed[k]} onWheel={type === "number" ? e => e.target.blur() : undefined}
+                  onChange={e => setF(k, e.target.value)} style={inp} /></div>
+            );
+            return (
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontSize: 13, fontWeight: 800, color: "var(--navy)", marginBottom: 12, display: "flex", alignItems: "center", gap: 6 }}>
+                  <i className="ti ti-edit" style={{ color: "var(--gold)" }} /> Editing Invoice #{bk.id} — admin
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(165px,1fr))", gap: 12, marginBottom: 12 }}>
+                  <F label="Guest Name" k="guest" />
+                  <F label="Phone" k="phone" />
+                  <F label="Room No." k="room" />
+                  <div><label style={lbl}>Status</label>
+                    <select value={ed.status} onChange={e => setF("status", e.target.value)} style={inp}>
+                      <option value="confirmed">Reserved (confirmed)</option>
+                      <option value="checked-in">Checked-in</option>
+                      <option value="checked-out">Checked-out</option>
+                      <option value="cancelled">Cancelled</option>
+                    </select>
+                  </div>
+                  <F label="Check-in" k="checkin" type="date" />
+                  <F label="Check-out" k="checkout" type="date" />
+                  <div><label style={lbl}>Nights</label>
+                    <input value={edNights} readOnly style={{ ...inp, background: "var(--bg4)", fontWeight: 700 }} /></div>
+                  <F label="Invoice Total (৳)" k="total" type="number" />
+                  <F label="Discount (৳)" k="disc" type="number" />
+                  <F label="Amount Paid (৳)" k="paid" type="number" />
+                  <F label="ID / NID Number" k="idNum" />
+                  <F label="Referrer" k="referrer" />
+                  <F label="Purpose" k="purpose" />
+                </div>
+                <div><label style={lbl}>Notes</label>
+                  <textarea value={ed.notes} onChange={e => setF("notes", e.target.value)} rows={2} style={{ ...inp, resize: "vertical" }} /></div>
+                <div style={{ display: "flex", gap: 16, marginTop: 12, padding: "10px 14px", background: "var(--bg4)", borderRadius: 8, fontSize: 13 }}>
+                  <span>Total <strong>{fmtMoney(newTotal)}</strong></span>
+                  <span style={{ color: "#065f46" }}>Paid <strong>{fmtMoney(newPaid)}</strong></span>
+                  <span style={{ color: newTotal - newPaid > 0 ? "#991b1b" : "#065f46" }}>Balance <strong>{fmtMoney(Math.max(0, newTotal - newPaid))}</strong></span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 14 }}>
+                  <button onClick={() => { setEditing(false); setEd(null); }} style={{ padding: "9px 18px", borderRadius: 8, border: "1.5px solid var(--border)", background: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>Cancel</button>
+                  <button onClick={() => { setSavePw(""); setPwOpen(true); }} style={{ padding: "9px 20px", borderRadius: 8, border: "none", background: "#1a7040", color: "#fff", fontSize: 13, fontWeight: 800, cursor: "pointer" }}>
+                    <i className="ti ti-device-floppy" style={{ marginRight: 5 }} />Save Changes
+                  </button>
+                </div>
+              </div>
+            );
+          })() : (<>
           <span style={{ display: "inline-block", padding: "4px 12px", borderRadius: 20, fontSize: 12, fontWeight: 700, marginBottom: 16, ...statusColor }}>
             {(bk.status || "reserved").toUpperCase()}
           </span>
@@ -236,6 +367,7 @@ function InvoiceDetail({ bk, onClose }) {
               ))}
             </div>
           </div>
+          </>)}
 
           {/* Payment history */}
           {(bk.paymentHistory || []).length > 0 && (
@@ -318,6 +450,30 @@ function InvoiceDetail({ bk, onClose }) {
           <img src={zoomImg} alt="ID document" style={{ maxWidth: "95%", maxHeight: "95%", objectFit: "contain", borderRadius: 8, boxShadow: "0 8px 40px rgba(0,0,0,.6)" }} />
           <button onClick={() => setZoomImg(null)}
             style={{ position: "fixed", top: 18, right: 22, background: "rgba(255,255,255,.15)", border: "1.5px solid rgba(255,255,255,.4)", color: "#fff", fontSize: 22, width: 44, height: 44, borderRadius: "50%", cursor: "pointer", lineHeight: 1 }}>✕</button>
+        </div>
+      )}
+
+      {/* Admin password confirm before saving edits */}
+      {pwOpen && (
+        <div className="modal-overlay open" style={{ zIndex: 100001 }} onClick={ev => ev.target === ev.currentTarget && setPwOpen(false)}>
+          <div className="modal-box" style={{ maxWidth: 380 }} onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <div className="modal-title">🔒 Confirm Invoice Changes</div>
+              <button className="modal-close" onClick={() => setPwOpen(false)}>✕</button>
+            </div>
+            <p style={{ fontSize: 13, color: "#555", margin: "4px 0 14px" }}>
+              You are editing the invoice for <strong>{bk.guest}</strong> (Rm {bk.room}). Enter the admin password to save these changes.
+            </p>
+            <div className="form-group">
+              <label>Admin Password</label>
+              <input type="password" value={savePw} onChange={e => setSavePw(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && commitSave()} autoFocus />
+            </div>
+            <div className="modal-actions">
+              <button className="btn" onClick={() => setPwOpen(false)}>Cancel</button>
+              <button className="btn primary" onClick={commitSave} style={{ background: "#1a7040", borderColor: "#1a7040" }}>Save Changes</button>
+            </div>
+          </div>
         </div>
       )}
     </div>
