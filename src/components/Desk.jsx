@@ -1274,23 +1274,43 @@ export default function Desk() {
                     const bk = bIn || bRes;
                     const w  = roomBookingWindow(bk, r.number);
                     const rn = Math.max(1, Math.round((new Date(w.checkout+"T00:00:00") - new Date(w.checkin+"T00:00:00")) / 86400000));
+                    const hasMulti = !!(bk.multiRooms && bk.multiRooms.length);
+                    const hasExtra = !!(bk.extraRooms && bk.extraRooms.length);
+                    const isCombined = hasMulti || hasExtra;
+                    // This room's OWN share of the booking (never the whole-booking total)
                     let total;
-                    if (bk.multiRooms && bk.multiRooms.length) {
+                    if (hasMulti) {
                       const mr = bk.multiRooms.find(m => String(m.number) === String(r.number));
-                      total = mr ? (mr.amount ?? mr.net ?? 0) : (bk.invoiceTotal ?? bk.amount ?? 0);
+                      total = mr ? (mr.amount ?? mr.net ?? 0) : 0;
+                    } else if (hasExtra) {
+                      const er = bk.extraRooms.find(x => String(x.number) === String(r.number));
+                      if (er) total = er.amount ?? er.grossAmt ?? 0;
+                      else { // primary room = booking total minus the extra rooms
+                        const extrasSum = bk.extraRooms.reduce((s,x)=>s+(x.amount ?? x.grossAmt ?? 0),0);
+                        total = Math.max(0, (bk.invoiceTotal ?? bk.amount ?? 0) - extrasSum);
+                      }
                     } else {
                       total = bk.invoiceTotal ?? bk.amount ?? 0;
                     }
+                    const roomList = hasMulti ? bk.multiRooms.map(m=>m.number)
+                                   : hasExtra ? [bk.room, ...bk.extraRooms.map(x=>x.number)]
+                                   : [bk.room];
                     const paid = (parseFloat(bk.advance)||0) + (parseFloat(bk.restPayment)||0) + (parseFloat(bk.extrasAdvance)||0);
                     const due  = Math.max(0, (bk.invoiceTotal ?? bk.amount ?? 0) - paid);
                     return (
                       <div style={{ marginTop:6, borderTop:`1px solid ${st.border}55`, paddingTop:5 }}>
                         <div style={{ fontSize:10.5, fontWeight:800, color:st.text, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{bk.guest}</div>
-                        <div style={{ fontSize:9.5, fontWeight:700, color:st.text, opacity:.85, marginTop:2 }}>{rn} night{rn>1?"s":""} · Total ৳{total.toLocaleString()}</div>
-                        <div style={{ fontSize:9.5, fontWeight:800, marginTop:1 }}>
-                          <span style={{ color:"#0f5027" }}>Paid ৳{paid.toLocaleString()}</span>
-                          {due > 0 && <span style={{ color:"#8a1010" }}> · Due ৳{due.toLocaleString()}</span>}
-                        </div>
+                        <div style={{ fontSize:9.5, fontWeight:700, color:st.text, opacity:.85, marginTop:2 }}>{rn} night{rn>1?"s":""} · This room ৳{total.toLocaleString()}</div>
+                        {isCombined ? (
+                          <div style={{ fontSize:9, fontWeight:700, color:st.text, opacity:.7, marginTop:1 }}>
+                            Combined booking · Rm {roomList.join(" + ")} · ৳{(bk.invoiceTotal ?? bk.amount ?? 0).toLocaleString()} total
+                          </div>
+                        ) : (
+                          <div style={{ fontSize:9.5, fontWeight:800, marginTop:1 }}>
+                            <span style={{ color:"#0f5027" }}>Paid ৳{paid.toLocaleString()}</span>
+                            {due > 0 && <span style={{ color:"#8a1010" }}> · Due ৳{due.toLocaleString()}</span>}
+                          </div>
+                        )}
                       </div>
                     );
                   })()}
