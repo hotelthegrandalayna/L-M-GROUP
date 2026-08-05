@@ -1120,17 +1120,21 @@ export default function Desk() {
   }
 
   function GuestRow({ b, showIn, showOut }) {
+    // Compact, stacked layout so it stays tidy in the narrow half-width panels:
+    // row 1 = room chip + guest name (truncated); row 2 = phone · nights + action
     return (
-      <div style={{ display:"flex", alignItems:"center", gap:8, padding:"7px 12px", borderBottom:"1px solid var(--border)", fontSize:12 }}>
-        <div style={{ width:28, height:28, borderRadius:7, background:"var(--navy)", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-          <span style={{ fontSize:10, fontWeight:800, color:"var(--gold2)" }}>{b.room}</span>
+      <div style={{ padding:"7px 10px", borderBottom:"1px solid var(--border)" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:7 }}>
+          <div style={{ width:24, height:24, borderRadius:6, background:"var(--navy)", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+            <span style={{ fontSize:10, fontWeight:800, color:"var(--gold2)" }}>{b.room}</span>
+          </div>
+          <div style={{ flex:1, minWidth:0, fontWeight:700, fontSize:12, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{b.guest}</div>
         </div>
-        <div style={{ flex:1, minWidth:0 }}>
-          <div style={{ fontWeight:700, fontSize:12 }}>{b.guest}</div>
-          <div style={{ fontSize:10, color:"var(--text3)" }}>{b.phone} · {b.nights}n</div>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:6, marginTop:5, paddingLeft:31 }}>
+          <span style={{ fontSize:10, color:"var(--text3)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{b.phone} · {b.nights}n</span>
+          {showIn  && <button className="btn sm primary" style={{ fontSize:11, padding:"3px 10px", flexShrink:0 }} onClick={() => initiateCheckin(b)}><i className="ti ti-login" /> In</button>}
+          {showOut && <button className="btn sm gold"    style={{ fontSize:11, padding:"3px 10px", flexShrink:0 }} onClick={() => chkOut(b.id)}><i className="ti ti-logout" /> Out</button>}
         </div>
-        {showIn  && <button className="btn sm primary" style={{ fontSize:11, padding:"4px 10px" }} onClick={() => initiateCheckin(b)}><i className="ti ti-login" /> In</button>}
-        {showOut && <button className="btn sm gold"    style={{ fontSize:11, padding:"4px 10px" }} onClick={() => chkOut(b.id)}><i className="ti ti-logout" /> Out</button>}
       </div>
     );
   }
@@ -1266,11 +1270,30 @@ export default function Desk() {
                     <div style={{ marginTop:6, fontSize:10, color:st.badge, fontWeight:800 }}>
                       Needs cleaning — tap to start
                     </div>
-                  ) : (bIn || bRes) && (
-                    <div style={{ marginTop:6, fontSize:10, color:st.badge, fontWeight:600, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
-                      {(bIn || bRes).guest}
-                    </div>
-                  )}
+                  ) : (bIn || bRes) && (() => {
+                    const bk = bIn || bRes;
+                    const w  = roomBookingWindow(bk, r.number);
+                    const rn = Math.max(1, Math.round((new Date(w.checkout+"T00:00:00") - new Date(w.checkin+"T00:00:00")) / 86400000));
+                    let total;
+                    if (bk.multiRooms && bk.multiRooms.length) {
+                      const mr = bk.multiRooms.find(m => String(m.number) === String(r.number));
+                      total = mr ? (mr.amount ?? mr.net ?? 0) : (bk.invoiceTotal ?? bk.amount ?? 0);
+                    } else {
+                      total = bk.invoiceTotal ?? bk.amount ?? 0;
+                    }
+                    const paid = (parseFloat(bk.advance)||0) + (parseFloat(bk.restPayment)||0) + (parseFloat(bk.extrasAdvance)||0);
+                    const due  = Math.max(0, (bk.invoiceTotal ?? bk.amount ?? 0) - paid);
+                    return (
+                      <div style={{ marginTop:6, borderTop:`1px solid ${st.border}55`, paddingTop:5 }}>
+                        <div style={{ fontSize:10.5, fontWeight:800, color:st.text, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{bk.guest}</div>
+                        <div style={{ fontSize:9.5, fontWeight:700, color:st.text, opacity:.85, marginTop:2 }}>{rn} night{rn>1?"s":""} · Total ৳{total.toLocaleString()}</div>
+                        <div style={{ fontSize:9.5, fontWeight:800, marginTop:1 }}>
+                          <span style={{ color:"#0f5027" }}>Paid ৳{paid.toLocaleString()}</span>
+                          {due > 0 && <span style={{ color:"#8a1010" }}> · Due ৳{due.toLocaleString()}</span>}
+                        </div>
+                      </div>
+                    );
+                  })()}
                   </div>
                 </div>
               );
