@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
-import { hasHotelSupabaseConfig, loadHotelBookingsFromSupabase, loadRoomsFromSupabase, saveRoomsToSupabase, persistHotelBookingBundle } from "../lib/hotelSupabase";
+import { hasHotelSupabaseConfig, loadHotelBookingsFromSupabase, loadHotelBookingsForMonth, loadRoomsFromSupabase, saveRoomsToSupabase, persistHotelBookingBundle } from "../lib/hotelSupabase";
 import { hasSupabase, upsertRows, loadRows, saveConfig, loadConfig } from "../utils/supabaseSync";
 import { restoreUserPasswords } from "../utils/userPass";
 import { onRemoteChange } from "../utils/realtimeSync";
@@ -291,9 +291,10 @@ export function AppProvider({ children }) {
         console.error("Failed to load hotel bookings from Supabase:", err);
       });
 
-    // Sync revenues — only last 2 months to reduce egress
-    const revCutoff = (() => { const d = new Date(); d.setMonth(d.getMonth() - 1); return d.toISOString().slice(0, 7) + "-01"; })();
-    loadRows("revenues", `&date=gte.${revCutoff}`)
+    // Sync revenues — FULL history. Revenue rows are tiny (no photos), so they
+    // were never the egress problem (that was booking ID images). Loading every
+    // month keeps past-month revenue totals correct and stable.
+    loadRows("revenues", "&order=date.desc")
       .then(rows => {
         const localRevs = (() => { try { return JSON.parse(localStorage.getItem('ga_revenues') || '[]'); } catch { return []; } })();
         const remoteIds = new Set((rows || []).map(r => String(r.id)));
@@ -473,12 +474,17 @@ export function AppProvider({ children }) {
           }).catch(() => {});
         })
         .on("postgres_changes", { event: "*", schema: "public", table: "revenues" }, () => {
-          const revCutoff = (() => { const d = new Date(); d.setMonth(d.getMonth() - 1); return d.toISOString().slice(0, 7) + "-01"; })();
-          loadRows("revenues", `&date=gte.${revCutoff}`).then(rows => {
+          // Reload FULL revenue history (never trim to a recent window — that was
+          // silently dropping past-month revenue whenever any revenue changed).
+          loadRows("revenues", "&order=date.desc").then(rows => {
             if (!rows?.length) return;
             const revs = rows.map(r => ({ id: r.id, date: r.date, source: r.source, amount: r.amount, note: r.note, by: r.by, bookingId: r.booking_id }));
-            setRevenues(revs);
-            try { localStorage.setItem('ga_revenues', JSON.stringify(revs)); } catch {}
+            const localRevs = (() => { try { return JSON.parse(localStorage.getItem('ga_revenues') || '[]'); } catch { return []; } })();
+            const remoteIds = new Set(revs.map(r => String(r.id)));
+            const localOnly = localRevs.filter(r => r && r.id != null && !remoteIds.has(String(r.id)));
+            const merged = [...revs, ...localOnly];
+            setRevenues(merged);
+            try { localStorage.setItem('ga_revenues', JSON.stringify(merged)); } catch {}
           }).catch(() => {});
         })
         .on("postgres_changes", { event: "*", schema: "public", table: "expenses" }, () => {
@@ -580,6 +586,47 @@ export function AppProvider({ children }) {
       try { localStorage.setItem('ga_bookings', JSON.stringify(slimForCache(trimmed))); } catch { /* quota full */ }
       return val; // React state always has full data
     });
+  }, []);
+
+  // ── On-demand month history ──────────────────────────────────────────────
+  // The routine sync only pulls the last ~30 days of bookings (to keep data
+  // costs low). When a manager opens a PAST month anywhere (Expenses, Admin
+  // Invoices, Insights), we fetch that whole month's bookings once and merge
+  // them in — so both the invoice list AND the revenue for that month become
+  // complete and correct. Cheap: text rows only, fetched once per month.
+  const loadedMonthsRef = useRef(new Set());
+  const [loadingMonths, setLoadingMonths] = useState({});
+  const ensureMonthLoaded = useCallback(async (ym) => {
+    if (!ym || !/^\d{4}-\d{2}$/.test(ym)) return;
+    if (loadedMonthsRef.current.has(ym)) return;
+    // Current + future months are already fully covered by the routine sync
+    const curMonth = (() => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); })();
+    if (ym >= curMonth) { loadedMonthsRef.current.add(ym); return; }
+    if (!hasHotelSupabaseConfig()) return;
+    loadedMonthsRef.current.add(ym); // mark early to avoid duplicate concurrent loads
+    setLoadingMonths(p => ({ ...p, [ym]: true }));
+    try {
+      const rows = await loadHotelBookingsForMonth(ym);
+      if (rows && rows.length) {
+        const deleted = (() => { try { return new Set(JSON.parse(localStorage.getItem('ga_deleted_booking_ids') || '[]')); } catch { return new Set(); } })();
+        setBookings(prev => {
+          const have = new Set(prev.map(b => String(b.supabaseBookingId ?? b.id)));
+          const add = rows.filter(b =>
+            !deleted.has(String(b.id)) && !deleted.has(String(b.supabaseBookingId ?? '')) &&
+            !have.has(String(b.supabaseBookingId ?? b.id))
+          );
+          if (!add.length) return prev;
+          const next = [...prev, ...add];
+          try { localStorage.setItem('ga_bookings', JSON.stringify(slimForCache(next))); } catch { /* quota */ }
+          return next;
+        });
+      }
+    } catch (err) {
+      console.error("On-demand month load failed:", err);
+      loadedMonthsRef.current.delete(ym); // allow a retry
+    } finally {
+      setLoadingMonths(p => { const n = { ...p }; delete n[ym]; return n; });
+    }
   }, []);
 
   // Daily rolling cloud backup — runs once per day, 90s after load so the
@@ -740,6 +787,7 @@ export function AppProvider({ children }) {
       modal, setModal,
       pendingInvoiceId, setPendingInvoiceId,
       pendingCompleteId, setPendingCompleteId,
+      ensureMonthLoaded, loadingMonths,
     }}>
       {children}
     </AppContext.Provider>

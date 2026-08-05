@@ -493,7 +493,7 @@ function InvoiceDetail({ bk, onClose }) {
 
 // ── Main component ────────────────────────────────────────────────────────────
 export default function AdminInvoices() {
-  const { bookings, updateBookings, notify } = useApp();
+  const { bookings, updateBookings, notify, ensureMonthLoaded, loadingMonths } = useApp();
 
   const [search,         setSearch]         = useState("");
   const [filterMonth,    setFilterMonth]    = useState("");
@@ -508,8 +508,15 @@ export default function AdminInvoices() {
 
   const allMonths = useMemo(() => {
     const set = new Set(bookings.map(getBookingMonth).filter(Boolean));
+    // Always offer the last 24 months so any past month is selectable and can
+    // be pulled from the cloud on demand, even before its invoices are loaded.
+    const d = new Date();
+    for (let i = 0; i < 24; i++) { set.add(d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')); d.setMonth(d.getMonth()-1); }
     return [...set].sort().reverse();
   }, [bookings]);
+
+  // When a past month is selected, fetch that whole month's invoices from the cloud
+  useEffect(() => { if (filterMonth) ensureMonthLoaded(filterMonth); }, [filterMonth, ensureMonthLoaded]);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
@@ -638,6 +645,13 @@ export default function AdminInvoices() {
         <input value={filterRoom} onChange={e => setFilterRoom(e.target.value)} placeholder="Room no."
           style={{ padding: "9px 12px", border: "1.5px solid var(--border)", borderRadius: 8, fontSize: 13, fontFamily: "inherit" }} />
       </div>
+
+      {/* Loading a past month from the cloud */}
+      {filterMonth && loadingMonths[filterMonth] && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, padding: "9px 14px", background: "#eef6ff", border: "1.5px solid #90c2f0", borderRadius: 9, fontSize: 12.5, color: "#1a4a7a", fontWeight: 600 }}>
+          <i className="ti ti-loader ti-spin" /> Loading {monthLabel(filterMonth)} invoices from cloud…
+        </div>
+      )}
 
       {/* Summary bar */}
       <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 14, padding: "12px 16px", background: "var(--bg4)", borderRadius: 10, alignItems: "center" }}>

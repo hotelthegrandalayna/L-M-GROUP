@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useApp } from "../../context/AppContext";
 import { money, todayStr, maxId } from "../../utils/helpers";
 import { checkAdminPassword } from "../../utils/auth";
@@ -7,7 +7,7 @@ import { hotelBusinessOnly } from "../../utils/expenseType";
 const REV_SOURCES = ["Room Rent","Food & Beverage","Laundry","Parking","Other"];
 
 export default function AdminFinance() {
-  const { curUser, bookings, updateBookings, revenues, updateRevenues, expenses, updateExpenses, expTypes, rooms, notify } = useApp();
+  const { curUser, bookings, updateBookings, revenues, updateRevenues, expenses, updateExpenses, expTypes, rooms, notify, ensureMonthLoaded } = useApp();
   const today = todayStr();
   const thisMonth = today.slice(0,7);
   const [tab, setTab] = useState("overview");
@@ -17,6 +17,8 @@ export default function AdminFinance() {
   const [rDate, setRDate] = useState(today);
   const [rNote, setRNote] = useState("");
   const [reportMonth, setReportMonth] = useState(thisMonth);
+  // Pull the selected report month's bookings from the cloud so its figures are complete
+  useEffect(() => { if (reportMonth) ensureMonthLoaded(reportMonth); }, [reportMonth, ensureMonthLoaded]);
 
   // Build revenue directly from bookings — covers ALL cases:
   // 1. paymentHistory entries (new bookings)
