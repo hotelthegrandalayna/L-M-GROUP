@@ -196,7 +196,15 @@ function InvoiceDetail({ bk, onClose }) {
       referrer: ed.referrer.trim(), purpose: ed.purpose.trim(), notes: ed.notes.trim(),
       editedAt: new Date().toISOString(), editedBy: curUser || "admin",
     };
-    updateBookings(prev => prev.map(b => b.id === bk.id ? updated : b));
+    // Update ONLY the exact invoice that was opened. Matching by id alone would
+    // overwrite any other booking that happens to share the same id (legacy
+    // data can have id collisions) — so prefer object-reference identity, and
+    // fall back to the first id match only if the reference was replaced.
+    updateBookings(prev => {
+      if (prev.some(b => b === bk)) return prev.map(b => b === bk ? updated : b);
+      let done = false;
+      return prev.map(b => (!done && b.id === bk.id) ? (done = true, updated) : b);
+    });
     void persistHotelBookingBundle(updated).catch(err => {
       console.error("Invoice edit sync failed:", err);
       notify("Saved locally, but cloud sync failed — will retry", "error");
@@ -277,8 +285,11 @@ function InvoiceDetail({ bk, onClose }) {
             const inp = { padding: "8px 10px", border: "1.5px solid var(--border)", borderRadius: 8, fontSize: 13, fontFamily: "inherit", width: "100%", boxSizing: "border-box" };
             const lbl = { fontSize: 10, fontWeight: 800, color: "var(--text3)", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 4, display: "block" };
             const newTotal = parseFloat(ed.total) || 0, newPaid = parseFloat(ed.paid) || 0;
-            const F = ({ label, k, type = "text" }) => (
-              <div><label style={lbl}>{label}</label>
+            // NOTE: build fields as plain inlined JSX (a function call, not a
+            // <Component/>). Defining a component inside render remounts the
+            // input on every keystroke and steals focus — this avoids that.
+            const F = (label, k, type = "text") => (
+              <div key={k}><label style={lbl}>{label}</label>
                 <input type={type} value={ed[k]} onWheel={type === "number" ? e => e.target.blur() : undefined}
                   onChange={e => setF(k, e.target.value)} style={inp} /></div>
             );
@@ -288,9 +299,9 @@ function InvoiceDetail({ bk, onClose }) {
                   <i className="ti ti-edit" style={{ color: "var(--gold)" }} /> Editing Invoice #{bk.id} — admin
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(165px,1fr))", gap: 12, marginBottom: 12 }}>
-                  <F label="Guest Name" k="guest" />
-                  <F label="Phone" k="phone" />
-                  <F label="Room No." k="room" />
+                  {F("Guest Name", "guest")}
+                  {F("Phone", "phone")}
+                  {F("Room No.", "room")}
                   <div><label style={lbl}>Status</label>
                     <select value={ed.status} onChange={e => setF("status", e.target.value)} style={inp}>
                       <option value="confirmed">Reserved (confirmed)</option>
@@ -299,16 +310,16 @@ function InvoiceDetail({ bk, onClose }) {
                       <option value="cancelled">Cancelled</option>
                     </select>
                   </div>
-                  <F label="Check-in" k="checkin" type="date" />
-                  <F label="Check-out" k="checkout" type="date" />
+                  {F("Check-in", "checkin", "date")}
+                  {F("Check-out", "checkout", "date")}
                   <div><label style={lbl}>Nights</label>
                     <input value={edNights} readOnly style={{ ...inp, background: "var(--bg4)", fontWeight: 700 }} /></div>
-                  <F label="Invoice Total (৳)" k="total" type="number" />
-                  <F label="Discount (৳)" k="disc" type="number" />
-                  <F label="Amount Paid (৳)" k="paid" type="number" />
-                  <F label="ID / NID Number" k="idNum" />
-                  <F label="Referrer" k="referrer" />
-                  <F label="Purpose" k="purpose" />
+                  {F("Invoice Total (৳)", "total", "number")}
+                  {F("Discount (৳)", "disc", "number")}
+                  {F("Amount Paid (৳)", "paid", "number")}
+                  {F("ID / NID Number", "idNum")}
+                  {F("Referrer", "referrer")}
+                  {F("Purpose", "purpose")}
                 </div>
                 <div><label style={lbl}>Notes</label>
                   <textarea value={ed.notes} onChange={e => setF("notes", e.target.value)} rows={2} style={{ ...inp, resize: "vertical" }} /></div>
