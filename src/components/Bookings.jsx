@@ -1745,14 +1745,6 @@ export function NewBookingModal({ onClose, prefill, editBooking }) {
         {/* Actions */}
         <div className="modal-actions">
           <button className="btn" onClick={onClose}>Cancel</button>
-          {!isEdit && bookingMode === "single" && name.trim() && phone.trim() && (
-            <button className="btn" style={{ background:"#fff8e1", borderColor:"#f0c040", color:"#7a5c00" }}
-              onClick={() => {
-                onClose({ addAnother: true, prefill: { name: name.trim(), phone: phone.trim(), nat, src, refName, refPhone, ci, co } });
-              }}>
-              <i className="ti ti-plus" /> Add Another Room
-            </button>
-          )}
           {bookingMode === "single" ? (<>
             <button className="btn" onClick={()=>doSave("confirmed")}><i className="ti ti-calendar" /> {isEdit ? "Save Changes (keep reserved)" : "Save Reservation"}</button>
             {ci <= today ? (
