@@ -76,6 +76,39 @@ function slimForCache(list) {
   });
 }
 
+// One stay = one guest + one room + one check-in day. Legacy id collisions and
+// local/cloud id mismatches can create TWO records for the same stay — which
+// shows as a double invoice, and makes an extended stay update only one copy.
+// dedupeBookings collapses them to the single most up-to-date record. It never
+// merges two genuinely different stays: a room cannot have two check-ins on the
+// same day.
+function bookingStayKey(b) {
+  return [String(b.guest || '').trim().toLowerCase(), String(b.room || ''), b.checkin || ''].join('|');
+}
+function betterBooking(a, b) {
+  // Prefer a live record over a cancelled one, then the most up-to-date copy:
+  // later check-out (extended), higher total, more recorded payments, cloud id.
+  const ac = a.status === 'cancelled', bc = b.status === 'cancelled';
+  if (ac !== bc) return ac ? b : a;
+  if ((a.checkout || '') !== (b.checkout || '')) return (a.checkout || '') > (b.checkout || '') ? a : b;
+  const ta = a.invoiceTotal ?? a.amount ?? 0, tb = b.invoiceTotal ?? b.amount ?? 0;
+  if (ta !== tb) return ta > tb ? a : b;
+  const pa = (a.paymentHistory || []).length, pb = (b.paymentHistory || []).length;
+  if (pa !== pb) return pa > pb ? a : b;
+  return (a.supabaseBookingId != null) ? a : b;
+}
+function dedupeBookings(list) {
+  if (!Array.isArray(list)) return list;
+  const map = new Map();
+  const noKey = [];
+  for (const b of list) {
+    if (!b || b.id == null || !b.guest) { noKey.push(b); continue; }
+    const k = bookingStayKey(b);
+    map.set(k, map.has(k) ? betterBooking(map.get(k), b) : b);
+  }
+  return [...map.values(), ...noKey];
+}
+
 const AppContext = createContext(null);
 
 // ── Hotel deleted-ID ledger — a record deleted here can never be re-pushed
@@ -119,7 +152,7 @@ export function AppProvider({ children }) {
 
   // Core data
   const [rooms,        setRoomsRaw]   = useState(initRooms);
-  const [bookings,     setBookings]   = useState(() => ls('ga_bookings', []));
+  const [bookings,     setBookings]   = useState(() => dedupeBookings(ls('ga_bookings', [])));
   const [revenues,     setRevenues]   = useState(() => ls('ga_revenues', []));
   const [expenses,     setExpenses]   = useState(() => ls('ga_expenses', []));
   const [expTypes,     setExpTypesRaw] = useState(() => ls('ga_exp_types', {}));
@@ -285,16 +318,22 @@ export function AppProvider({ children }) {
         // keep them visible and retry the push, so a save failure can't silently
         // lose a booking on the next sync.
         const remoteIds2 = new Set(filtered.map(b => String(b.id)));
+        // Also match by stay (guest+room+check-in) — a legacy local booking whose
+        // cloud copy has a different serial id would otherwise be treated as
+        // "local only" and RE-INSERTED, creating a duplicate invoice every sync.
+        const remoteStayKeys = new Set(filtered.map(bookingStayKey));
         const localOnly = localSnap.filter(l =>
           l && l.id != null && l.guest &&
           !remoteIds2.has(String(l.id)) &&
           !remoteIds2.has(String(l.supabaseBookingId ?? '')) &&
+          !remoteStayKeys.has(bookingStayKey(l)) &&
           !deletedIds.has(String(l.id)) &&
           !deletedIds.has(String(l.supabaseBookingId ?? ''))
         );
         localOnly.forEach(b => { persistHotelBookingBundle(b).catch(() => {}); });
-        // Keep on-demand-loaded past months alive across this 30-day poll too
-        const withLocalOnly = mergePastBookings([...merged, ...localOnly], deletedIds);
+        // Keep on-demand-loaded past months alive across this 30-day poll too;
+        // collapse any duplicate stays into one up-to-date invoice.
+        const withLocalOnly = dedupeBookings(mergePastBookings([...merged, ...localOnly], deletedIds));
         setBookings(withLocalOnly);
         const cutoff2 = new Date(); cutoff2.setMonth(cutoff2.getMonth() - 6);
         const cutoffStr2 = cutoff2.toISOString().slice(0, 10);
@@ -481,8 +520,9 @@ export function AppProvider({ children }) {
             if (!Array.isArray(remoteBookings) || !remoteBookings.length) return;
             const deletedIds = (() => { try { return new Set(JSON.parse(localStorage.getItem('ga_deleted_booking_ids') || '[]')); } catch { return new Set(); } })();
             const filteredRecent = remoteBookings.filter(b => !deletedIds.has(String(b.supabaseBookingId ?? b.id ?? '')) && !deletedIds.has(String(b.id ?? '')));
-            // Keep any on-demand-loaded past months alive across this 30-day sync
-            const filtered = mergePastBookings(filteredRecent, deletedIds);
+            // Keep any on-demand-loaded past months alive across this 30-day sync,
+            // and collapse duplicate stays into one up-to-date invoice.
+            const filtered = dedupeBookings(mergePastBookings(filteredRecent, deletedIds));
             setBookings(filtered);
             const cutoff = new Date(); cutoff.setMonth(cutoff.getMonth() - 6);
             const cutoffStr = cutoff.toISOString().slice(0, 10);
@@ -634,7 +674,7 @@ export function AppProvider({ children }) {
           const have = new Set(prev.map(b => String(b.supabaseBookingId ?? b.id)));
           const add = clean.filter(b => !have.has(String(b.supabaseBookingId ?? b.id)));
           if (!add.length) return prev;
-          const next = [...prev, ...add];
+          const next = dedupeBookings([...prev, ...add]);
           try { localStorage.setItem('ga_bookings', JSON.stringify(slimForCache(next))); } catch { /* quota */ }
           return next;
         });
