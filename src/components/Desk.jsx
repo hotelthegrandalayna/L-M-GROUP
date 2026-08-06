@@ -1581,7 +1581,7 @@ export default function Desk() {
             </div>
           </div>
           <style>{ROOM_MAP_CSS}</style>
-          <div style={{ display:"grid", gridTemplateColumns:isMobile ? "repeat(2,minmax(0,1fr))" : "repeat(auto-fill,minmax(150px,1fr))", gap:14, marginBottom:14 }}>
+          <div style={{ display:"grid", gridTemplateColumns:isMobile ? "repeat(2,minmax(0,1fr))" : `repeat(${Math.min(rooms.length, 12)},minmax(0,1fr))`, gap:isMobile?14:10, marginBottom:14 }}>
             {rooms.map(r => {
               const rawDs = getRoomDisplayStatus(r, bookings, today);
               // A vacant room that was just checked out shows "needs cleaning"
