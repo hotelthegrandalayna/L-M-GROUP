@@ -1031,6 +1031,12 @@ export default function Desk() {
   const inhouse    = bookings.filter(b => b.status === "checked-in");
   const arrivals   = bookings.filter(b => b.checkin === today && (b.status === "confirmed" || b.status === "checked-in"));
   const departures = bookings.filter(b => b.checkout === today && b.status === "checked-in");
+  const extensions = bookings.filter(b => (b.extensions || []).some(e => e.at === today));
+  const tomorrowStr = addDaysIso(today, 1);
+  const upcoming   = bookings
+    .filter(b => b.status === "confirmed" && b.checkin > today)
+    .sort((a, b) => a.checkin < b.checkin ? -1 : a.checkin > b.checkin ? 1 : 0);
+  const toConfirm  = upcoming.filter(b => b.checkin === tomorrowStr); // arriving tomorrow — call to confirm
   const pendingT   = pendingTasks(tasks, taskDone, today);
   function quickDoneTask(task, due) {
     setTaskDone(prev => ({ ...prev, [`${task.id}_${due}`]: { by: curUser || "staff", at: new Date().toISOString(), hasPhoto: false } }));
@@ -1434,44 +1440,73 @@ export default function Desk() {
         {/* Right: Action panels */}
         <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
 
-          {/* Arrivals + Departures side by side to save vertical space */}
-          <div style={{ display:"grid", gridTemplateColumns:"minmax(0,1fr) minmax(0,1fr)", gap:8 }}>
-            <div className="panel">
-              <div className="panel-header" style={{ padding:"8px 9px" }}>
-                <div className="panel-title" style={{ fontSize:11.5, gap:5, minWidth:0, flex:1 }}>
-                  <i className="ti ti-login" style={{ color:"var(--green)", flexShrink:0 }} />
-                  <span style={{ minWidth:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>Arrivals</span>
-                  <span style={{ marginLeft:"auto", flexShrink:0, background:"var(--green-bg)", color:"var(--green)", fontWeight:800, fontSize:10, padding:"1px 6px", borderRadius:8 }}>{arrivals.length}</span>
+          {/* Today's Arrivals / Departures / Extensions — full-width, clear labels, chips wrap */}
+          {[
+            { title:"Today's Arrivals",   icon:"ti-login",         list:arrivals,   color:"var(--green)", bg:"var(--green-bg)" },
+            { title:"Today's Departures", icon:"ti-logout",        list:departures, color:"var(--red2)",  bg:"var(--red-bg)" },
+            { title:"Today's Extensions", icon:"ti-calendar-plus", list:extensions, color:"#7a4dd6",      bg:"#efe9fb" },
+          ].map(sec => (
+            <div className="panel" key={sec.title} style={{ marginBottom:8 }}>
+              <div className="panel-header" style={{ padding:"9px 12px" }}>
+                <div className="panel-title" style={{ fontSize:13, gap:7, minWidth:0, flex:1, alignItems:"center" }}>
+                  <i className={"ti "+sec.icon} style={{ color:sec.color, flexShrink:0 }} />
+                  <span style={{ fontWeight:800 }}>{sec.title}</span>
+                  <span style={{ marginLeft:"auto", flexShrink:0, background:sec.bg, color:sec.color, fontWeight:800, fontSize:11, padding:"2px 9px", borderRadius:9 }}>{sec.list.length}</span>
                 </div>
               </div>
-              {arrivals.length ? (
-                <div style={{ display:"flex", flexWrap:"wrap", gap:7, padding:"9px 10px" }}>
-                  {arrivals.map(b => (
-                    <span key={b.id} style={{ minWidth:38, textAlign:"center", background:"var(--green-bg)", color:"var(--green)", border:"1.5px solid var(--green)", borderRadius:9, padding:"6px 10px", fontWeight:900, fontSize:15, lineHeight:1 }}>{b.room}</span>
+              {sec.list.length ? (
+                <div style={{ display:"flex", flexWrap:"wrap", gap:7, padding:"10px 12px" }}>
+                  {sec.list.map(b => (
+                    <span key={b.id} style={{ minWidth:38, textAlign:"center", background:sec.bg, color:sec.color, border:"1.5px solid "+sec.color, borderRadius:9, padding:"6px 11px", fontWeight:900, fontSize:15, lineHeight:1 }}>{b.room}</span>
                   ))}
                 </div>
               ) : (
-                <div style={{ color:"var(--text3)", fontSize:11, textAlign:"center", padding:"8px 4px" }}>None today</div>
+                <div style={{ color:"var(--text3)", fontSize:11.5, textAlign:"center", padding:"10px 4px" }}>None today</div>
               )}
             </div>
-            <div className="panel">
-              <div className="panel-header" style={{ padding:"8px 9px" }}>
-                <div className="panel-title" style={{ fontSize:11.5, gap:5, minWidth:0, flex:1 }}>
-                  <i className="ti ti-logout" style={{ color:"var(--red2)", flexShrink:0 }} />
-                  <span style={{ minWidth:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>Departures</span>
-                  <span style={{ marginLeft:"auto", flexShrink:0, background:"var(--red-bg)", color:"var(--red2)", fontWeight:800, fontSize:10, padding:"1px 6px", borderRadius:8 }}>{departures.length}</span>
-                </div>
+          ))}
+
+          {/* Call-to-confirm alert — reservations arriving tomorrow */}
+          {toConfirm.length > 0 && (
+            <div style={{ background:"#fff8e6", border:"2px solid var(--gold2)", borderRadius:12, padding:"11px 13px", marginBottom:8 }}>
+              <div style={{ fontSize:13, fontWeight:900, color:"#8a6200", display:"flex", alignItems:"center", gap:7, marginBottom:7 }}>
+                <i className="ti ti-phone-call" style={{ fontSize:17 }} /> Call to confirm — arriving tomorrow
               </div>
-              {departures.length ? (
-                <div style={{ display:"flex", flexWrap:"wrap", gap:7, padding:"9px 10px" }}>
-                  {departures.map(b => (
-                    <span key={b.id} style={{ minWidth:38, textAlign:"center", background:"var(--red-bg)", color:"var(--red2)", border:"1.5px solid var(--red2)", borderRadius:9, padding:"6px 10px", fontWeight:900, fontSize:15, lineHeight:1 }}>{b.room}</span>
-                  ))}
-                </div>
-              ) : (
-                <div style={{ color:"var(--text3)", fontSize:11, textAlign:"center", padding:"8px 4px" }}>None today</div>
-              )}
+              <div style={{ display:"flex", flexWrap:"wrap", gap:7 }}>
+                {toConfirm.map(b => (
+                  <span key={b.id} style={{ display:"inline-flex", flexDirection:"column", alignItems:"center", gap:1, background:"#fff", color:"#8a6200", border:"1.5px solid var(--gold2)", borderRadius:9, padding:"5px 10px", lineHeight:1.1 }}>
+                    <span style={{ fontWeight:900, fontSize:15 }}>Rm {b.room}</span>
+                    <span style={{ fontSize:10, fontWeight:600, opacity:.85 }}>{b.phone || "no phone"}</span>
+                  </span>
+                ))}
+              </div>
             </div>
+          )}
+
+          {/* Upcoming Reservations — room + arrival date */}
+          <div className="panel" style={{ marginBottom:8 }}>
+            <div className="panel-header" style={{ padding:"9px 12px" }}>
+              <div className="panel-title" style={{ fontSize:13, gap:7, minWidth:0, flex:1, alignItems:"center" }}>
+                <i className="ti ti-calendar-event" style={{ color:"#2a7ab8", flexShrink:0 }} />
+                <span style={{ fontWeight:800 }}>Upcoming Reservations</span>
+                <span style={{ marginLeft:"auto", flexShrink:0, background:"#e4f0fa", color:"#2a7ab8", fontWeight:800, fontSize:11, padding:"2px 9px", borderRadius:9 }}>{upcoming.length}</span>
+              </div>
+            </div>
+            {upcoming.length ? (
+              <div style={{ display:"flex", flexWrap:"wrap", gap:7, padding:"10px 12px" }}>
+                {upcoming.map(b => {
+                  const soon = b.checkin === tomorrowStr;
+                  return (
+                    <span key={b.id} title={b.guest || ""} style={{ display:"inline-flex", flexDirection:"column", alignItems:"center", gap:1, minWidth:44, background: soon ? "#fff8e6" : "#e4f0fa", color: soon ? "#8a6200" : "#2a7ab8", border:"1.5px solid "+(soon ? "var(--gold2)" : "#2a7ab8"), borderRadius:9, padding:"5px 10px", lineHeight:1.1 }}>
+                      <span style={{ fontWeight:900, fontSize:15 }}>{b.room}</span>
+                      <span style={{ fontSize:10, fontWeight:700, opacity:.9 }}>{shortDate(b.checkin)}</span>
+                    </span>
+                  );
+                })}
+              </div>
+            ) : (
+              <div style={{ color:"var(--text3)", fontSize:11.5, textAlign:"center", padding:"10px 4px" }}>No upcoming reservations</div>
+            )}
           </div>
 
           {/* Pending Balances */}
