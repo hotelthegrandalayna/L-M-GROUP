@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
-import { hasHotelSupabaseConfig, loadHotelBookingsFromSupabase, loadHotelBookingsForMonth, loadRoomsFromSupabase, saveRoomsToSupabase, persistHotelBookingBundle } from "../lib/hotelSupabase";
+import { hasHotelSupabaseConfig, loadHotelBookingsFromSupabase, loadRoomsFromSupabase, saveRoomsToSupabase, persistHotelBookingBundle } from "../lib/hotelSupabase";
 import { hasSupabase, upsertRows, loadRows, saveConfig, loadConfig } from "../utils/supabaseSync";
 import { restoreUserPasswords } from "../utils/userPass";
 import { onRemoteChange } from "../utils/realtimeSync";
@@ -76,39 +76,6 @@ function slimForCache(list) {
   });
 }
 
-// One stay = one guest + one room + one check-in day. Legacy id collisions and
-// local/cloud id mismatches can create TWO records for the same stay — which
-// shows as a double invoice, and makes an extended stay update only one copy.
-// dedupeBookings collapses them to the single most up-to-date record. It never
-// merges two genuinely different stays: a room cannot have two check-ins on the
-// same day.
-function bookingStayKey(b) {
-  return [String(b.guest || '').trim().toLowerCase(), String(b.room || ''), b.checkin || ''].join('|');
-}
-function betterBooking(a, b) {
-  // Prefer a live record over a cancelled one, then the most up-to-date copy:
-  // later check-out (extended), higher total, more recorded payments, cloud id.
-  const ac = a.status === 'cancelled', bc = b.status === 'cancelled';
-  if (ac !== bc) return ac ? b : a;
-  if ((a.checkout || '') !== (b.checkout || '')) return (a.checkout || '') > (b.checkout || '') ? a : b;
-  const ta = a.invoiceTotal ?? a.amount ?? 0, tb = b.invoiceTotal ?? b.amount ?? 0;
-  if (ta !== tb) return ta > tb ? a : b;
-  const pa = (a.paymentHistory || []).length, pb = (b.paymentHistory || []).length;
-  if (pa !== pb) return pa > pb ? a : b;
-  return (a.supabaseBookingId != null) ? a : b;
-}
-function dedupeBookings(list) {
-  if (!Array.isArray(list)) return list;
-  const map = new Map();
-  const noKey = [];
-  for (const b of list) {
-    if (!b || b.id == null || !b.guest) { noKey.push(b); continue; }
-    const k = bookingStayKey(b);
-    map.set(k, map.has(k) ? betterBooking(map.get(k), b) : b);
-  }
-  return [...map.values(), ...noKey];
-}
-
 const AppContext = createContext(null);
 
 // ── Hotel deleted-ID ledger — a record deleted here can never be re-pushed
@@ -136,23 +103,10 @@ export function AppProvider({ children }) {
 
   // Track last local rooms edit so poll doesn't overwrite it before Supabase save completes
   const roomsEditedAt = useRef(0);
-  // On-demand loaded past-month bookings — kept here so every routine sync
-  // (which only pulls the last ~30 days) re-merges them instead of wiping them.
-  const pastBookingsRef = useRef([]);
-  // Merge the persistent past-month bookings into a freshly-synced recent list
-  const mergePastBookings = (recentList, deletedIds) => {
-    if (!pastBookingsRef.current.length) return recentList;
-    const have = new Set(recentList.map(b => String(b.supabaseBookingId ?? b.id)));
-    const del = deletedIds || (() => { try { return new Set(JSON.parse(localStorage.getItem('ga_deleted_booking_ids') || '[]')); } catch { return new Set(); } })();
-    const extra = pastBookingsRef.current.filter(b =>
-      !have.has(String(b.supabaseBookingId ?? b.id)) &&
-      !del.has(String(b.id ?? '')) && !del.has(String(b.supabaseBookingId ?? '')));
-    return extra.length ? [...recentList, ...extra] : recentList;
-  };
 
   // Core data
   const [rooms,        setRoomsRaw]   = useState(initRooms);
-  const [bookings,     setBookings]   = useState(() => dedupeBookings(ls('ga_bookings', [])));
+  const [bookings,     setBookings]   = useState(() => ls('ga_bookings', []));
   const [revenues,     setRevenues]   = useState(() => ls('ga_revenues', []));
   const [expenses,     setExpenses]   = useState(() => ls('ga_expenses', []));
   const [expTypes,     setExpTypesRaw] = useState(() => ls('ga_exp_types', {}));
@@ -318,22 +272,15 @@ export function AppProvider({ children }) {
         // keep them visible and retry the push, so a save failure can't silently
         // lose a booking on the next sync.
         const remoteIds2 = new Set(filtered.map(b => String(b.id)));
-        // Also match by stay (guest+room+check-in) — a legacy local booking whose
-        // cloud copy has a different serial id would otherwise be treated as
-        // "local only" and RE-INSERTED, creating a duplicate invoice every sync.
-        const remoteStayKeys = new Set(filtered.map(bookingStayKey));
         const localOnly = localSnap.filter(l =>
           l && l.id != null && l.guest &&
           !remoteIds2.has(String(l.id)) &&
           !remoteIds2.has(String(l.supabaseBookingId ?? '')) &&
-          !remoteStayKeys.has(bookingStayKey(l)) &&
           !deletedIds.has(String(l.id)) &&
           !deletedIds.has(String(l.supabaseBookingId ?? ''))
         );
         localOnly.forEach(b => { persistHotelBookingBundle(b).catch(() => {}); });
-        // Keep on-demand-loaded past months alive across this 30-day poll too;
-        // collapse any duplicate stays into one up-to-date invoice.
-        const withLocalOnly = dedupeBookings(mergePastBookings([...merged, ...localOnly], deletedIds));
+        const withLocalOnly = [...merged, ...localOnly];
         setBookings(withLocalOnly);
         const cutoff2 = new Date(); cutoff2.setMonth(cutoff2.getMonth() - 6);
         const cutoffStr2 = cutoff2.toISOString().slice(0, 10);
@@ -344,10 +291,9 @@ export function AppProvider({ children }) {
         console.error("Failed to load hotel bookings from Supabase:", err);
       });
 
-    // Sync revenues — FULL history. Revenue rows are tiny (no photos), so they
-    // were never the egress problem (that was booking ID images). Loading every
-    // month keeps past-month revenue totals correct and stable.
-    loadRows("revenues", "&order=date.desc")
+    // Sync revenues — only last 2 months to reduce egress
+    const revCutoff = (() => { const d = new Date(); d.setMonth(d.getMonth() - 1); return d.toISOString().slice(0, 7) + "-01"; })();
+    loadRows("revenues", `&date=gte.${revCutoff}`)
       .then(rows => {
         const localRevs = (() => { try { return JSON.parse(localStorage.getItem('ga_revenues') || '[]'); } catch { return []; } })();
         const remoteIds = new Set((rows || []).map(r => String(r.id)));
@@ -519,10 +465,7 @@ export function AppProvider({ children }) {
           loadHotelBookingsFromSupabase().then(remoteBookings => {
             if (!Array.isArray(remoteBookings) || !remoteBookings.length) return;
             const deletedIds = (() => { try { return new Set(JSON.parse(localStorage.getItem('ga_deleted_booking_ids') || '[]')); } catch { return new Set(); } })();
-            const filteredRecent = remoteBookings.filter(b => !deletedIds.has(String(b.supabaseBookingId ?? b.id ?? '')) && !deletedIds.has(String(b.id ?? '')));
-            // Keep any on-demand-loaded past months alive across this 30-day sync,
-            // and collapse duplicate stays into one up-to-date invoice.
-            const filtered = dedupeBookings(mergePastBookings(filteredRecent, deletedIds));
+            const filtered = remoteBookings.filter(b => !deletedIds.has(String(b.supabaseBookingId ?? b.id ?? '')) && !deletedIds.has(String(b.id ?? '')));
             setBookings(filtered);
             const cutoff = new Date(); cutoff.setMonth(cutoff.getMonth() - 6);
             const cutoffStr = cutoff.toISOString().slice(0, 10);
@@ -530,17 +473,12 @@ export function AppProvider({ children }) {
           }).catch(() => {});
         })
         .on("postgres_changes", { event: "*", schema: "public", table: "revenues" }, () => {
-          // Reload FULL revenue history (never trim to a recent window — that was
-          // silently dropping past-month revenue whenever any revenue changed).
-          loadRows("revenues", "&order=date.desc").then(rows => {
+          const revCutoff = (() => { const d = new Date(); d.setMonth(d.getMonth() - 1); return d.toISOString().slice(0, 7) + "-01"; })();
+          loadRows("revenues", `&date=gte.${revCutoff}`).then(rows => {
             if (!rows?.length) return;
             const revs = rows.map(r => ({ id: r.id, date: r.date, source: r.source, amount: r.amount, note: r.note, by: r.by, bookingId: r.booking_id }));
-            const localRevs = (() => { try { return JSON.parse(localStorage.getItem('ga_revenues') || '[]'); } catch { return []; } })();
-            const remoteIds = new Set(revs.map(r => String(r.id)));
-            const localOnly = localRevs.filter(r => r && r.id != null && !remoteIds.has(String(r.id)));
-            const merged = [...revs, ...localOnly];
-            setRevenues(merged);
-            try { localStorage.setItem('ga_revenues', JSON.stringify(merged)); } catch {}
+            setRevenues(revs);
+            try { localStorage.setItem('ga_revenues', JSON.stringify(revs)); } catch {}
           }).catch(() => {});
         })
         .on("postgres_changes", { event: "*", schema: "public", table: "expenses" }, () => {
@@ -642,49 +580,6 @@ export function AppProvider({ children }) {
       try { localStorage.setItem('ga_bookings', JSON.stringify(slimForCache(trimmed))); } catch { /* quota full */ }
       return val; // React state always has full data
     });
-  }, []);
-
-  // ── On-demand month history ──────────────────────────────────────────────
-  // The routine sync only pulls the last ~30 days of bookings (to keep data
-  // costs low). When a manager opens a PAST month anywhere (Expenses, Admin
-  // Invoices, Insights), we fetch that whole month's bookings once and merge
-  // them in — so both the invoice list AND the revenue for that month become
-  // complete and correct. Cheap: text rows only, fetched once per month.
-  const loadedMonthsRef = useRef(new Set());
-  const [loadingMonths, setLoadingMonths] = useState({});
-  const ensureMonthLoaded = useCallback(async (ym) => {
-    if (!ym || !/^\d{4}-\d{2}$/.test(ym)) return;
-    if (loadedMonthsRef.current.has(ym)) return;
-    // Current + future months are already fully covered by the routine sync
-    const curMonth = (() => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); })();
-    if (ym >= curMonth) { loadedMonthsRef.current.add(ym); return; }
-    if (!hasHotelSupabaseConfig()) return;
-    loadedMonthsRef.current.add(ym); // mark early to avoid duplicate concurrent loads
-    setLoadingMonths(p => ({ ...p, [ym]: true }));
-    try {
-      const rows = await loadHotelBookingsForMonth(ym);
-      if (rows && rows.length) {
-        const deleted = (() => { try { return new Set(JSON.parse(localStorage.getItem('ga_deleted_booking_ids') || '[]')); } catch { return new Set(); } })();
-        const clean = rows.filter(b => !deleted.has(String(b.id)) && !deleted.has(String(b.supabaseBookingId ?? '')));
-        // Persist in the ref so the 8s poll and realtime sync keep re-merging
-        // them — otherwise the next sync (30-day window) would wipe this month.
-        const existing = new Set(pastBookingsRef.current.map(b => String(b.supabaseBookingId ?? b.id)));
-        pastBookingsRef.current = [...pastBookingsRef.current, ...clean.filter(b => !existing.has(String(b.supabaseBookingId ?? b.id)))];
-        setBookings(prev => {
-          const have = new Set(prev.map(b => String(b.supabaseBookingId ?? b.id)));
-          const add = clean.filter(b => !have.has(String(b.supabaseBookingId ?? b.id)));
-          if (!add.length) return prev;
-          const next = dedupeBookings([...prev, ...add]);
-          try { localStorage.setItem('ga_bookings', JSON.stringify(slimForCache(next))); } catch { /* quota */ }
-          return next;
-        });
-      }
-    } catch (err) {
-      console.error("On-demand month load failed:", err);
-      loadedMonthsRef.current.delete(ym); // allow a retry
-    } finally {
-      setLoadingMonths(p => { const n = { ...p }; delete n[ym]; return n; });
-    }
   }, []);
 
   // Daily rolling cloud backup — runs once per day, 90s after load so the
@@ -845,7 +740,6 @@ export function AppProvider({ children }) {
       modal, setModal,
       pendingInvoiceId, setPendingInvoiceId,
       pendingCompleteId, setPendingCompleteId,
-      ensureMonthLoaded, loadingMonths,
     }}>
       {children}
     </AppContext.Provider>

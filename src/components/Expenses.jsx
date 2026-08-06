@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect } from "react";
+import { useState, useMemo, useRef } from "react";
 import { useApp } from "../context/AppContext";
 import { todayStr, money } from "../utils/helpers";
 import { deleteRow, hasSupabase } from "../utils/supabaseSync";
@@ -69,7 +69,7 @@ const blankForm = (today) => ({
 });
 
 export default function Expenses() {
-  const { expenses, updateExpenses, expTypes, setExpenseType, removeExpenseType, bookings, revenues, curRole, curUser, notify, ensureMonthLoaded, loadingMonths } = useApp();
+  const { expenses, updateExpenses, expTypes, setExpenseType, removeExpenseType, bookings, revenues, curRole, curUser, notify } = useApp();
   const today = todayStr();
   const thisMonth = today.slice(0,7);
 
@@ -162,15 +162,8 @@ export default function Expenses() {
       ...allRevEntries.map(r=>(r.date||"").slice(0,7)),
       thisMonth,
     ].filter(Boolean));
-    // Offer this month + the last 2, so recent months are always selectable
-    // (and load on demand). Any older month that already has data still shows.
-    const d = new Date();
-    for (let i = 0; i < 3; i++) { s.add(d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')); d.setMonth(d.getMonth()-1); }
     return [...s].sort().reverse();
   }, [normalizedExpenses, allRevEntries, thisMonth]);
-
-  // Pull the selected past month's bookings from the cloud so its revenue is complete
-  useEffect(() => { if (filterMonth) ensureMonthLoaded(filterMonth); }, [filterMonth, ensureMonthLoaded]);
 
   const catOptions = form.type === "nonbusiness" ? NONBUSINESS_CAT_OPTIONS : BUSINESS_CAT_OPTIONS;
 

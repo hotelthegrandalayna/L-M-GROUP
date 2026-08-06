@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { useApp } from "../../context/AppContext";
 import { money, todayStr, maxId } from "../../utils/helpers";
 import { checkAdminPassword } from "../../utils/auth";
@@ -7,7 +7,7 @@ import { hotelBusinessOnly } from "../../utils/expenseType";
 const REV_SOURCES = ["Room Rent","Food & Beverage","Laundry","Parking","Other"];
 
 export default function AdminFinance() {
-  const { curUser, bookings, updateBookings, revenues, updateRevenues, expenses, updateExpenses, expTypes, rooms, notify, ensureMonthLoaded } = useApp();
+  const { curUser, bookings, updateBookings, revenues, updateRevenues, expenses, updateExpenses, expTypes, rooms, notify } = useApp();
   const today = todayStr();
   const thisMonth = today.slice(0,7);
   const [tab, setTab] = useState("overview");
@@ -17,8 +17,6 @@ export default function AdminFinance() {
   const [rDate, setRDate] = useState(today);
   const [rNote, setRNote] = useState("");
   const [reportMonth, setReportMonth] = useState(thisMonth);
-  // Pull the selected report month's bookings from the cloud so its figures are complete
-  useEffect(() => { if (reportMonth) ensureMonthLoaded(reportMonth); }, [reportMonth, ensureMonthLoaded]);
 
   // Build revenue directly from bookings — covers ALL cases:
   // 1. paymentHistory entries (new bookings)
@@ -124,15 +122,10 @@ export default function AdminFinance() {
 
   // ── Monthly report ──
   const reportMonths = useMemo(()=>{
-    // this month + last 2, plus any month that already has booking/revenue data
-    const set = new Set([
-      ...bookings.map(b=>(b.checkin||"").slice(0,7)).filter(Boolean),
-      ...revenues.map(r=>(r.date||"").slice(0,7)).filter(Boolean),
-    ]);
-    const d=new Date(today);
-    for(let i=0;i<3;i++){ set.add(d.toISOString().slice(0,7)); d.setMonth(d.getMonth()-1); }
-    return [...set].filter(Boolean).sort().reverse();
-  },[today, bookings, revenues]);
+    const ms=[];
+    for(let i=11;i>=0;i--){ const d=new Date(today); d.setMonth(d.getMonth()-i); ms.push(d.toISOString().slice(0,7)); }
+    return ms;
+  },[today]);
 
   const report = useMemo(()=>{
     const bks=bookings.filter(b=>b.checkin?.startsWith(reportMonth)&&b.status!=="cancelled");
