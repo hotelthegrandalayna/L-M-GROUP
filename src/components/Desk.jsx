@@ -44,27 +44,32 @@ import { persistHotelBookingBundle } from "../lib/hotelSupabase";
 
 // ── Room status colours (bold, high-visibility) ────────────────────────────
 const STATUS_STYLE = {
-  occupied:    { bg:"#FFD1D1", text:"#7a1010", border:"#E24B4A", badge:"#C62828", badgeTx:"#fff", grad:"linear-gradient(150deg,#FFE7E7 0%,#FFC2C2 55%,#FFB0B0 100%)", glow:"rgba(226,75,74,.42)" },
-  reserved:    { bg:"#E4D3FB", text:"#4a2589", border:"#8B5CF6", badge:"#6D28D9", badgeTx:"#fff", grad:"linear-gradient(150deg,#F2EAFE 0%,#DBC6FB 55%,#CAAFF9 100%)", glow:"rgba(139,92,246,.48)" },
-  vacant:      { bg:"#C4F5D4", text:"#0f5027", border:"#22C55E", badge:"#1B7A33", badgeTx:"#fff", grad:"linear-gradient(150deg,#DEFBE7 0%,#B2F1C6 55%,#9CEDB6 100%)", glow:"rgba(34,197,94,.38)" },
-  cleaning:    { bg:"#FDE68A", text:"#6b4a00", border:"#EAB308", badge:"#CA8A04", badgeTx:"#fff", grad:"linear-gradient(150deg,#FEF6CC 0%,#FCE585 55%,#FADB63 100%)", glow:"rgba(234,179,8,.5)" },
-  maintenance: { bg:"#E2E5EA", text:"#374151", border:"#9CA3AF", badge:"#555",    badgeTx:"#fff", grad:"linear-gradient(150deg,#EFF1F4 0%,#D8DCE2 100%)", glow:"rgba(156,163,175,.35)" },
+  occupied:    { label:"occupied", ribbon:"#E24B4A", ribbonTx:"#fff", shadow:"rgba(190,45,45,.32)", numColor:"#B03030" },
+  reserved:    { label:"reserved", ribbon:"#7F77DD", ribbonTx:"#fff", shadow:"rgba(90,70,190,.32)", numColor:"#5a3aa8" },
+  vacant:      { label:"vacant",   ribbon:"#4FA845", ribbonTx:"#fff", shadow:"rgba(30,130,65,.30)", numColor:"#1f7a3a" },
+  cleaning:    { label:"cleaning", ribbon:"#EAB308", ribbonTx:"#4a2b00", shadow:"rgba(200,140,10,.34)", numColor:"#8a6200" },
+  maintenance: { label:"maintenance", ribbon:"#9CA3AF", ribbonTx:"#fff", shadow:"rgba(120,125,135,.30)", numColor:"#4b5563" },
 };
 
-// Injected once — keyframes for the smart, animated room-map cards
+// Injected once — 3D raised room cards: a clean white body with a coloured status
+// ribbon on top, a solid drop-shadow that lifts on hover and sinks when pressed.
 const ROOM_MAP_CSS = `
-@keyframes rmBadgePulse { 0%,100%{ box-shadow:0 0 0 0 var(--pulse-c); } 50%{ box-shadow:0 0 10px 2px var(--pulse-c); } }
-@keyframes rmAheadZoom  { 0%,100%{ transform:scale(1); } 50%{ transform:scale(1.16); } }
-@keyframes rmGlow       { 0%,100%{ opacity:.55; } 50%{ opacity:1; } }
-.rm-card { position:relative; border-radius:14px; cursor:pointer; overflow:hidden;
-  transition:transform .18s cubic-bezier(.2,.7,.3,1), box-shadow .18s ease; will-change:transform; }
-.rm-card::before { content:""; position:absolute; inset:0; border-radius:14px; pointer-events:none;
-  background:linear-gradient(180deg,rgba(255,255,255,.55) 0%,rgba(255,255,255,0) 42%); }
-.rm-card:hover { transform:translateY(-4px) scale(1.02); }
-.rm-badge-pulse { animation:rmBadgePulse 2s ease-in-out infinite; }
-.rm-ahead { animation:rmAheadZoom 1.4s ease-in-out infinite; }
-.rm-glow-ring { animation:rmGlow 2.4s ease-in-out infinite; }
+@keyframes rmAheadZoom { 0%,100%{ transform:scale(1); } 50%{ transform:scale(1.14); } }
+.rm-card { position:relative; border-radius:13px; cursor:pointer; overflow:hidden;
+  background:var(--panel,#fff); border:0.5px solid var(--border,#e2e2ea);
+  box-shadow:0 5px 0 var(--rm-shadow), 0 8px 14px rgba(0,0,0,.13);
+  transition:transform .13s cubic-bezier(.2,.7,.3,1), box-shadow .13s ease; will-change:transform; }
+.rm-card:hover { transform:translateY(-3px); box-shadow:0 8px 0 var(--rm-shadow), 0 13px 22px rgba(0,0,0,.17); }
+.rm-card:active { transform:translateY(2px); box-shadow:0 2px 0 var(--rm-shadow), 0 4px 8px rgba(0,0,0,.13); }
+.rm-ahead { animation:rmAheadZoom 1.5s ease-in-out infinite; display:inline-block; }
 `;
+
+function shortDate(iso) {
+  if (!iso) return "";
+  const d = new Date(iso + "T00:00:00");
+  if (isNaN(d)) return "";
+  return d.getDate() + " " + d.toLocaleDateString("en-GB", { month: "short" });
+}
 
 function getHotelDue(b) {
   if (!b) return 0;
@@ -1235,85 +1240,71 @@ export default function Desk() {
             </div>
           </div>
           <style>{ROOM_MAP_CSS}</style>
-          <div style={{ display:"grid", gridTemplateColumns:isMobile ? "repeat(2,minmax(0,1fr))" : "repeat(3,minmax(0,1fr))", gap:12, marginBottom:14 }}>
+          <div style={{ display:"grid", gridTemplateColumns:isMobile ? "repeat(2,minmax(0,1fr))" : "repeat(auto-fill,minmax(150px,1fr))", gap:14, marginBottom:14 }}>
             {rooms.map(r => {
               const rawDs = getRoomDisplayStatus(r, bookings, today);
-              // A vacant room that was just checked out shows yellow "needs cleaning"
+              // A vacant room that was just checked out shows "needs cleaning"
               const needsClean = dirtyRooms && dirtyRooms[String(r.number)];
               const ds = (rawDs === "vacant" && needsClean) ? "cleaning" : rawDs;
               const st = STATUS_STYLE[ds] || STATUS_STYLE.vacant;
               const fc = bookings.filter(b => b.status === "confirmed" && bookingCoversRoom(b, r.number) && roomBookingWindow(b, r.number).checkin > today).length;
               const bIn  = bookings.find(b => b.status === "checked-in" && bookingCoversRoom(b, r.number) && roomBookingWindow(b, r.number).checkout >= today);
               const bRes = bookings.find(b => { if (b.status !== "confirmed" || !bookingCoversRoom(b, r.number)) return false; const w = roomBookingWindow(b, r.number); return w.checkin <= today && w.checkout > today; });
-              const isActive = ds !== "vacant";
+              const bk = bIn || bRes;
+              const statusIcon = ds === "occupied" ? "ti-user" : ds === "reserved" ? "ti-calendar" : ds === "cleaning" ? "ti-spray" : "ti-bed";
+              // Ribbon note: checkout for active rooms, "N ahead" heads-up for a free room with future reservations
+              let ribbonNote = "";
+              if (ds === "cleaning") ribbonNote = "tap to start";
+              else if (bk) ribbonNote = "out " + shortDate(roomBookingWindow(bk, r.number).checkout);
+              else if (fc > 0) ribbonNote = fc + " ahead";
+              // This room's own share of the booking (never the whole-booking total)
+              let rn = 0, total = 0, paid = 0, due = 0, isCombined = false, roomList = [];
+              if (bk) {
+                const w = roomBookingWindow(bk, r.number);
+                rn = Math.max(1, Math.round((new Date(w.checkout+"T00:00:00") - new Date(w.checkin+"T00:00:00")) / 86400000));
+                const hasMulti = !!(bk.multiRooms && bk.multiRooms.length);
+                const hasExtra = !!(bk.extraRooms && bk.extraRooms.length);
+                isCombined = hasMulti || hasExtra;
+                if (hasMulti) { const mr = bk.multiRooms.find(m => String(m.number) === String(r.number)); total = mr ? (mr.amount ?? mr.net ?? 0) : 0; }
+                else if (hasExtra) {
+                  const er = bk.extraRooms.find(x => String(x.number) === String(r.number));
+                  if (er) total = er.amount ?? er.grossAmt ?? 0;
+                  else { const extrasSum = bk.extraRooms.reduce((s,x)=>s+(x.amount ?? x.grossAmt ?? 0),0); total = Math.max(0, (bk.invoiceTotal ?? bk.amount ?? 0) - extrasSum); }
+                } else total = bk.invoiceTotal ?? bk.amount ?? 0;
+                roomList = hasMulti ? bk.multiRooms.map(m=>m.number) : hasExtra ? [bk.room, ...bk.extraRooms.map(x=>x.number)] : [bk.room];
+                paid = (parseFloat(bk.advance)||0) + (parseFloat(bk.restPayment)||0) + (parseFloat(bk.extrasAdvance)||0);
+                due  = Math.max(0, (bk.invoiceTotal ?? bk.amount ?? 0) - paid);
+              }
               return (
-                <div key={r.id} className="rm-card" onClick={() => ds === "cleaning" ? setCleanTarget(r) : setSel(r)} style={{
-                  background:st.grad || st.bg, color:st.text, border:"2px solid "+st.border,
-                  padding:"12px 14px",
-                  boxShadow:`0 8px 20px -6px ${st.glow}, 0 2px 5px rgba(0,0,0,.10), inset 0 1px 0 rgba(255,255,255,.55)`,
-                }}
-                  onMouseEnter={e=>{e.currentTarget.style.boxShadow=`0 16px 30px -8px ${st.glow}, 0 4px 10px rgba(0,0,0,.14), inset 0 1px 0 rgba(255,255,255,.6)`;}}
-                  onMouseLeave={e=>{e.currentTarget.style.boxShadow=`0 8px 20px -6px ${st.glow}, 0 2px 5px rgba(0,0,0,.10), inset 0 1px 0 rgba(255,255,255,.55)`;}}
-                >
-                  {fc > 0 && <div className="rm-ahead" style={{ position:"absolute", top:7, right:8, background:st.badge, color:st.badgeTx, fontSize:8, fontWeight:800, borderRadius:6, padding:"2px 6px", boxShadow:`0 2px 6px ${st.glow}`, zIndex:2 }}>{fc} ahead</div>}
-                  <div style={{ position:"relative", zIndex:1 }}>
-                  <div style={{ fontSize:23, fontWeight:900, color:st.badge, letterSpacing:-.5, lineHeight:1, textShadow:"0 1px 1px rgba(255,255,255,.5)" }}>{r.number}</div>
-                  <div style={{ fontSize:12, fontWeight:700, margin:"3px 0 1px", opacity:.9 }}>{r.name || r.type}</div>
-                  <div style={{ fontSize:9, opacity:.55, textTransform:"uppercase", letterSpacing:.5 }}>{r.type}</div>
-                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginTop:9 }}>
-                    <span style={{ fontSize:13, fontWeight:800, color:st.badge }}>{money(r.rate)}<span style={{ fontSize:8, opacity:.6 }}>/n</span></span>
-                    <span className={isActive ? "rm-badge-pulse" : ""} style={{ ["--pulse-c"]:st.glow, fontSize:9, fontWeight:800, background:st.badge, color:st.badgeTx, padding:"3px 9px", borderRadius:7, textTransform:"uppercase", boxShadow:`0 2px 5px ${st.glow}` }}>
-                      {ds === "occupied" ? "IN" : ds === "reserved" ? "RSVD" : ds === "cleaning" ? "🧹 CLEAN" : "FREE"}
-                    </span>
+                <div key={r.id} className="rm-card" onClick={() => ds === "cleaning" ? setCleanTarget(r) : setSel(r)} style={{ ["--rm-shadow"]:st.shadow }}>
+                  {/* Status ribbon */}
+                  <div style={{ background:st.ribbon, color:st.ribbonTx, fontSize:10.5, fontWeight:700, padding:"3px 9px", display:"flex", justifyContent:"space-between", alignItems:"center", gap:6 }}>
+                    <span style={{ textTransform:"capitalize", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}><i className={"ti " + statusIcon} style={{ fontSize:12, marginRight:3, verticalAlign:"-1px" }} />{st.label}</span>
+                    {ribbonNote && <span className={(!bk && fc>0) ? "rm-ahead" : ""} style={{ whiteSpace:"nowrap", fontWeight:800 }}>{ribbonNote}</span>}
                   </div>
-                  {ds === "cleaning" ? (
-                    <div style={{ marginTop:6, fontSize:10, color:st.badge, fontWeight:800 }}>
-                      Needs cleaning — tap to start
+                  {/* Body */}
+                  <div style={{ padding:"9px 11px 10px" }}>
+                    <div style={{ display:"flex", alignItems:"baseline", gap:6 }}>
+                      <span style={{ fontSize:21, fontWeight:900, color:st.numColor, letterSpacing:-.5, lineHeight:1 }}>{r.number}</span>
+                      <span style={{ fontSize:11, fontWeight:600, color:"var(--text3)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{r.name || r.type}</span>
                     </div>
-                  ) : (bIn || bRes) && (() => {
-                    const bk = bIn || bRes;
-                    const w  = roomBookingWindow(bk, r.number);
-                    const rn = Math.max(1, Math.round((new Date(w.checkout+"T00:00:00") - new Date(w.checkin+"T00:00:00")) / 86400000));
-                    const hasMulti = !!(bk.multiRooms && bk.multiRooms.length);
-                    const hasExtra = !!(bk.extraRooms && bk.extraRooms.length);
-                    const isCombined = hasMulti || hasExtra;
-                    // This room's OWN share of the booking (never the whole-booking total)
-                    let total;
-                    if (hasMulti) {
-                      const mr = bk.multiRooms.find(m => String(m.number) === String(r.number));
-                      total = mr ? (mr.amount ?? mr.net ?? 0) : 0;
-                    } else if (hasExtra) {
-                      const er = bk.extraRooms.find(x => String(x.number) === String(r.number));
-                      if (er) total = er.amount ?? er.grossAmt ?? 0;
-                      else { // primary room = booking total minus the extra rooms
-                        const extrasSum = bk.extraRooms.reduce((s,x)=>s+(x.amount ?? x.grossAmt ?? 0),0);
-                        total = Math.max(0, (bk.invoiceTotal ?? bk.amount ?? 0) - extrasSum);
-                      }
-                    } else {
-                      total = bk.invoiceTotal ?? bk.amount ?? 0;
-                    }
-                    const roomList = hasMulti ? bk.multiRooms.map(m=>m.number)
-                                   : hasExtra ? [bk.room, ...bk.extraRooms.map(x=>x.number)]
-                                   : [bk.room];
-                    const paid = (parseFloat(bk.advance)||0) + (parseFloat(bk.restPayment)||0) + (parseFloat(bk.extrasAdvance)||0);
-                    const due  = Math.max(0, (bk.invoiceTotal ?? bk.amount ?? 0) - paid);
-                    return (
-                      <div style={{ marginTop:6, borderTop:`1px solid ${st.border}55`, paddingTop:5 }}>
-                        <div style={{ fontSize:10.5, fontWeight:800, color:st.text, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{bk.guest}</div>
-                        <div style={{ fontSize:9.5, fontWeight:700, color:st.text, opacity:.85, marginTop:2 }}>{rn} night{rn>1?"s":""} · This room ৳{total.toLocaleString()}</div>
-                        {isCombined && (
-                          <div style={{ fontSize:9, fontWeight:700, color:st.text, opacity:.7, marginTop:1 }}>
-                            Combined · Rm {roomList.join(" + ")} · ৳{(bk.invoiceTotal ?? bk.amount ?? 0).toLocaleString()} total
-                          </div>
-                        )}
-                        <div style={{ fontSize:9.5, fontWeight:800, marginTop:1 }}>
-                          <span style={{ color:"#0f5027" }}>Paid ৳{paid.toLocaleString()}</span>
-                          {due > 0 && <span style={{ color:"#8a1010" }}> · Due ৳{due.toLocaleString()}</span>}
-                          {isCombined && <span style={{ color:st.text, opacity:.6, fontWeight:600 }}> (whole booking)</span>}
-                        </div>
+                    {ds === "cleaning" ? (
+                      <div style={{ marginTop:5, fontSize:11, color:st.numColor, fontWeight:700 }}>Needs cleaning</div>
+                    ) : bk ? (<>
+                      <div style={{ fontSize:12.5, fontWeight:800, color:"var(--text)", marginTop:3, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{bk.guest}</div>
+                      <div style={{ fontSize:11, color:"var(--text3)", marginTop:1 }}>{rn} night{rn>1?"s":""} · ৳{total.toLocaleString()}{isCombined ? " (Rm " + roomList.join("+") + ")" : ""}</div>
+                      <div style={{ marginTop:6 }}>
+                        {due > 0
+                          ? <span style={{ fontSize:11, fontWeight:800, background:"#fdecec", color:"#b02a2a", padding:"2px 9px", borderRadius:20 }}>due ৳{due.toLocaleString()}</span>
+                          : <span style={{ fontSize:11, fontWeight:800, background:"#e7f6ec", color:"#137a3f", padding:"2px 9px", borderRadius:20 }}>paid <i className="ti ti-check" style={{ fontSize:11 }} /></span>}
                       </div>
-                    );
-                  })()}
+                    </>) : (<>
+                      <div style={{ fontSize:12.5, fontWeight:700, color:"var(--text3)", marginTop:3 }}>Available</div>
+                      <div style={{ fontSize:11, color:"var(--text3)", marginTop:1 }}>{money(r.rate)} / night</div>
+                      <div style={{ marginTop:6 }}>
+                        <span style={{ fontSize:11, fontWeight:700, background:"var(--bg3)", color:"var(--text3)", padding:"2px 9px", borderRadius:20 }}>tap to book</span>
+                      </div>
+                    </>)}
                   </div>
                 </div>
               );
