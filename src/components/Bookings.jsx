@@ -1074,6 +1074,32 @@ export function NewBookingModal({ onClose, prefill, editBooking }) {
                   <div className="form-group" style={{ marginBottom:0 }}><label>Children</label><input type="number" value={children} min={0} max={15} onWheel={e=>e.target.blur()} onChange={e=>setChildren(e.target.value)} style={{ textAlign:"center" }} /></div>
                 </div>
               )}
+              {/* Add more rooms to THIS reservation (same guest, same dates, one invoice) */}
+              {selRoom && (() => {
+                const addable = availRooms.filter(r => String(r.number) !== String(room) && !extraRooms.some(x => String(x.number) === String(r.number)));
+                return (
+                  <div style={{ marginBottom:10, background:"#faf7ff", border:"1.5px dashed #c4a8f0", borderRadius:10, padding:"10px 14px" }}>
+                    <div style={{ fontSize:11, fontWeight:800, color:"#5a2ea8", marginBottom:2, textTransform:"uppercase", letterSpacing:.5 }}>
+                      <i className="ti ti-plus" style={{ marginRight:4 }} />Add more rooms for this guest
+                    </div>
+                    <div style={{ fontSize:10.5, color:"var(--text3)", marginBottom:8 }}>Optional · same dates · one combined invoice</div>
+                    {addable.length ? (
+                      <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
+                        {addable.map(r => (
+                          <button key={r.number} type="button"
+                            onClick={() => setExtraRooms(prev => [...prev, { number:String(r.number), acChoice:"AC", discAmt:"" }])}
+                            style={{ background:"#fff", border:"1.5px solid #c4a8f0", color:"#5a2ea8", borderRadius:8, padding:"5px 11px", fontSize:12.5, fontWeight:800, cursor:"pointer", fontFamily:"inherit" }}>
+                            + {r.number}{r.name ? " · "+r.name : ""}
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <div style={{ fontSize:11.5, color:"var(--text3)" }}>No other rooms available for these dates.</div>
+                    )}
+                  </div>
+                );
+              })()}
+
               {/* Multi-room: primary room discount */}
               {isMultiRoom && selRoom && (
                 <div style={{ background:"#f0f7ff", border:"1.5px solid #a8c8f0", borderRadius:9, padding:"10px 14px", marginBottom:8 }}>

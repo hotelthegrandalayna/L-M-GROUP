@@ -1137,6 +1137,10 @@ export default function Desk() {
     .filter(b => b.status === "confirmed" && b.checkin > today)
     .sort((a, b) => a.checkin < b.checkin ? -1 : a.checkin > b.checkin ? 1 : 0);
   const toConfirm  = upcoming.filter(b => b.checkin === tomorrowStr); // arriving tomorrow — call to confirm
+  // Every room number in a booking (multi-room bookings expand to all their rooms)
+  const roomsOf = (b) => b.multiRooms && b.multiRooms.length
+    ? b.multiRooms.map(m => String(m.number))
+    : [String(b.room), ...((b.extraRooms || []).map(r => String(r.number)))];
   const pendingT   = pendingTasks(tasks, taskDone, today);
   function quickDoneTask(task, due) {
     setTaskDone(prev => ({ ...prev, [`${task.id}_${due}`]: { by: curUser || "staff", at: new Date().toISOString(), hasPhoto: false } }));
@@ -1496,14 +1500,14 @@ export default function Desk() {
               <div className="panel-title" style={{ fontSize:12.5, gap:7, minWidth:0, flex:1, alignItems:"center" }}>
                 <i className={"ti "+sec.icon} style={{ color:sec.color, flexShrink:0 }} />
                 <span style={{ fontWeight:800, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{sec.title}</span>
-                <span style={{ marginLeft:"auto", flexShrink:0, background:sec.bg, color:sec.color, fontWeight:800, fontSize:11, padding:"2px 9px", borderRadius:9 }}>{sec.list.length}</span>
+                <span style={{ marginLeft:"auto", flexShrink:0, background:sec.bg, color:sec.color, fontWeight:800, fontSize:11, padding:"2px 9px", borderRadius:9 }}>{sec.list.reduce((n,b)=>n+roomsOf(b).length,0)}</span>
               </div>
             </div>
             {sec.list.length ? (
               <div style={{ display:"flex", flexWrap:"wrap", gap:6, padding:"10px 12px" }}>
-                {sec.list.map(b => (
-                  <span key={b.id} style={{ minWidth:36, textAlign:"center", background:sec.bg, color:sec.color, border:"1.5px solid "+sec.color, borderRadius:9, padding:"5px 10px", fontWeight:900, fontSize:14, lineHeight:1 }}>{b.room}</span>
-                ))}
+                {sec.list.flatMap(b => roomsOf(b).map(rm => (
+                  <span key={b.id+"-"+rm} style={{ minWidth:36, textAlign:"center", background:sec.bg, color:sec.color, border:"1.5px solid "+sec.color, borderRadius:9, padding:"5px 10px", fontWeight:900, fontSize:14, lineHeight:1 }}>{rm}</span>
+                )))}
               </div>
             ) : (
               <div style={{ color:"var(--text3)", fontSize:11.5, textAlign:"center", padding:"12px 4px" }}>None today</div>
@@ -1517,7 +1521,7 @@ export default function Desk() {
             <div className="panel-title" style={{ fontSize:12.5, gap:7, minWidth:0, flex:1, alignItems:"center" }}>
               <i className="ti ti-calendar-event" style={{ color:"#2a7ab8", flexShrink:0 }} />
               <span style={{ fontWeight:800, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>Upcoming</span>
-              <span style={{ marginLeft:"auto", flexShrink:0, background:"#e4f0fa", color:"#2a7ab8", fontWeight:800, fontSize:11, padding:"2px 9px", borderRadius:9 }}>{upcoming.length}</span>
+              <span style={{ marginLeft:"auto", flexShrink:0, background:"#e4f0fa", color:"#2a7ab8", fontWeight:800, fontSize:11, padding:"2px 9px", borderRadius:9 }}>{upcoming.reduce((n,b)=>n+roomsOf(b).length,0)}</span>
             </div>
           </div>
           {toConfirm.length > 0 && (
@@ -1527,15 +1531,15 @@ export default function Desk() {
           )}
           {upcoming.length ? (
             <div style={{ display:"flex", flexWrap:"wrap", gap:6, padding:"10px 12px" }}>
-              {upcoming.map(b => {
+              {upcoming.flatMap(b => {
                 const soon = b.checkin === tomorrowStr;
-                return (
-                  <button key={b.id} type="button" title={(b.guest || "")+" — click to confirm check-in"} onClick={() => setConfirmRes(b)}
+                return roomsOf(b).map(rm => (
+                  <button key={b.id+"-"+rm} type="button" title={(b.guest || "")+" — click to confirm check-in"} onClick={() => setConfirmRes(b)}
                     style={{ display:"inline-flex", flexDirection:"column", alignItems:"center", gap:1, minWidth:44, cursor:"pointer", fontFamily:"inherit", background: soon ? "#fff8e6" : "#e4f0fa", color: soon ? "#8a6200" : "#2a7ab8", border:"1.5px solid "+(soon ? "var(--gold2)" : "#2a7ab8"), borderRadius:9, padding:"5px 10px", lineHeight:1.1 }}>
-                    <span style={{ fontWeight:900, fontSize:14 }}>{b.room}</span>
-                    <span style={{ fontSize:9.5, fontWeight:700, opacity:.9 }}>{shortDate(b.checkin)}</span>
+                    <span style={{ fontWeight:900, fontSize:14 }}>{rm}</span>
+                    <span style={{ fontSize:9.5, fontWeight:700, opacity:.9 }}>{shortDate(roomBookingWindow(b, rm).checkin)}</span>
                   </button>
-                );
+                ));
               })}
             </div>
           ) : (
