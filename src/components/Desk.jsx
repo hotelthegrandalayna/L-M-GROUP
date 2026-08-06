@@ -44,11 +44,11 @@ import { persistHotelBookingBundle } from "../lib/hotelSupabase";
 
 // ── Room status colours (bold, high-visibility) ────────────────────────────
 const STATUS_STYLE = {
-  occupied:    { label:"Occupied",    tint:"#FDECEC", stripTx:"#A32D2D", dot:"#E24B4A" },
-  reserved:    { label:"Reserved",    tint:"#F0EEFC", stripTx:"#3C3489", dot:"#7F77DD" },
-  vacant:      { label:"Vacant",      tint:"#EDF7E8", stripTx:"#3B6D11", dot:"#639922" },
-  cleaning:    { label:"Cleaning",    tint:"#FBF0D8", stripTx:"#7a5000", dot:"#EAB308" },
-  maintenance: { label:"Maintenance", tint:"#EFF1F4", stripTx:"#4b5563", dot:"#9CA3AF" },
+  occupied:    { label:"Occupied",    tint:"#FBD3D3", stripTx:"#8f2323", dot:"#E24B4A" },
+  reserved:    { label:"Reserved",    tint:"#DAD4F8", stripTx:"#332b7a", dot:"#7F77DD" },
+  vacant:      { label:"Vacant",      tint:"#D6EEC6", stripTx:"#356010", dot:"#5AA82F" },
+  cleaning:    { label:"Cleaning",    tint:"#FAE4A6", stripTx:"#6b4600", dot:"#E0A400" },
+  maintenance: { label:"Maintenance", tint:"#E3E6EB", stripTx:"#414855", dot:"#9CA3AF" },
 };
 
 // Elegant room cards: white body, a soft tinted status strip with a colour dot,
@@ -324,33 +324,56 @@ function RoomModal({ room, onClose, onCheckout, onExtend, onCollect, onService, 
         <div style={{ marginBottom:14 }}>
           <div style={{ fontSize:10, fontWeight:800, color:"var(--text3)", textTransform:"uppercase", letterSpacing:.4, marginBottom:6 }}>Availability — next 30 days</div>
           <div style={{ display:"flex", gap:3, overflowX:"auto", paddingBottom:4 }}>
-            {availStrip.map(dd => (
-              <div key={dd.ds} title={dd.state === "free" ? "Free" : (dd.state + " · " + dd.guest)}
-                style={{ minWidth:30, flexShrink:0, textAlign:"center", padding:"4px 0", borderRadius:7, fontSize:11,
-                  background: dd.state === "occupied" ? "#FDECEC" : dd.state === "reserved" ? "#F0EEFC" : "var(--bg3)",
-                  color: dd.state === "occupied" ? "#A32D2D" : dd.state === "reserved" ? "#3C3489" : "var(--text3)",
-                  border: dd.ds === today ? "1.5px solid var(--navy)" : "0.5px solid transparent" }}>
-                <div style={{ fontSize:8, opacity:.7 }}>{dd.wd}</div>
-                <div style={{ fontWeight:700 }}>{dd.dnum}</div>
-              </div>
-            ))}
+            {availStrip.map(dd => {
+              const cell = dd.state === "occupied" ? { bg:"#E24B4A", fg:"#fff" }
+                         : dd.state === "reserved" ? { bg:"#7F77DD", fg:"#fff" }
+                         : { bg:"#fff", fg:"var(--text3)" };
+              return (
+                <div key={dd.ds} title={dd.state === "free" ? "Free" : (dd.state + " · " + dd.guest)}
+                  style={{ minWidth:30, flexShrink:0, textAlign:"center", padding:"4px 0", borderRadius:7, fontSize:11,
+                    background:cell.bg, color:cell.fg,
+                    border: dd.ds === today ? "2px solid var(--navy)" : (dd.state === "free" ? "0.5px solid var(--border)" : "0.5px solid transparent") }}>
+                  <div style={{ fontSize:8, opacity:.75 }}>{dd.wd}</div>
+                  <div style={{ fontWeight:700 }}>{dd.dnum}</div>
+                </div>
+              );
+            })}
           </div>
           <div style={{ display:"flex", gap:12, fontSize:10, color:"var(--text3)", marginTop:5 }}>
-            <span><span style={{ display:"inline-block", width:9, height:9, borderRadius:3, background:"#FDECEC", border:"0.5px solid #E24B4A", verticalAlign:"-1px" }} /> occupied</span>
-            <span><span style={{ display:"inline-block", width:9, height:9, borderRadius:3, background:"#F0EEFC", border:"0.5px solid #7F77DD", verticalAlign:"-1px" }} /> reserved</span>
-            <span><span style={{ display:"inline-block", width:9, height:9, borderRadius:3, background:"var(--bg3)", border:"0.5px solid var(--border)", verticalAlign:"-1px" }} /> free</span>
+            <span><span style={{ display:"inline-block", width:10, height:10, borderRadius:3, background:"#E24B4A", verticalAlign:"-1px" }} /> occupied</span>
+            <span><span style={{ display:"inline-block", width:10, height:10, borderRadius:3, background:"#7F77DD", verticalAlign:"-1px" }} /> reserved</span>
+            <span><span style={{ display:"inline-block", width:10, height:10, borderRadius:3, background:"#fff", border:"0.5px solid var(--border)", verticalAlign:"-1px" }} /> free</span>
           </div>
         </div>
 
-        {bIn && (<>
+        {bIn && (() => {
+          const extSum = (bIn.extensions || []).reduce((s, e) => s + (e.amount || 0), 0);
+          const extNights = (bIn.extensions || []).reduce((s, e) => s + (e.nights || 0), 0);
+          const totalNow = bIn.invoiceTotal ?? bIn.amount ?? 0;
+          const origTotal = Math.max(0, totalNow - extSum);
+          const paidNow = (parseFloat(bIn.advance)||0) + (parseFloat(bIn.restPayment)||0) + (parseFloat(bIn.extrasAdvance)||0);
+          const dueNow = getHotelDue(bIn);
+          return (
           <div style={{ background:"var(--green-bg)", border:"1.5px solid var(--green-bd)", borderRadius:9, padding:13, marginBottom:14 }}>
             <div style={{ fontSize:11, fontWeight:800, color:"var(--green)", textTransform:"uppercase", marginBottom:10 }}>Currently Checked In</div>
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:9, fontSize:12 }}>
-              {[["Guest",bIn.guest],["Phone",bIn.phone],["Check-out",bIn.checkout],["Balance Due",money(getHotelDue(bIn))]].map(([l,v]) => (
+              {[["Guest",bIn.guest],["Phone",bIn.phone],["Check-in",formatDate(bIn.checkin)],["Check-out",formatDate(bIn.checkout)],["Nights",bIn.nights]].map(([l,v]) => (
                 <div key={l}><div style={{ fontSize:10, color:"var(--text3)", marginBottom:2 }}>{l}</div><strong>{v}</strong></div>
               ))}
             </div>
+            <div style={{ background:"#fff", borderRadius:8, padding:"9px 11px", marginTop:11 }}>
+              <div style={{ display:"flex", justifyContent:"space-between", fontSize:12, padding:"2px 0" }}><span style={{ color:"var(--text3)" }}>{extSum > 0 ? "Original stay" : "Room total"}</span><span style={{ fontWeight:700 }}>{money(origTotal)}</span></div>
+              {extSum > 0 && <div style={{ display:"flex", justifyContent:"space-between", fontSize:12, padding:"2px 0", color:"#332b7a" }}><span>Extended +{extNights} night{extNights>1?"s":""}</span><span style={{ fontWeight:700 }}>+{money(extSum)}</span></div>}
+              <div style={{ display:"flex", justifyContent:"space-between", fontSize:13, padding:"5px 0 2px", marginTop:3, borderTop:"1px solid var(--border)", fontWeight:800 }}><span>Total</span><span>{money(totalNow)}</span></div>
+              <div style={{ display:"flex", justifyContent:"space-between", fontSize:12, marginTop:4 }}>
+                <span style={{ color:"#137a3f" }}>Paid {money(paidNow)}</span>
+                {dueNow > 0 ? <span style={{ color:"#b02a2a", fontWeight:700 }}>Due {money(dueNow)}</span> : <span style={{ color:"#137a3f", fontWeight:700 }}>Fully paid ✓</span>}
+              </div>
+            </div>
           </div>
+          );
+        })()}
+        {bIn && (<>
           {future.length > 0 && <><div style={{ fontSize:10, fontWeight:800, color:"var(--text3)", textTransform:"uppercase", marginBottom:6 }}>Upcoming Reservations</div>{future.map(b => <FRow key={b.id} b={b} />)}</>}
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:9, marginTop:14 }}>
             {getHotelDue(bIn) > 0 && <button className="rm-act" style={actBtn("#c0392b","#7a1e14")} onClick={() => onCollect && onCollect(bIn)}><i className="ti ti-cash" /> Collect {money(getHotelDue(bIn))}</button>}
@@ -374,6 +397,10 @@ function RoomModal({ room, onClose, onCheckout, onExtend, onCollect, onService, 
               onClick={() => { setPendingCompleteId(bRes.id); setActiveTab("bookings"); onClose(); }}>
               <i className="ti ti-login" /> Complete Check-In (add remaining details)
             </button>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:9, marginTop:9 }}>
+              {getHotelDue(bRes) > 0 && <button className="rm-act" style={actBtn("#c0392b","#7a1e14")} onClick={() => onCollect && onCollect(bRes)}><i className="ti ti-cash" /> Collect {money(getHotelDue(bRes))}</button>}
+              <button className="rm-act" style={{ ...actBtn("#1a5a8a","#0e3554"), gridColumn:getHotelDue(bRes) > 0 ? "auto" : "1/-1" }} onClick={() => onInvoice && onInvoice(bRes)}><i className="ti ti-file-invoice" /> Invoice</button>
+            </div>
           </div>
           {future.length > 0 && <><div style={{ fontSize:10, fontWeight:800, color:"var(--text3)", textTransform:"uppercase", marginBottom:6 }}>Other Upcoming</div>{future.map(b => <FRow key={b.id} b={b} />)}</>}
           <div style={{ borderTop:"1px dashed var(--border)", margin:"12px 0 10px" }} />
@@ -1050,15 +1077,18 @@ export default function Desk() {
       ts: new Date().toISOString(), amount: advance, method, txnNumber: txn||"",
       note: `Extend stay +${extraNights} night${extraNights>1?"s":""}`, type: "room", by: curUser||"staff",
     }] : [];
+    const origTotal = b.invoiceTotal ?? b.amount ?? 0;
     const updated = {
       ...b,
       checkout: newCheckout,
       nights: totalNights,
-      invoiceTotal: (b.invoiceTotal ?? b.amount ?? 0) + extTotal,
+      invoiceTotal: origTotal + extTotal,
       discAmt: (b.discAmt || 0) + (extDiscAmt || 0),
       ...(acChoice ? { acChoice } : {}),
       restPayment: (b.restPayment || 0) + advance,
       paymentHistory: [...(b.paymentHistory||[]), ...extPayEntry],
+      // Track each extension so the room popup can show original → extension → total
+      extensions: [...(b.extensions || []), { nights: extraNights, amount: extTotal, from: b.checkout, to: newCheckout, at: today }],
     };
 
     updateBookings(prev => prev.map(x => x.id === b.id ? updated : x));
@@ -1284,9 +1314,9 @@ export default function Desk() {
           <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:9 }}>
             <span style={{ fontSize:10, fontWeight:800, color:"var(--text3)", textTransform:"uppercase", letterSpacing:.8 }}>Room Map</span>
             <div style={{ display:"flex", gap:10, marginLeft:"auto" }}>
-              {[["#22C55E","#C4F5D4","Vacant"],["#E24B4A","#FFD1D1","Occupied"],["#8B5CF6","#E4D3FB","Reserved"],["#EAB308","#FDE68A","Cleaning"]].map(([c,bg,l])=>(
+              {[["#5AA82F","Vacant"],["#E24B4A","Occupied"],["#7F77DD","Reserved"],["#E0A400","Cleaning"]].map(([c,l])=>(
                 <span key={l} style={{ display:"flex", alignItems:"center", gap:5, fontSize:10, color:"var(--text3)", fontWeight:600 }}>
-                  <span style={{ width:14, height:14, borderRadius:4, background:bg, border:"1.5px solid "+c, display:"inline-block" }} />{l}
+                  <span style={{ width:10, height:10, borderRadius:"50%", background:c, display:"inline-block" }} />{l}
                 </span>
               ))}
             </div>
@@ -1310,7 +1340,7 @@ export default function Desk() {
               else if (bk) ribbonNote = "out " + shortDate(roomBookingWindow(bk, r.number).checkout);
               else if (fc > 0) ribbonNote = fc + " ahead";
               // This room's own share of the booking (never the whole-booking total)
-              let rn = 0, total = 0, paid = 0, due = 0, isCombined = false, roomList = [];
+              let rn = 0, total = 0, paid = 0, due = 0, isCombined = false, roomList = [], isExtended = false;
               if (bk) {
                 const w = roomBookingWindow(bk, r.number);
                 rn = Math.max(1, Math.round((new Date(w.checkout+"T00:00:00") - new Date(w.checkin+"T00:00:00")) / 86400000));
@@ -1326,6 +1356,7 @@ export default function Desk() {
                 roomList = hasMulti ? bk.multiRooms.map(m=>m.number) : hasExtra ? [bk.room, ...bk.extraRooms.map(x=>x.number)] : [bk.room];
                 paid = (parseFloat(bk.advance)||0) + (parseFloat(bk.restPayment)||0) + (parseFloat(bk.extrasAdvance)||0);
                 due  = Math.max(0, (bk.invoiceTotal ?? bk.amount ?? 0) - paid);
+                isExtended = !!(bk.extensions && bk.extensions.length) || (bk.paymentHistory || []).some(p => /extend/i.test(p.note || ""));
               }
               return (
                 <div key={r.id} className="rm-card" onClick={() => ds === "cleaning" ? setCleanTarget(r) : setSel(r)}>
@@ -1348,13 +1379,14 @@ export default function Desk() {
                       <div style={{ fontSize:14, color:"var(--text)", marginTop:6, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{bk.guest}</div>
                       <div style={{ height:"0.5px", background:"var(--border)", margin:"11px 0 9px" }} />
                       <div style={{ display:"flex", alignItems:"flex-end", justifyContent:"space-between" }}>
-                        <span style={{ fontSize:12, color:"var(--text3)" }}>{rn} night{rn>1?"s":""}{isCombined ? " · Rm "+roomList.join("+") : ""}</span>
+                        <span style={{ fontSize:12, color:"var(--text3)" }}>{rn} night{rn>1?"s":""}</span>
                         <span style={{ fontSize:18, fontWeight:500, color:"var(--text)" }}>{money(total)}</span>
                       </div>
-                      <div style={{ marginTop:8 }}>
+                      <div style={{ marginTop:8, display:"flex", gap:6, flexWrap:"wrap" }}>
                         {due > 0
-                          ? <span style={{ fontSize:11, background:"#FDECEC", color:"#A32D2D", padding:"2px 9px", borderRadius:20 }}>due {money(due)}</span>
-                          : <span style={{ fontSize:11, background:"#EDF7E8", color:"#3B6D11", padding:"2px 9px", borderRadius:20 }}>paid <i className="ti ti-check" style={{ fontSize:11 }} /></span>}
+                          ? <span style={{ fontSize:11, background:"#FBD3D3", color:"#8f2323", padding:"2px 9px", borderRadius:20 }}>due {money(due)}</span>
+                          : <span style={{ fontSize:11, background:"#D6EEC6", color:"#356010", padding:"2px 9px", borderRadius:20 }}>paid <i className="ti ti-check" style={{ fontSize:11 }} /></span>}
+                        {isExtended && <span style={{ fontSize:11, background:"#DAD4F8", color:"#332b7a", padding:"2px 9px", borderRadius:20 }}><i className="ti ti-arrow-up-right" style={{ fontSize:11 }} /> extended</span>}
                       </div>
                     </>) : (<>
                       <div style={{ fontSize:14, color:"var(--text2)", marginTop:6 }}>Available now</div>
