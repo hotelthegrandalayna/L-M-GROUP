@@ -3,7 +3,7 @@ import { useApp } from "../context/AppContext";
 import useIsMobile from "../hall/useIsMobile";
 import { todayStr, money, bookingConflicts, getRoomDisplayStatus, bookingCoversRoom, roomBookingWindow, maxId, formatDate } from "../utils/helpers";
 import { buildInvoiceHTML, buildTCHtml, hotelPrint } from "./Invoice";
-import { NewBookingModal } from "./Bookings";
+import { NewBookingModal, InvoicePreviewModal } from "./Bookings";
 import { sendNtfyAlert } from "../utils/ntfy";
 import { hotelBusinessOnly } from "../utils/expenseType";
 import { pendingTasks, freqLabel } from "../utils/tasks";
@@ -970,6 +970,8 @@ export default function Desk() {
   const isMobile = useIsMobile();
   const [sel, setSel] = useState(null);
   const [newBooking, setNewBooking] = useState(null);          // prefill for the full New Booking form
+  const [confirmRes, setConfirmRes] = useState(null);          // reservation to open as invoice for check-in confirmation
+  const [completeBooking, setCompleteBooking] = useState(null); // reservation being completed (prefilled form)
   const [checkoutTarget, setCheckoutTarget] = useState(null);
   const [postCheckout, setPostCheckout] = useState(null);
   const [surveyBooking, setSurveyBooking] = useState(null);
@@ -1497,10 +1499,11 @@ export default function Desk() {
                 {upcoming.map(b => {
                   const soon = b.checkin === tomorrowStr;
                   return (
-                    <span key={b.id} title={b.guest || ""} style={{ display:"inline-flex", flexDirection:"column", alignItems:"center", gap:1, minWidth:44, background: soon ? "#fff8e6" : "#e4f0fa", color: soon ? "#8a6200" : "#2a7ab8", border:"1.5px solid "+(soon ? "var(--gold2)" : "#2a7ab8"), borderRadius:9, padding:"5px 10px", lineHeight:1.1 }}>
+                    <button key={b.id} type="button" title={(b.guest || "")+" — click to confirm check-in"} onClick={() => setConfirmRes(b)}
+                      style={{ display:"inline-flex", flexDirection:"column", alignItems:"center", gap:1, minWidth:44, cursor:"pointer", fontFamily:"inherit", background: soon ? "#fff8e6" : "#e4f0fa", color: soon ? "#8a6200" : "#2a7ab8", border:"1.5px solid "+(soon ? "var(--gold2)" : "#2a7ab8"), borderRadius:9, padding:"5px 10px", lineHeight:1.1 }}>
                       <span style={{ fontWeight:900, fontSize:15 }}>{b.room}</span>
                       <span style={{ fontSize:10, fontWeight:700, opacity:.9 }}>{shortDate(b.checkin)}</span>
-                    </span>
+                    </button>
                   );
                 })}
               </div>
@@ -1625,6 +1628,10 @@ export default function Desk() {
         onInvoice={(b) => { setSel(null); setInvoiceTarget(b); }}
         onNewBooking={(prefill) => { setSel(null); setNewBooking(prefill); }} />}
       {newBooking && <NewBookingModal prefill={newBooking} onClose={() => setNewBooking(null)} />}
+      {confirmRes && <InvoicePreviewModal booking={confirmRes} rooms={rooms}
+        onClose={() => setConfirmRes(null)}
+        onComplete={(bk) => { setConfirmRes(null); setCompleteBooking(bk); }} />}
+      {completeBooking && <NewBookingModal editBooking={completeBooking} onClose={() => setCompleteBooking(null)} />}
       {checkoutTarget && <CheckoutModal b={checkoutTarget} onConfirm={doCheckout} onClose={() => setCheckoutTarget(null)} />}
       {extendTarget && <ExtendStayModal booking={extendTarget} rooms={rooms} onClose={() => setExtendTarget(null)} onConfirm={(data) => handleExtendStay(extendTarget, data)} />}
       {cleanTarget && <CleaningModal room={cleanTarget} info={dirtyRooms[String(cleanTarget.number)]} onClose={() => setCleanTarget(null)} onConfirm={(checklist) => markRoomClean(cleanTarget, checklist)} />}

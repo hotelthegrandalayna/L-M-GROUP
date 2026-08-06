@@ -23,7 +23,7 @@ import { logEvent } from "../utils/auditLog";
 import { persistHotelBookingBundle } from "../lib/hotelSupabase";
 import { buildInvoiceHTML, buildTCHtml, hotelPrint } from "./Invoice";
 
-function InvoicePreviewModal({ booking, rooms, onClose, onComplete }) {
+export function InvoicePreviewModal({ booking, rooms, onClose, onComplete }) {
   const html = buildInvoiceHTML(booking, rooms, booking.extras || [], "room");
   const isReservation = booking.status === "confirmed";
   const print = () => {
