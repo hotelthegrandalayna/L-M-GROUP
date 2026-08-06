@@ -62,7 +62,20 @@ const ROOM_MAP_CSS = `
 .rm-card:hover { transform:translateY(-3px); box-shadow:0 10px 24px rgba(0,0,0,.14); }
 .rm-card:active { transform:translateY(0); box-shadow:0 3px 10px rgba(0,0,0,.10); }
 .rm-ahead { animation:rmAheadZoom 1.6s ease-in-out infinite; display:inline-block; }
+.rm-act { transition:transform .09s ease, box-shadow .09s ease; }
+.rm-act:hover { filter:brightness(1.06); }
+.rm-act:active { transform:translateY(3px); box-shadow:0 1px 0 var(--rm-act-sh), 0 2px 4px rgba(0,0,0,.16) !important; }
 `;
+
+// 3D tactile action button for the room popup — raised with a coloured under-edge
+function actBtn(bg, edge) {
+  return {
+    display:"inline-flex", alignItems:"center", justifyContent:"center", gap:5,
+    padding:"10px 14px", borderRadius:10, border:"none", cursor:"pointer",
+    fontSize:12.5, fontWeight:800, color:"#fff", background:bg, fontFamily:"inherit",
+    boxShadow:`0 4px 0 ${edge}, 0 6px 9px rgba(0,0,0,.18)`, ["--rm-act-sh"]:edge,
+  };
+}
 
 function shortDate(iso) {
   if (!iso) return "";
@@ -80,9 +93,23 @@ function getHotelDue(b) {
   return Math.max(0, total - paid);
 }
 
-function RoomModal({ room, onClose, onCheckout }) {
+function RoomModal({ room, onClose, onCheckout, onExtend, onCollect, onService, onInvoice }) {
   const { curUser, curRole, bookings, updateBookings, revenues, updateRevenues, notify, setActiveTab, setPendingCompleteId } = useApp();
   const today = todayStr();
+
+  // 30-day availability for THIS room — read-only, drives the strip
+  const availStrip = (() => {
+    const out = [];
+    for (let i = 0; i < 30; i++) {
+      const d = new Date(today + "T00:00:00"); d.setDate(d.getDate() + i);
+      const ds = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+      const bk = bookings.find(b => (b.status === "checked-in" || b.status === "confirmed") && bookingCoversRoom(b, room.number)
+        && (() => { const w = roomBookingWindow(b, room.number); return w.checkin <= ds && w.checkout > ds; })());
+      out.push({ ds, dnum: d.getDate(), wd: d.toLocaleDateString("en-GB", { weekday: "narrow" }),
+        state: bk ? (bk.status === "checked-in" ? "occupied" : "reserved") : "free", guest: bk?.guest || "" });
+    }
+    return out;
+  })();
   const tmr = new Date(today + "T00:00:00");
   tmr.setDate(tmr.getDate() + 1);
   const d2  = new Date(today + "T00:00:00");
@@ -293,6 +320,28 @@ function RoomModal({ room, onClose, onCheckout }) {
           <button className="modal-close" onClick={onClose}><i className="ti ti-x" /></button>
         </div>
 
+        {/* Availability — next 30 days for this room */}
+        <div style={{ marginBottom:14 }}>
+          <div style={{ fontSize:10, fontWeight:800, color:"var(--text3)", textTransform:"uppercase", letterSpacing:.4, marginBottom:6 }}>Availability — next 30 days</div>
+          <div style={{ display:"flex", gap:3, overflowX:"auto", paddingBottom:4 }}>
+            {availStrip.map(dd => (
+              <div key={dd.ds} title={dd.state === "free" ? "Free" : (dd.state + " · " + dd.guest)}
+                style={{ minWidth:30, flexShrink:0, textAlign:"center", padding:"4px 0", borderRadius:7, fontSize:11,
+                  background: dd.state === "occupied" ? "#FDECEC" : dd.state === "reserved" ? "#F0EEFC" : "var(--bg3)",
+                  color: dd.state === "occupied" ? "#A32D2D" : dd.state === "reserved" ? "#3C3489" : "var(--text3)",
+                  border: dd.ds === today ? "1.5px solid var(--navy)" : "0.5px solid transparent" }}>
+                <div style={{ fontSize:8, opacity:.7 }}>{dd.wd}</div>
+                <div style={{ fontWeight:700 }}>{dd.dnum}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ display:"flex", gap:12, fontSize:10, color:"var(--text3)", marginTop:5 }}>
+            <span><span style={{ display:"inline-block", width:9, height:9, borderRadius:3, background:"#FDECEC", border:"0.5px solid #E24B4A", verticalAlign:"-1px" }} /> occupied</span>
+            <span><span style={{ display:"inline-block", width:9, height:9, borderRadius:3, background:"#F0EEFC", border:"0.5px solid #7F77DD", verticalAlign:"-1px" }} /> reserved</span>
+            <span><span style={{ display:"inline-block", width:9, height:9, borderRadius:3, background:"var(--bg3)", border:"0.5px solid var(--border)", verticalAlign:"-1px" }} /> free</span>
+          </div>
+        </div>
+
         {bIn && (<>
           <div style={{ background:"var(--green-bg)", border:"1.5px solid var(--green-bd)", borderRadius:9, padding:13, marginBottom:14 }}>
             <div style={{ fontSize:11, fontWeight:800, color:"var(--green)", textTransform:"uppercase", marginBottom:10 }}>Currently Checked In</div>
@@ -303,9 +352,12 @@ function RoomModal({ room, onClose, onCheckout }) {
             </div>
           </div>
           {future.length > 0 && <><div style={{ fontSize:10, fontWeight:800, color:"var(--text3)", textTransform:"uppercase", marginBottom:6 }}>Upcoming Reservations</div>{future.map(b => <FRow key={b.id} b={b} />)}</>}
-          <div className="modal-actions">
-            <button className="btn" onClick={onClose}>Close</button>
-            <button className="btn gold" onClick={() => chkOut(bIn.id)}><i className="ti ti-logout" /> Check Out</button>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:9, marginTop:14 }}>
+            {getHotelDue(bIn) > 0 && <button className="rm-act" style={actBtn("#c0392b","#7a1e14")} onClick={() => onCollect && onCollect(bIn)}><i className="ti ti-cash" /> Collect {money(getHotelDue(bIn))}</button>}
+            <button className="rm-act" style={actBtn("#4a2ea8","#2c1a6b")} onClick={() => onExtend && onExtend(bIn)}><i className="ti ti-calendar-plus" /> Extend stay</button>
+            <button className="rm-act" style={actBtn("#b07800","#6b4900")} onClick={() => onService && onService(bIn)}><i className="ti ti-sparkles" /> Add service</button>
+            <button className="rm-act" style={actBtn("#1a5a8a","#0e3554")} onClick={() => onInvoice && onInvoice(bIn)}><i className="ti ti-file-invoice" /> Invoice</button>
+            <button className="rm-act" style={{ ...actBtn("#7a1a1a","#470d0d"), gridColumn:"1/-1" }} onClick={() => chkOut(bIn.id)}><i className="ti ti-logout" /> Check out</button>
           </div>
         </>)}
 
@@ -1584,7 +1636,11 @@ export default function Desk() {
           </div>
         </div>
       )}
-      {sel && <RoomModal room={sel} onClose={() => setSel(null)} onCheckout={chkOut} />}
+      {sel && <RoomModal room={sel} onClose={() => setSel(null)} onCheckout={chkOut}
+        onExtend={(b) => { setSel(null); setExtendTarget(b); }}
+        onCollect={(b) => { setSel(null); setCollectTarget(b); }}
+        onService={(b) => { setSel(null); setServiceTarget(b); }}
+        onInvoice={(b) => { setSel(null); setInvoiceTarget(b); }} />}
       {checkoutTarget && <CheckoutModal b={checkoutTarget} onConfirm={doCheckout} onClose={() => setCheckoutTarget(null)} />}
       {extendTarget && <ExtendStayModal booking={extendTarget} rooms={rooms} onClose={() => setExtendTarget(null)} onConfirm={(data) => handleExtendStay(extendTarget, data)} />}
       {cleanTarget && <CleaningModal room={cleanTarget} info={dirtyRooms[String(cleanTarget.number)]} onClose={() => setCleanTarget(null)} onConfirm={(checklist) => markRoomClean(cleanTarget, checklist)} />}
