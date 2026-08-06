@@ -1377,12 +1377,8 @@ export default function Desk() {
                       <div style={{ fontSize:14, color:"var(--text2)", marginTop:6 }}>Needs cleaning</div>
                     ) : bk ? (<>
                       <div style={{ fontSize:14, color:"var(--text)", marginTop:6, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{bk.guest}</div>
-                      <div style={{ height:"0.5px", background:"var(--border)", margin:"11px 0 9px" }} />
-                      <div style={{ display:"flex", alignItems:"flex-end", justifyContent:"space-between" }}>
-                        <span style={{ fontSize:12, color:"var(--text3)" }}>{rn} night{rn>1?"s":""}</span>
-                        <span style={{ fontSize:18, fontWeight:500, color:"var(--text)" }}>{money(total)}</span>
-                      </div>
-                      <div style={{ marginTop:8, display:"flex", gap:6, flexWrap:"wrap" }}>
+                      <div style={{ fontSize:12, color:"var(--text3)", marginTop:3 }}>{rn} night{rn>1?"s":""}</div>
+                      <div style={{ marginTop:9, display:"flex", gap:6, flexWrap:"wrap" }}>
                         {due > 0
                           ? <span style={{ fontSize:11, background:"#FBD3D3", color:"#8f2323", padding:"2px 9px", borderRadius:20 }}>due {money(due)}</span>
                           : <span style={{ fontSize:11, background:"#D6EEC6", color:"#356010", padding:"2px 9px", borderRadius:20 }}>paid <i className="ti ti-check" style={{ fontSize:11 }} /></span>}
@@ -1390,12 +1386,7 @@ export default function Desk() {
                       </div>
                     </>) : (<>
                       <div style={{ fontSize:14, color:"var(--text2)", marginTop:6 }}>Available now</div>
-                      <div style={{ height:"0.5px", background:"var(--border)", margin:"11px 0 9px" }} />
-                      <div style={{ display:"flex", alignItems:"flex-end", justifyContent:"space-between" }}>
-                        <span style={{ fontSize:12, color:"var(--text3)" }}>per night</span>
-                        <span style={{ fontSize:18, fontWeight:500, color:"var(--text)" }}>{money(r.rate)}</span>
-                      </div>
-                      <div style={{ marginTop:8 }}>
+                      <div style={{ marginTop:9 }}>
                         <span style={{ fontSize:11, background:"var(--bg3)", color:"var(--text3)", padding:"2px 9px", borderRadius:20 }}>tap to book</span>
                       </div>
                     </>)}
