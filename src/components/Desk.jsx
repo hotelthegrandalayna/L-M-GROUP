@@ -1444,7 +1444,13 @@ export default function Desk() {
                   <span style={{ marginLeft:"auto", flexShrink:0, background:"var(--green-bg)", color:"var(--green)", fontWeight:800, fontSize:10, padding:"1px 6px", borderRadius:8 }}>{arrivals.length}</span>
                 </div>
               </div>
-              {arrivals.length ? arrivals.map(b => <GuestRow key={b.id} b={b} showIn showOut={false} />) : (
+              {arrivals.length ? (
+                <div style={{ display:"flex", flexWrap:"wrap", gap:7, padding:"9px 10px" }}>
+                  {arrivals.map(b => (
+                    <span key={b.id} style={{ minWidth:38, textAlign:"center", background:"var(--green-bg)", color:"var(--green)", border:"1.5px solid var(--green)", borderRadius:9, padding:"6px 10px", fontWeight:900, fontSize:15, lineHeight:1 }}>{b.room}</span>
+                  ))}
+                </div>
+              ) : (
                 <div style={{ color:"var(--text3)", fontSize:11, textAlign:"center", padding:"8px 4px" }}>None today</div>
               )}
             </div>
@@ -1456,7 +1462,13 @@ export default function Desk() {
                   <span style={{ marginLeft:"auto", flexShrink:0, background:"var(--red-bg)", color:"var(--red2)", fontWeight:800, fontSize:10, padding:"1px 6px", borderRadius:8 }}>{departures.length}</span>
                 </div>
               </div>
-              {departures.length ? departures.map(b => <GuestRow key={b.id} b={b} showIn={false} showOut />) : (
+              {departures.length ? (
+                <div style={{ display:"flex", flexWrap:"wrap", gap:7, padding:"9px 10px" }}>
+                  {departures.map(b => (
+                    <span key={b.id} style={{ minWidth:38, textAlign:"center", background:"var(--red-bg)", color:"var(--red2)", border:"1.5px solid var(--red2)", borderRadius:9, padding:"6px 10px", fontWeight:900, fontSize:15, lineHeight:1 }}>{b.room}</span>
+                  ))}
+                </div>
+              ) : (
                 <div style={{ color:"var(--text3)", fontSize:11, textAlign:"center", padding:"8px 4px" }}>None today</div>
               )}
             </div>
