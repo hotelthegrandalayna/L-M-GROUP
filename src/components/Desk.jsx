@@ -382,6 +382,7 @@ function RoomModal({ room, onClose, onCheckout, onExtend, onCollect, onService, 
             <button className="rm-act" style={actBtn("#b07800","#6b4900")} onClick={() => onService && onService(bIn)}><i className="ti ti-sparkles" /> Add service</button>
             <button className="rm-act" style={actBtn("#1a5a8a","#0e3554")} onClick={() => onInvoice && onInvoice(bIn)}><i className="ti ti-file-invoice" /> Invoice</button>
             <button className="rm-act" style={{ ...actBtn("#7a1a1a","#470d0d"), gridColumn:"1/-1" }} onClick={() => chkOut(bIn.id)}><i className="ti ti-logout" /> Check out</button>
+            <button className="rm-act" style={{ ...actBtn("#1a7040","#0d3d22"), gridColumn:"1/-1" }} onClick={() => onNewBooking && onNewBooking({ room: room.number, ci: bIn.checkout, co: addDaysIso(bIn.checkout, 1), acChoice: isDual ? acChoice : undefined })}><i className="ti ti-calendar-plus" /> Reserve future dates for room {room.number}</button>
           </div>
         </>)}
 
@@ -405,27 +406,25 @@ function RoomModal({ room, onClose, onCheckout, onExtend, onCollect, onService, 
           </div>
           {future.length > 0 && <><div style={{ fontSize:10, fontWeight:800, color:"var(--text3)", textTransform:"uppercase", marginBottom:6 }}>Other Upcoming</div>{future.map(b => <FRow key={b.id} b={b} />)}</>}
           <div style={{ borderTop:"1px dashed var(--border)", margin:"12px 0 10px" }} />
-          <div style={{ fontSize:11, fontWeight:800, color:"var(--text3)", textTransform:"uppercase", marginBottom:12 }}>Add Another Reservation</div>
-          {qrForm()}
-          <div className="modal-actions">
+          <button className="rm-act" style={{ ...actBtn("#1a7040","#0d3d22"), width:"100%", padding:"12px" }}
+            onClick={() => onNewBooking && onNewBooking({ room: room.number, ci: bRes.checkout, co: addDaysIso(bRes.checkout, 1), acChoice: isDual ? acChoice : undefined })}>
+            <i className="ti ti-calendar-plus" /> Reserve future dates for room {room.number}
+          </button>
+          <div className="modal-actions" style={{ marginTop:12 }}>
             {curRole === "admin" && <button className="btn danger" style={{ marginRight:"auto" }} onClick={() => cancelRes(bRes.id)}><i className="ti ti-calendar-x" /> Cancel Current</button>}
             <button className="btn" onClick={onClose}>Close</button>
-            <button className="btn primary" onClick={doRes}><i className="ti ti-calendar-check" /> Reserve</button>
           </div>
         </>)}
 
         {!bIn && !bRes && (<>
           {future.length > 0 && <><div style={{ fontSize:10, fontWeight:800, color:"var(--text3)", textTransform:"uppercase", marginBottom:6 }}>Upcoming Reservations</div>{future.map(b => <FRow key={b.id} b={b} />)}<div style={{ borderTop:"1px dashed var(--border)", margin:"12px 0 10px" }} /></>}
-          {/* Full new booking — opens the existing booking form with this room pre-filled */}
-          <button className="rm-act" style={{ ...actBtn("#1a7040","#0d3d22"), width:"100%", marginBottom:14, padding:"12px" }}
+          <div style={{ fontSize:12, color:"var(--text3)", marginBottom:10 }}>This room is free. Book or reserve it — the full booking form opens with room {room.number} already selected.</div>
+          <button className="rm-act" style={{ ...actBtn("#1a7040","#0d3d22"), width:"100%", padding:"13px" }}
             onClick={() => onNewBooking && onNewBooking({ room: room.number, ci: today, co: addDaysIso(today, 1), acChoice: isDual ? acChoice : undefined })}>
-            <i className="ti ti-calendar-plus" /> New booking — full details
+            <i className="ti ti-calendar-plus" /> New booking / reserve room {room.number}
           </button>
-          <div style={{ fontSize:11, fontWeight:800, color:"var(--text3)", textTransform:"uppercase", marginBottom:12 }}>Or quick reserve (name + phone)</div>
-          {qrForm()}
-          <div className="modal-actions">
-            <button className="btn" onClick={onClose}>Cancel</button>
-            <button className="btn primary" onClick={doRes}><i className="ti ti-calendar-check" /> Quick reserve</button>
+          <div className="modal-actions" style={{ marginTop:12 }}>
+            <button className="btn" onClick={onClose}>Close</button>
           </div>
         </>)}
       </div>
