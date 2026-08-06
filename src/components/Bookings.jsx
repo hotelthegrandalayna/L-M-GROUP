@@ -667,6 +667,8 @@ export function NewBookingModal({ onClose, prefill, editBooking }) {
   function pickCheckin(v) {
     if (!v) return;
     let d = v, guard = 0;
+    // never allow a date earlier than the allowed minimum (today for busy rooms, yesterday for vacant)
+    if (new Date(d) < new Date(ciMin)) d = ciMin;
     while (roomNightBooked(d) && guard < 400) { d = addDaysIso(d, 1); guard++; }
     setCi(d);
     setCo(addDaysIso(d, 1));
@@ -688,6 +690,11 @@ export function NewBookingModal({ onClose, prefill, editBooking }) {
     if (new Date(co2) <= new Date(ci)) co2 = addDaysIso(ci, 1);
     setCo(co2);
   }
+
+  // Backdate rule: a vacant room keeps 1 day back open (late-night / next-morning invoicing);
+  // an occupied/reserved room locks all past dates so nobody can book behind a current guest.
+  const busyToday = roomAvailStrip.length ? roomAvailStrip[0].state !== "free" : false;
+  const ciMin = busyToday ? today : yesterday;
 
   function handlePhotoUpload(idx, side, files) {
     const fileArr = Array.from(files || []);
@@ -948,7 +955,7 @@ export function NewBookingModal({ onClose, prefill, editBooking }) {
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12, alignItems:"end" }}>
               <div className="form-group" style={{ marginBottom:0 }}>
                 <label style={{ color:"rgba(255,255,255,.7)", fontSize:11 }}>Check-in *</label>
-                <DateInput value={ci} min={yesterday}
+                <DateInput value={ci} min={ciMin}
                   onChange={e=>pickCheckin(e.target.value)}
                   style={{ fontWeight:800, fontSize:15 }} />
                 {ci && <div style={{ color:"rgba(255,255,255,.6)", fontSize:11, marginTop:3 }}>{new Date(ci+"T00:00:00").toLocaleDateString("en-GB",{weekday:"long"})}</div>}
