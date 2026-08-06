@@ -1485,7 +1485,7 @@ export default function Desk() {
       </div>
 
       {/* ── Front-desk strip: the common tabs, side by side, right above the room map ── */}
-      <div style={{ display:"grid", gridTemplateColumns:isMobile ? "repeat(2,minmax(0,1fr))" : "repeat(4,minmax(0,1fr))", gap:8, marginBottom:14, alignItems:"start" }}>
+      <div style={{ display:"grid", gridTemplateColumns:isMobile ? "repeat(2,minmax(0,1fr))" : "repeat(4,minmax(0,1fr))", gap:8, marginBottom:14, alignItems:"stretch" }}>
         {[
           { title:"Today's Arrivals",   icon:"ti-login",         list:arrivals,   color:"var(--green)", bg:"var(--green-bg)" },
           { title:"Today's Departures", icon:"ti-logout",        list:departures, color:"var(--red2)",  bg:"var(--red-bg)" },
