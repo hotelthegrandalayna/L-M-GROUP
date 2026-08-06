@@ -1,6 +1,7 @@
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { useApp } from "../context/AppContext";
 import { todayStr, money } from "../utils/helpers";
+import { loadHotelBookingsForMonth, hasHotelSupabaseConfig } from "../lib/hotelSupabase";
 import { deleteRow, hasSupabase } from "../utils/supabaseSync";
 import { gaRecordDeleted } from "../context/AppContext";
 import { hotelExpenseType } from "../utils/expenseType";
@@ -84,6 +85,41 @@ export default function Expenses() {
   const [showRecords, setShowRecords] = useState(false);
   const fileRef = useRef();
 
+  // ── Past-month revenue accuracy (isolated) ───────────────────────────────
+  // The live sync only keeps the last ~30 days of bookings, so a past month's
+  // room-payment revenue is undercounted. When a past month is selected we fetch
+  // THAT month's bookings into local state used ONLY for the revenue figures on
+  // this page. It is never merged into the app's live bookings, so the room map,
+  // checkouts, and notifications are completely unaffected.
+  const [monthBookings, setMonthBookings] = useState({}); // { 'YYYY-MM': [bookings] }
+  const [loadingRevMonth, setLoadingRevMonth] = useState(null);
+  useEffect(() => {
+    const m = filterMonth;
+    if (!m || m >= thisMonth) return;      // current/future already fully loaded
+    if (monthBookings[m]) return;          // already fetched
+    if (!hasHotelSupabaseConfig()) return;
+    let alive = true;
+    setLoadingRevMonth(m);
+    loadHotelBookingsForMonth(m)
+      .then(rows => { if (alive) setMonthBookings(p => ({ ...p, [m]: rows || [] })); })
+      .catch(() => {})
+      .finally(() => { if (alive) setLoadingRevMonth(null); });
+    return () => { alive = false; };
+  }, [filterMonth, thisMonth]);
+
+  // Bookings used ONLY for revenue math on this page: live bookings + the
+  // on-demand past month, de-duplicated, excluding deleted ones.
+  const revBookings = useMemo(() => {
+    const extra = monthBookings[filterMonth] || [];
+    if (!extra.length) return bookings;
+    const have = new Set(bookings.map(b => String(b.supabaseBookingId ?? b.id)));
+    const deleted = (() => { try { return new Set(JSON.parse(localStorage.getItem('ga_deleted_booking_ids') || '[]')); } catch { return new Set(); } })();
+    const add = extra.filter(b =>
+      !have.has(String(b.supabaseBookingId ?? b.id)) &&
+      !deleted.has(String(b.id)) && !deleted.has(String(b.supabaseBookingId ?? '')));
+    return add.length ? [...bookings, ...add] : bookings;
+  }, [bookings, monthBookings, filterMonth]);
+
   const setF = (k,v) => setForm(p => ({ ...p, [k]:v }));
   const isAdmin = curRole === "admin";
   const isMobile = typeof window !== "undefined" && window.innerWidth < 700;
@@ -96,7 +132,7 @@ export default function Expenses() {
   // ── Revenue entries — same derivation as Desk (paymentHistory + manual) ──────
   const allRevEntries = useMemo(() => {
     const entries = [];
-    bookings.forEach(b => {
+    revBookings.forEach(b => {
       if (b.status === "cancelled") return;
       const history = b.paymentHistory || [];
       if (history.length > 0) {
@@ -111,17 +147,17 @@ export default function Expenses() {
     });
     revenues.filter(r => !r.bookingId && !r.fromBooking).forEach(r => entries.push({ date: r.date, amount: r.amount || 0 }));
     return entries;
-  }, [bookings, revenues]);
+  }, [revBookings, revenues]);
 
   // ── Row 1: billing — Collected matches Desk "This Month Revenue" exactly ─────
   const { monthBilled, monthRevenue, monthOutstanding } = useMemo(() => {
     const m = filterMonth || thisMonth;
     const collected = allRevEntries.filter(r => r.date && r.date.startsWith(m)).reduce((s,r) => s+r.amount, 0);
-    const outstanding = bookings
+    const outstanding = revBookings
       .filter(b => b.status !== "cancelled" && (b.checkin||"").startsWith(m))
       .reduce((s,b) => s + getHotelDue(b), 0);
     return { monthBilled: collected + outstanding, monthRevenue: collected, monthOutstanding: outstanding };
-  }, [allRevEntries, bookings, filterMonth, thisMonth]);
+  }, [allRevEntries, revBookings, filterMonth, thisMonth]);
 
   // ── Expense stats ─────────────────────────────────────────────────────────────
   const { businessTotal, nonBusinessTotal } = useMemo(() => {
@@ -162,6 +198,10 @@ export default function Expenses() {
       ...allRevEntries.map(r=>(r.date||"").slice(0,7)),
       thisMonth,
     ].filter(Boolean));
+    // Always offer this month + the last 2 so recent past months can be picked
+    // (and their full revenue loaded on demand), even before their rows arrive.
+    const d = new Date();
+    for (let i = 0; i < 3; i++) { s.add(d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')); d.setMonth(d.getMonth()-1); }
     return [...s].sort().reverse();
   }, [normalizedExpenses, allRevEntries, thisMonth]);
 
@@ -265,7 +305,11 @@ export default function Expenses() {
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-end", flexWrap:"wrap", gap:10, marginBottom:18 }}>
         <div>
           <div style={{ fontSize:26, fontWeight:700, fontFamily:"'Playfair Display',serif", color:C.navy }}>🏨 HOTEL — Expenses & Cash</div>
-          <div style={{ fontSize:12, color:C.dim, marginTop:4 }}>Hotel money overview — {monthLabel}</div>
+          <div style={{ fontSize:12, color:C.dim, marginTop:4 }}>Hotel money overview — {monthLabel}
+            {loadingRevMonth && loadingRevMonth === filterMonth && (
+              <span style={{ marginLeft:8, color:C.navy, fontWeight:700 }}><i className="ti ti-loader ti-spin" /> loading full month from cloud…</span>
+            )}
+          </div>
         </div>
         <div>
           <label style={{ fontSize:10, fontWeight:700, color:C.dim, textTransform:"uppercase", letterSpacing:.8, display:"block", marginBottom:4 }}>📅 Report Month</label>

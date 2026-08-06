@@ -416,6 +416,29 @@ export async function loadHotelBookingsFromSupabase() {
   );
 }
 
+// Read-only: fetch all bookings active during a given month (YYYY-MM), bypassing
+// the 30-day window. Used ONLY to compute that month's revenue on the Expenses/
+// reports screens — the result is kept separate and never merged into the live
+// bookings that drive the room map / checkouts, so it can't affect operations.
+export async function loadHotelBookingsForMonth(ym) {
+  if (!hasHotelSupabaseConfig() || !ym || !/^\d{4}-\d{2}$/.test(ym)) return [];
+  const start = ym + "-01";
+  const [y, m] = ym.split("-").map(Number);
+  const end = new Date(Date.UTC(y, m, 1)).toISOString().slice(0, 10); // first day of next month
+  // interval overlap: checkin < next-month-start AND checkout >= month-start
+  const bookingRows = await request("bookings", {
+    query: { and: `(checkin_date.lt.${end},checkout_date.gte.${start})`, order: "created_at.desc" },
+  });
+  if (!Array.isArray(bookingRows) || bookingRows.length === 0) return [];
+  const guestIds = [...new Set(bookingRows.map((r) => r.guest_id).filter(Boolean))];
+  const GUEST_COLS = "id,full_name,phone,nationality,email,ref_name,ref_phone,id_type,id_number";
+  const guestRows = guestIds.length
+    ? await request("guests", { query: { id: `in.(${guestIds.join(",")})`, select: GUEST_COLS } })
+    : [];
+  const guestById = new Map((Array.isArray(guestRows) ? guestRows : []).map((g) => [g.id, g]));
+  return bookingRows.map((row) => fromDbBooking(row, guestById.get(row.guest_id)));
+}
+
 // Fetch a single guest's ID photos on demand (only when a booking's details are
 // opened), so the regular sync stays fast. Returns { idFront, idBack, idDocs }.
 export async function loadHotelGuestImages(guestId) {
