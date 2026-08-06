@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import { hasHotelSupabaseConfig, loadHotelBookingsFromSupabase, loadRoomsFromSupabase, saveRoomsToSupabase, persistHotelBookingBundle } from "../lib/hotelSupabase";
-import { hasSupabase, upsertRows, loadRows, saveConfig, loadConfig } from "../utils/supabaseSync";
+import { hasSupabase, upsertRows, loadRows, saveConfig, loadConfig, deleteRow } from "../utils/supabaseSync";
 import { restoreUserPasswords } from "../utils/userPass";
 import { onRemoteChange } from "../utils/realtimeSync";
 import { runDailyBackup } from "../utils/dailyBackup";
@@ -320,9 +320,14 @@ export function AppProvider({ children }) {
     loadRows("expenses", "&order=date.desc")
       .then(rows => {
         if (!rows || !rows.length) return;
-        const exps = rows.map(r => ({ id: r.id, date: r.date, category: r.category, amount: r.amount, note: r.note, by: r.by }));
-        const localExps = (() => { try { return JSON.parse(localStorage.getItem('ga_expenses') || '[]'); } catch { return []; } })();
         const delExp = new Set(gaLoadDeleted().exp || []);
+        const rawExps = rows.map(r => ({ id: r.id, date: r.date, category: r.category, amount: r.amount, note: r.note, by: r.by }));
+        // A locally-deleted expense must never re-hydrate from the cloud. Drop any
+        // remote row that was deleted here, and keep retrying to purge the cloud copy
+        // (the original delete can silently fail, leaving a ghost row that comes back).
+        const exps = rawExps.filter(e => !delExp.has(String(e.id)));
+        rawExps.filter(e => delExp.has(String(e.id))).forEach(e => deleteRow("expenses", e.id).catch(() => {}));
+        const localExps = (() => { try { return JSON.parse(localStorage.getItem('ga_expenses') || '[]'); } catch { return []; } })();
         const remoteIds = new Set(exps.map(e => String(e.id)));
         const localOnly = localExps.filter(e => e && e.id != null && !remoteIds.has(String(e.id)) && !delExp.has(String(e.id)));
         if (localOnly.length) {
@@ -484,9 +489,11 @@ export function AppProvider({ children }) {
         .on("postgres_changes", { event: "*", schema: "public", table: "expenses" }, () => {
           loadRows("expenses", "&order=date.desc").then(rows => {
             if (!rows?.length) return;
-            const exps = rows.map(r => ({ id: r.id, date: r.date, category: r.category, amount: r.amount, note: r.note, by: r.by }));
-            const localExps = (() => { try { return JSON.parse(localStorage.getItem('ga_expenses') || '[]'); } catch { return []; } })();
             const delExp = new Set(gaLoadDeleted().exp || []);
+            const rawExps = rows.map(r => ({ id: r.id, date: r.date, category: r.category, amount: r.amount, note: r.note, by: r.by }));
+            const exps = rawExps.filter(e => !delExp.has(String(e.id)));
+            rawExps.filter(e => delExp.has(String(e.id))).forEach(e => deleteRow("expenses", e.id).catch(() => {}));
+            const localExps = (() => { try { return JSON.parse(localStorage.getItem('ga_expenses') || '[]'); } catch { return []; } })();
             const remoteIds = new Set(exps.map(e => String(e.id)));
             const localOnly = localExps.filter(e => e && e.id != null && !remoteIds.has(String(e.id)) && !delExp.has(String(e.id)));
             const mergedExps = [...exps, ...localOnly];
