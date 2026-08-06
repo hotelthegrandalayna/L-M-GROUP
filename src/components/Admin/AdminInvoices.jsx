@@ -130,7 +130,8 @@ function exportPDF(rows, label) {
 
 // ── Invoice detail modal ──────────────────────────────────────────────────────
 function InvoiceDetail({ bk, onClose }) {
-  const { curRole, curUser, updateBookings, notify } = useApp();
+  const { curRole, curUser, updateBookings, notify, rooms } = useApp();
+  const isMultiRoom = !!(bk.isMultiRoomBooking && (bk.multiRooms || []).length);
   // Use the shared calcPaid so this modal matches the list, the summary,
   // the invoice and the rest of the app (advance + restPayment counts as
   // paid, not only paymentHistory entries).
@@ -156,9 +157,51 @@ function InvoiceDetail({ bk, onClose }) {
       paid: calcPaid(bk),
       idNum: bk.idDocs?.[0]?.idNum || bk.idNum || "",
       referrer: bk.referrer || "", purpose: bk.purpose || "", notes: bk.notes || "",
+      // Per-room rows for multi-room bookings — each room keeps its OWN dates/AC/discount
+      rooms: isMultiRoom ? bk.multiRooms.map(r => ({
+        number: String(r.number),
+        checkin: r.checkin || bk.checkin || "",
+        checkout: r.checkout || bk.checkout || "",
+        acChoice: r.acChoice || "",
+        disc: r.discAmt || 0,
+      })) : [],
     });
     setEditing(true);
   }
+
+  // Rate for a room given its AC choice (falls back to stored rate / room config)
+  function roomRateFor(number, acChoice, storedRate) {
+    const cfg = (rooms || []).find(r => String(r.number) === String(number));
+    if (cfg && cfg.acRate && cfg.nonAcRate) return acChoice === "Non-AC" ? cfg.nonAcRate : cfg.acRate;
+    return cfg?.rate ?? storedRate ?? 0;
+  }
+  function roomIsDual(number) {
+    const cfg = (rooms || []).find(r => String(r.number) === String(number));
+    return !!(cfg && cfg.acRate && cfg.nonAcRate);
+  }
+  function nightsBetweenD(ci, co) {
+    if (!ci || !co) return 0;
+    const n = Math.round((new Date(co + "T00:00:00") - new Date(ci + "T00:00:00")) / 86400000);
+    return n > 0 ? n : 0;
+  }
+
+  // Live per-room computation while editing a multi-room booking
+  const edMultiRooms = (ed?.rooms || []).map(er => {
+    const orig = (bk.multiRooms || []).find(m => String(m.number) === String(er.number)) || {};
+    // Keep the ACTUAL booked rate unless the AC choice was changed (which legitimately
+    // switches to the room's standard AC / Non-AC rate). This stops opening the editor
+    // from silently re-pricing at the standard rate.
+    const acUnchanged = (er.acChoice || "") === (orig.acChoice || "");
+    const rate = acUnchanged ? (orig.rate ?? roomRateFor(er.number, er.acChoice, orig.rate))
+                             : roomRateFor(er.number, er.acChoice, orig.rate);
+    const nights = Math.max(1, nightsBetweenD(er.checkin, er.checkout));
+    const gross = nights * rate;
+    const disc = Math.min(parseFloat(er.disc) || 0, gross);
+    const amount = Math.max(0, gross - disc);
+    return { ...er, orig, name: orig.name, type: orig.type, rate, nights, gross, disc, amount, isDual: roomIsDual(er.number) };
+  });
+  const edMultiTotal = edMultiRooms.reduce((s, r) => s + r.amount, 0);
+  const setRoomF = (idx, k, v) => setEd(p => ({ ...p, rooms: p.rooms.map((r, i) => i === idx ? { ...r, [k]: v } : r) }));
 
   const edNights = (() => {
     if (!ed?.checkin || !ed?.checkout) return bk.nights || 0;
@@ -168,7 +211,8 @@ function InvoiceDetail({ bk, onClose }) {
 
   function commitSave() {
     if (!checkAdminPassword(savePw)) { notify("Incorrect admin password", "error"); return; }
-    const newTotal = parseFloat(ed.total) || 0;
+    // Multi-room: the total comes from the per-room rows, not a single field.
+    const newTotal = isMultiRoom ? edMultiTotal : (parseFloat(ed.total) || 0);
     const newPaid  = parseFloat(ed.paid)  || 0;
     const origPaid = calcPaid(bk);
     let advance = bk.advance, restPayment = bk.restPayment, paymentHistory = bk.paymentHistory;
@@ -183,18 +227,36 @@ function InvoiceDetail({ bk, onClose }) {
     if (idDocs && idDocs.length && ed.idNum !== (bk.idDocs?.[0]?.idNum || "")) {
       idDocs = idDocs.map((d, i) => i === 0 ? { ...d, idNum: ed.idNum } : d);
     }
+
+    // Rebuild per-room data for multi-room bookings so the invoice matches
+    let multiFields = {};
+    if (isMultiRoom) {
+      const newRooms = edMultiRooms.map(r => ({
+        ...r.orig, number: r.number, name: r.name, type: r.type,
+        acChoice: r.isDual ? r.acChoice : r.orig.acChoice,
+        rate: r.rate, nights: r.nights, checkin: r.checkin, checkout: r.checkout,
+        grossAmt: r.gross, discAmt: r.disc, amount: r.amount,
+      }));
+      const minCi = newRooms.reduce((m, r) => (r.checkin && (!m || r.checkin < m)) ? r.checkin : m, "");
+      const maxCo = newRooms.reduce((m, r) => (r.checkout && r.checkout > m) ? r.checkout : m, "");
+      const maxNights = newRooms.reduce((m, r) => Math.max(m, r.nights || 0), 0);
+      const totalDisc = newRooms.reduce((s, r) => s + (r.discAmt || 0), 0);
+      multiFields = { multiRooms: newRooms, checkin: minCi || bk.checkin, checkout: maxCo || bk.checkout, nights: maxNights || bk.nights, discAmt: totalDisc };
+    }
+
     const updated = {
       ...bk,
-      guest: ed.guest.trim(), phone: ed.phone.trim(), room: ed.room.trim(),
-      checkin: ed.checkin, checkout: ed.checkout, nights: edNights || bk.nights,
+      guest: ed.guest.trim(), phone: ed.phone.trim(),
       status: ed.status,
       invoiceTotal: newTotal, amount: newTotal,
-      discAmt: parseFloat(ed.disc) || 0,
       advance, restPayment, paymentHistory,
       dueAmount: Math.max(0, newTotal - newPaid),
       idNum: ed.idNum, idDocs,
       referrer: ed.referrer.trim(), purpose: ed.purpose.trim(), notes: ed.notes.trim(),
       editedAt: new Date().toISOString(), editedBy: curUser || "admin",
+      // single-room fields (overridden by multiFields for multi-room)
+      ...(isMultiRoom ? {} : { room: ed.room.trim(), checkin: ed.checkin, checkout: ed.checkout, nights: edNights || bk.nights, discAmt: parseFloat(ed.disc) || 0 }),
+      ...multiFields,
     };
     // Update ONLY the exact invoice that was opened. Matching by id alone would
     // overwrite any other booking that happens to share the same id (legacy
@@ -284,7 +346,7 @@ function InvoiceDetail({ bk, onClose }) {
           {editing ? (() => {
             const inp = { padding: "8px 10px", border: "1.5px solid var(--border)", borderRadius: 8, fontSize: 13, fontFamily: "inherit", width: "100%", boxSizing: "border-box" };
             const lbl = { fontSize: 10, fontWeight: 800, color: "var(--text3)", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 4, display: "block" };
-            const newTotal = parseFloat(ed.total) || 0, newPaid = parseFloat(ed.paid) || 0;
+            const newTotal = isMultiRoom ? edMultiTotal : (parseFloat(ed.total) || 0), newPaid = parseFloat(ed.paid) || 0;
             // NOTE: build fields as plain inlined JSX (a function call, not a
             // <Component/>). Defining a component inside render remounts the
             // input on every keystroke and steals focus — this avoids that.
@@ -301,7 +363,6 @@ function InvoiceDetail({ bk, onClose }) {
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(165px,1fr))", gap: 12, marginBottom: 12 }}>
                   {F("Guest Name", "guest")}
                   {F("Phone", "phone")}
-                  {F("Room No.", "room")}
                   <div><label style={lbl}>Status</label>
                     <select value={ed.status} onChange={e => setF("status", e.target.value)} style={inp}>
                       <option value="confirmed">Reserved (confirmed)</option>
@@ -310,17 +371,57 @@ function InvoiceDetail({ bk, onClose }) {
                       <option value="cancelled">Cancelled</option>
                     </select>
                   </div>
-                  {F("Check-in", "checkin", "date")}
-                  {F("Check-out", "checkout", "date")}
-                  <div><label style={lbl}>Nights</label>
-                    <input value={edNights} readOnly style={{ ...inp, background: "var(--bg4)", fontWeight: 700 }} /></div>
-                  {F("Invoice Total (৳)", "total", "number")}
-                  {F("Discount (৳)", "disc", "number")}
+                  {!isMultiRoom && F("Room No.", "room")}
+                  {!isMultiRoom && F("Check-in", "checkin", "date")}
+                  {!isMultiRoom && F("Check-out", "checkout", "date")}
+                  {!isMultiRoom && (
+                    <div><label style={lbl}>Nights</label>
+                      <input value={edNights} readOnly style={{ ...inp, background: "var(--bg4)", fontWeight: 700 }} /></div>
+                  )}
+                  {!isMultiRoom && F("Invoice Total (৳)", "total", "number")}
+                  {!isMultiRoom && F("Discount (৳)", "disc", "number")}
                   {F("Amount Paid (৳)", "paid", "number")}
                   {F("ID / NID Number", "idNum")}
                   {F("Referrer", "referrer")}
                   {F("Purpose", "purpose")}
                 </div>
+
+                {/* Multi-room: edit EACH room separately (dates, AC, discount) */}
+                {isMultiRoom && (
+                  <div style={{ border: "1.5px solid #c4a8f0", borderRadius: 10, padding: "12px 14px", marginBottom: 12, background: "#f8f4ff" }}>
+                    <div style={{ fontSize: 11, fontWeight: 800, color: "#5a2ea8", marginBottom: 10, textTransform: "uppercase", letterSpacing: 0.5 }}>
+                      Rooms in this booking — edit each on its own
+                    </div>
+                    {edMultiRooms.map((r, idx) => (
+                      <div key={idx} style={{ border: "1px solid #e0d4f5", borderRadius: 8, background: "#fff", padding: "10px 12px", marginBottom: 8 }}>
+                        <div style={{ fontSize: 12.5, fontWeight: 800, color: "var(--navy)", marginBottom: 8 }}>Room {r.number}{r.name ? " — " + r.name : ""}</div>
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px,1fr))", gap: 10 }}>
+                          <div><label style={lbl}>Check-in</label>
+                            <input type="date" value={r.checkin} onChange={e => setRoomF(idx, "checkin", e.target.value)} style={inp} /></div>
+                          <div><label style={lbl}>Check-out</label>
+                            <input type="date" value={r.checkout} onChange={e => setRoomF(idx, "checkout", e.target.value)} style={inp} /></div>
+                          {r.isDual && (
+                            <div><label style={lbl}>AC / Non-AC</label>
+                              <select value={r.acChoice || "AC"} onChange={e => setRoomF(idx, "acChoice", e.target.value)} style={inp}>
+                                <option value="AC">❄️ AC</option>
+                                <option value="Non-AC">🌬️ Non-AC</option>
+                              </select></div>
+                          )}
+                          <div><label style={lbl}>Discount (৳)</label>
+                            <input type="number" value={r.disc} onWheel={e => e.target.blur()} onChange={e => setRoomF(idx, "disc", e.target.value)} style={inp} /></div>
+                          <div><label style={lbl}>Nights</label>
+                            <input value={r.nights} readOnly style={{ ...inp, background: "var(--bg4)", fontWeight: 700 }} /></div>
+                          <div><label style={lbl}>Amount</label>
+                            <input value={fmtMoney(r.amount)} readOnly style={{ ...inp, background: "var(--bg4)", fontWeight: 800 }} /></div>
+                        </div>
+                        <div style={{ fontSize: 10.5, color: "var(--text3)", marginTop: 5 }}>{r.nights} night{r.nights > 1 ? "s" : ""} × ৳{(r.rate || 0).toLocaleString()}{r.disc > 0 ? ` − ৳${r.disc.toLocaleString()} discount` : ""}</div>
+                      </div>
+                    ))}
+                    <div style={{ display: "flex", justifyContent: "flex-end", fontSize: 14, fontWeight: 800, color: "var(--navy)", padding: "4px 2px" }}>
+                      Total (all rooms): ৳{edMultiTotal.toLocaleString()}
+                    </div>
+                  </div>
+                )}
                 <div><label style={lbl}>Notes</label>
                   <textarea value={ed.notes} onChange={e => setF("notes", e.target.value)} rows={2} style={{ ...inp, resize: "vertical" }} /></div>
                 <div style={{ display: "flex", gap: 16, marginTop: 12, padding: "10px 14px", background: "var(--bg4)", borderRadius: 8, fontSize: 13 }}>
