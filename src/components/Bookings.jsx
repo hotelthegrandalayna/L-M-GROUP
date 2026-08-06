@@ -643,6 +643,52 @@ export function NewBookingModal({ onClose, prefill, editBooking }) {
     return out;
   }, [selRoom, bookings, ci, co, today, eb]);
 
+  // Is a given night booked/reserved for the selected room?
+  const roomNightBooked = (dsIso) => {
+    if (!selRoom) return false;
+    const nextDs = addDaysIso(dsIso, 1);
+    return bookings.some(b => {
+      if (b.status === "cancelled" || b.status === "checked-out") return false;
+      if (eb && b.id === eb.id) return false;
+      const nums = b.multiRooms && b.multiRooms.length
+        ? b.multiRooms.map(m => String(m.number))
+        : [String(b.room), ...((b.extraRooms||[]).map(r => String(r.number)))];
+      if (!nums.includes(String(selRoom.number))) return false;
+      let bci = b.checkin, bco = b.checkout;
+      if (b.multiRooms && b.multiRooms.length) {
+        const mr = b.multiRooms.find(m => String(m.number) === String(selRoom.number));
+        if (mr) { bci = mr.checkin || b.checkin; bco = mr.checkout || b.checkout; }
+      }
+      return new Date(dsIso) < new Date(bco) && new Date(nextDs) > new Date(bci);
+    });
+  };
+
+  // Check-in picker: if the chosen night is booked, jump forward to the next free night
+  function pickCheckin(v) {
+    if (!v) return;
+    let d = v, guard = 0;
+    while (roomNightBooked(d) && guard < 400) { d = addDaysIso(d, 1); guard++; }
+    setCi(d);
+    setCo(addDaysIso(d, 1));
+    if (d !== v) notify(`Those nights are booked — jumped to the next available: ${d.split("-").reverse().join("/")}`, "info");
+  }
+
+  // Check-out picker: cannot extend past the next booked night after check-in
+  function pickCheckout(v) {
+    if (!v) return;
+    let co2 = v;
+    if (selRoom && ci) {
+      let scan = ci, guard = 0, firstBooked = null;
+      while (guard < 400) { if (roomNightBooked(scan)) { firstBooked = scan; break; } scan = addDaysIso(scan, 1); guard++; }
+      if (firstBooked && new Date(co2) > new Date(firstBooked)) {
+        co2 = firstBooked;
+        notify(`Room is booked from ${firstBooked.split("-").reverse().join("/")} — stay shortened to fit`, "info");
+      }
+    }
+    if (new Date(co2) <= new Date(ci)) co2 = addDaysIso(ci, 1);
+    setCo(co2);
+  }
+
   function handlePhotoUpload(idx, side, files) {
     const fileArr = Array.from(files || []);
     if (!fileArr.length) return;
@@ -903,14 +949,14 @@ export function NewBookingModal({ onClose, prefill, editBooking }) {
               <div className="form-group" style={{ marginBottom:0 }}>
                 <label style={{ color:"rgba(255,255,255,.7)", fontSize:11 }}>Check-in *</label>
                 <DateInput value={ci} min={yesterday}
-                  onChange={e=>{ setCi(e.target.value); setCo(addDaysIso(e.target.value,1)); }}
+                  onChange={e=>pickCheckin(e.target.value)}
                   style={{ fontWeight:800, fontSize:15 }} />
                 {ci && <div style={{ color:"rgba(255,255,255,.6)", fontSize:11, marginTop:3 }}>{new Date(ci+"T00:00:00").toLocaleDateString("en-GB",{weekday:"long"})}</div>}
               </div>
               <div className="form-group" style={{ marginBottom:0 }}>
                 <label style={{ color:"rgba(255,255,255,.7)", fontSize:11 }}>Check-out *</label>
                 <DateInput value={co} min={ci ? addDaysIso(ci,1) : addDaysIso(today,1)}
-                  onChange={e=>setCo(e.target.value)}
+                  onChange={e=>pickCheckout(e.target.value)}
                   style={{ fontWeight:800, fontSize:15 }} />
                 {co && <div style={{ color:"rgba(255,255,255,.6)", fontSize:11, marginTop:3 }}>{new Date(co+"T00:00:00").toLocaleDateString("en-GB",{weekday:"long"})}</div>}
               </div>
@@ -960,7 +1006,7 @@ export function NewBookingModal({ onClose, prefill, editBooking }) {
                     <span><span style={{ display:"inline-block", width:9, height:9, borderRadius:2, background:"#E24B4A", marginRight:4, verticalAlign:"middle" }} />Occupied</span>
                     <span><span style={{ display:"inline-block", width:9, height:9, borderRadius:2, background:"#7F77DD", marginRight:4, verticalAlign:"middle" }} />Reserved</span>
                     <span><span style={{ display:"inline-block", width:9, height:9, borderRadius:2, background:"#fff", border:"1px solid #ccc", marginRight:4, verticalAlign:"middle" }} />Free</span>
-                    <span><span style={{ display:"inline-block", width:9, height:9, borderRadius:2, background:"#c9a84c", marginRight:4, verticalAlign:"middle" }} />Your stay</span>
+                    <span><span style={{ display:"inline-block", width:9, height:9, borderRadius:2, background:"#fff", border:"2px solid #d81e1e", marginRight:4, verticalAlign:"middle" }} />Your stay</span>
                   </div>
                   <div style={{ display:"flex", gap:3, overflowX:"auto", paddingBottom:4 }}>
                     {roomAvailStrip.map(c => {
@@ -970,7 +1016,7 @@ export function NewBookingModal({ onClose, prefill, editBooking }) {
                         <div key={c.ds} title={c.ds+" — "+c.state} style={{
                           minWidth:30, textAlign:"center", borderRadius:6, padding:"4px 0",
                           background:bg, color:fg,
-                          border: c.inStay ? "2px solid #c9a84c" : (c.state==="free" ? "1px solid #ddd" : "1px solid transparent"),
+                          border: c.inStay ? "2px solid #d81e1e" : (c.state==="free" ? "1px solid #ddd" : "1px solid transparent"),
                           boxShadow: c.isToday ? "inset 0 0 0 1.5px var(--navy)" : "none",
                         }}>
                           <div style={{ fontSize:8.5, opacity:.8, lineHeight:1 }}>{c.wd}</div>
