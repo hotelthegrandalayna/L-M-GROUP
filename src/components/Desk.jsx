@@ -1460,12 +1460,10 @@ export default function Desk() {
       )}
 
       {/* ── Stat bar ── */}
-      <div style={{ display:"grid", gridTemplateColumns:isMobile ? "repeat(2,1fr)" : (curRole==="admin" ? "repeat(8,1fr)" : "repeat(6,1fr)"), gap:6, marginBottom:14 }}>
+      <div style={{ display:"grid", gridTemplateColumns:isMobile ? "repeat(2,1fr)" : (curRole==="admin" ? "repeat(6,1fr)" : "repeat(4,1fr)"), gap:6, marginBottom:14 }}>
         {[
           { label:"Occupancy",    value:occPct+"%",           sub:occ+" of "+rooms.length+" rooms", icon:"ti-percentage",    color:"var(--navy)" },
           { label:"In-House",     value:inhouse.length,       sub:"guests staying",                  icon:"ti-users",         color:"#5b3fa0" },
-          { label:"Arrivals",     value:arrivals.length,      sub:"today",                           icon:"ti-login",         color:"var(--green)" },
-          { label:"Departures",   value:departures.length,    sub:"today",                           icon:"ti-logout",        color:"var(--red2)" },
           { label:"Today Revenue",value:money(dRev),          sub:"tap to see breakdown",             icon:"ti-currency-taka", color:"var(--gold2)", onClick:()=>setShowRevDetail(true) },
           curRole==="admin"
             ? { label:"This Month Revenue", value:money(mRev), sub:"month to date",                 icon:"ti-currency-taka", color:"var(--gold2)" }
@@ -1486,11 +1484,69 @@ export default function Desk() {
         ))}
       </div>
 
-      {/* ── Main grid: room map left, action panels right ── */}
-      <div style={{ display:"grid", gridTemplateColumns:isMobile ? "minmax(0,1fr)" : "minmax(0,1fr) 290px", gap:14, alignItems:"start" }}>
+      {/* ── Front-desk strip: the common tabs, side by side, right above the room map ── */}
+      <div style={{ display:"grid", gridTemplateColumns:isMobile ? "repeat(2,minmax(0,1fr))" : "repeat(4,minmax(0,1fr))", gap:8, marginBottom:14, alignItems:"start" }}>
+        {[
+          { title:"Today's Arrivals",   icon:"ti-login",         list:arrivals,   color:"var(--green)", bg:"var(--green-bg)" },
+          { title:"Today's Departures", icon:"ti-logout",        list:departures, color:"var(--red2)",  bg:"var(--red-bg)" },
+          { title:"Today's Extensions", icon:"ti-calendar-plus", list:extensions, color:"#7a4dd6",      bg:"#efe9fb" },
+        ].map(sec => (
+          <div className="panel" key={sec.title} style={{ margin:0 }}>
+            <div className="panel-header" style={{ padding:"9px 12px" }}>
+              <div className="panel-title" style={{ fontSize:12.5, gap:7, minWidth:0, flex:1, alignItems:"center" }}>
+                <i className={"ti "+sec.icon} style={{ color:sec.color, flexShrink:0 }} />
+                <span style={{ fontWeight:800, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{sec.title}</span>
+                <span style={{ marginLeft:"auto", flexShrink:0, background:sec.bg, color:sec.color, fontWeight:800, fontSize:11, padding:"2px 9px", borderRadius:9 }}>{sec.list.length}</span>
+              </div>
+            </div>
+            {sec.list.length ? (
+              <div style={{ display:"flex", flexWrap:"wrap", gap:6, padding:"10px 12px" }}>
+                {sec.list.map(b => (
+                  <span key={b.id} style={{ minWidth:36, textAlign:"center", background:sec.bg, color:sec.color, border:"1.5px solid "+sec.color, borderRadius:9, padding:"5px 10px", fontWeight:900, fontSize:14, lineHeight:1 }}>{b.room}</span>
+                ))}
+              </div>
+            ) : (
+              <div style={{ color:"var(--text3)", fontSize:11.5, textAlign:"center", padding:"12px 4px" }}>None today</div>
+            )}
+          </div>
+        ))}
 
-        {/* Left: Room map + In-House below */}
-        <div style={{ minWidth:0 }}>
+        {/* Upcoming Reservations — room + arrival date; call-to-confirm folded in */}
+        <div className="panel" style={{ margin:0, ...(toConfirm.length ? { border:"2px solid var(--gold2)" } : {}) }}>
+          <div className="panel-header" style={{ padding:"9px 12px" }}>
+            <div className="panel-title" style={{ fontSize:12.5, gap:7, minWidth:0, flex:1, alignItems:"center" }}>
+              <i className="ti ti-calendar-event" style={{ color:"#2a7ab8", flexShrink:0 }} />
+              <span style={{ fontWeight:800, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>Upcoming</span>
+              <span style={{ marginLeft:"auto", flexShrink:0, background:"#e4f0fa", color:"#2a7ab8", fontWeight:800, fontSize:11, padding:"2px 9px", borderRadius:9 }}>{upcoming.length}</span>
+            </div>
+          </div>
+          {toConfirm.length > 0 && (
+            <div style={{ background:"#fff8e6", borderBottom:"1px solid var(--gold2)", padding:"6px 12px", fontSize:11, fontWeight:800, color:"#8a6200", display:"flex", alignItems:"center", gap:6 }}>
+              <i className="ti ti-phone-call" style={{ fontSize:14 }} /> Call to confirm — arriving tomorrow
+            </div>
+          )}
+          {upcoming.length ? (
+            <div style={{ display:"flex", flexWrap:"wrap", gap:6, padding:"10px 12px" }}>
+              {upcoming.map(b => {
+                const soon = b.checkin === tomorrowStr;
+                return (
+                  <button key={b.id} type="button" title={(b.guest || "")+" — click to confirm check-in"} onClick={() => setConfirmRes(b)}
+                    style={{ display:"inline-flex", flexDirection:"column", alignItems:"center", gap:1, minWidth:44, cursor:"pointer", fontFamily:"inherit", background: soon ? "#fff8e6" : "#e4f0fa", color: soon ? "#8a6200" : "#2a7ab8", border:"1.5px solid "+(soon ? "var(--gold2)" : "#2a7ab8"), borderRadius:9, padding:"5px 10px", lineHeight:1.1 }}>
+                    <span style={{ fontWeight:900, fontSize:14 }}>{b.room}</span>
+                    <span style={{ fontSize:9.5, fontWeight:700, opacity:.9 }}>{shortDate(b.checkin)}</span>
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <div style={{ color:"var(--text3)", fontSize:11.5, textAlign:"center", padding:"12px 4px" }}>None</div>
+          )}
+        </div>
+      </div>
+
+      {/* ── Room map (full width) ── */}
+      <div style={{ minWidth:0 }}>
+        <div>
           {/* Room map */}
           <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:9, flexWrap:"wrap" }}>
             <span style={{ fontSize:10, fontWeight:800, color:"var(--text3)", textTransform:"uppercase", letterSpacing:.8 }}>Room Map</span>
@@ -1606,78 +1662,8 @@ export default function Desk() {
           </div>
         </div>
 
-        {/* Right: Action panels */}
-        <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-
-          {/* Today's Arrivals / Departures / Extensions — full-width, clear labels, chips wrap */}
-          {[
-            { title:"Today's Arrivals",   icon:"ti-login",         list:arrivals,   color:"var(--green)", bg:"var(--green-bg)" },
-            { title:"Today's Departures", icon:"ti-logout",        list:departures, color:"var(--red2)",  bg:"var(--red-bg)" },
-            { title:"Today's Extensions", icon:"ti-calendar-plus", list:extensions, color:"#7a4dd6",      bg:"#efe9fb" },
-          ].map(sec => (
-            <div className="panel" key={sec.title} style={{ marginBottom:8 }}>
-              <div className="panel-header" style={{ padding:"9px 12px" }}>
-                <div className="panel-title" style={{ fontSize:13, gap:7, minWidth:0, flex:1, alignItems:"center" }}>
-                  <i className={"ti "+sec.icon} style={{ color:sec.color, flexShrink:0 }} />
-                  <span style={{ fontWeight:800 }}>{sec.title}</span>
-                  <span style={{ marginLeft:"auto", flexShrink:0, background:sec.bg, color:sec.color, fontWeight:800, fontSize:11, padding:"2px 9px", borderRadius:9 }}>{sec.list.length}</span>
-                </div>
-              </div>
-              {sec.list.length ? (
-                <div style={{ display:"flex", flexWrap:"wrap", gap:7, padding:"10px 12px" }}>
-                  {sec.list.map(b => (
-                    <span key={b.id} style={{ minWidth:38, textAlign:"center", background:sec.bg, color:sec.color, border:"1.5px solid "+sec.color, borderRadius:9, padding:"6px 11px", fontWeight:900, fontSize:15, lineHeight:1 }}>{b.room}</span>
-                  ))}
-                </div>
-              ) : (
-                <div style={{ color:"var(--text3)", fontSize:11.5, textAlign:"center", padding:"10px 4px" }}>None today</div>
-              )}
-            </div>
-          ))}
-
-          {/* Call-to-confirm alert — reservations arriving tomorrow */}
-          {toConfirm.length > 0 && (
-            <div style={{ background:"#fff8e6", border:"2px solid var(--gold2)", borderRadius:12, padding:"11px 13px", marginBottom:8 }}>
-              <div style={{ fontSize:13, fontWeight:900, color:"#8a6200", display:"flex", alignItems:"center", gap:7, marginBottom:7 }}>
-                <i className="ti ti-phone-call" style={{ fontSize:17 }} /> Call to confirm — arriving tomorrow
-              </div>
-              <div style={{ display:"flex", flexWrap:"wrap", gap:7 }}>
-                {toConfirm.map(b => (
-                  <span key={b.id} style={{ display:"inline-flex", flexDirection:"column", alignItems:"center", gap:1, background:"#fff", color:"#8a6200", border:"1.5px solid var(--gold2)", borderRadius:9, padding:"5px 10px", lineHeight:1.1 }}>
-                    <span style={{ fontWeight:900, fontSize:15 }}>Rm {b.room}</span>
-                    <span style={{ fontSize:10, fontWeight:600, opacity:.85 }}>{b.phone || "no phone"}</span>
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Upcoming Reservations — room + arrival date */}
-          <div className="panel" style={{ marginBottom:8 }}>
-            <div className="panel-header" style={{ padding:"9px 12px" }}>
-              <div className="panel-title" style={{ fontSize:13, gap:7, minWidth:0, flex:1, alignItems:"center" }}>
-                <i className="ti ti-calendar-event" style={{ color:"#2a7ab8", flexShrink:0 }} />
-                <span style={{ fontWeight:800 }}>Upcoming Reservations</span>
-                <span style={{ marginLeft:"auto", flexShrink:0, background:"#e4f0fa", color:"#2a7ab8", fontWeight:800, fontSize:11, padding:"2px 9px", borderRadius:9 }}>{upcoming.length}</span>
-              </div>
-            </div>
-            {upcoming.length ? (
-              <div style={{ display:"flex", flexWrap:"wrap", gap:7, padding:"10px 12px" }}>
-                {upcoming.map(b => {
-                  const soon = b.checkin === tomorrowStr;
-                  return (
-                    <button key={b.id} type="button" title={(b.guest || "")+" — click to confirm check-in"} onClick={() => setConfirmRes(b)}
-                      style={{ display:"inline-flex", flexDirection:"column", alignItems:"center", gap:1, minWidth:44, cursor:"pointer", fontFamily:"inherit", background: soon ? "#fff8e6" : "#e4f0fa", color: soon ? "#8a6200" : "#2a7ab8", border:"1.5px solid "+(soon ? "var(--gold2)" : "#2a7ab8"), borderRadius:9, padding:"5px 10px", lineHeight:1.1 }}>
-                      <span style={{ fontWeight:900, fontSize:15 }}>{b.room}</span>
-                      <span style={{ fontSize:10, fontWeight:700, opacity:.9 }}>{shortDate(b.checkin)}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            ) : (
-              <div style={{ color:"var(--text3)", fontSize:11.5, textAlign:"center", padding:"10px 4px" }}>No upcoming reservations</div>
-            )}
-          </div>
+        {/* Below the map: less-used panels in a row (off the main scroll path) */}
+        <div style={{ display:"grid", gridTemplateColumns:isMobile ? "minmax(0,1fr)" : "repeat(3,minmax(0,1fr))", gap:10, marginTop:14, alignItems:"start" }}>
 
           {/* Pending Balances */}
           {pendingBal.length > 0 && (
