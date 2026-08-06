@@ -44,24 +44,24 @@ import { persistHotelBookingBundle } from "../lib/hotelSupabase";
 
 // ── Room status colours (bold, high-visibility) ────────────────────────────
 const STATUS_STYLE = {
-  occupied:    { label:"occupied", ribbon:"#E24B4A", ribbonTx:"#fff", shadow:"rgba(190,45,45,.32)", numColor:"#B03030" },
-  reserved:    { label:"reserved", ribbon:"#7F77DD", ribbonTx:"#fff", shadow:"rgba(90,70,190,.32)", numColor:"#5a3aa8" },
-  vacant:      { label:"vacant",   ribbon:"#4FA845", ribbonTx:"#fff", shadow:"rgba(30,130,65,.30)", numColor:"#1f7a3a" },
-  cleaning:    { label:"cleaning", ribbon:"#EAB308", ribbonTx:"#4a2b00", shadow:"rgba(200,140,10,.34)", numColor:"#8a6200" },
-  maintenance: { label:"maintenance", ribbon:"#9CA3AF", ribbonTx:"#fff", shadow:"rgba(120,125,135,.30)", numColor:"#4b5563" },
+  occupied:    { label:"Occupied",    tint:"#FDECEC", stripTx:"#A32D2D", dot:"#E24B4A" },
+  reserved:    { label:"Reserved",    tint:"#F0EEFC", stripTx:"#3C3489", dot:"#7F77DD" },
+  vacant:      { label:"Vacant",      tint:"#EDF7E8", stripTx:"#3B6D11", dot:"#639922" },
+  cleaning:    { label:"Cleaning",    tint:"#FBF0D8", stripTx:"#7a5000", dot:"#EAB308" },
+  maintenance: { label:"Maintenance", tint:"#EFF1F4", stripTx:"#4b5563", dot:"#9CA3AF" },
 };
 
-// Injected once — 3D raised room cards: a clean white body with a coloured status
-// ribbon on top, a solid drop-shadow that lifts on hover and sinks when pressed.
+// Elegant room cards: white body, a soft tinted status strip with a colour dot,
+// a light guest name, a hairline divider, and a prominent amount. Subtle lift.
 const ROOM_MAP_CSS = `
-@keyframes rmAheadZoom { 0%,100%{ transform:scale(1); } 50%{ transform:scale(1.14); } }
-.rm-card { position:relative; border-radius:13px; cursor:pointer; overflow:hidden;
-  background:var(--panel,#fff); border:0.5px solid var(--border,#e2e2ea);
-  box-shadow:0 5px 0 var(--rm-shadow), 0 8px 14px rgba(0,0,0,.13);
-  transition:transform .13s cubic-bezier(.2,.7,.3,1), box-shadow .13s ease; will-change:transform; }
-.rm-card:hover { transform:translateY(-3px); box-shadow:0 8px 0 var(--rm-shadow), 0 13px 22px rgba(0,0,0,.17); }
-.rm-card:active { transform:translateY(2px); box-shadow:0 2px 0 var(--rm-shadow), 0 4px 8px rgba(0,0,0,.13); }
-.rm-ahead { animation:rmAheadZoom 1.5s ease-in-out infinite; display:inline-block; }
+@keyframes rmAheadZoom { 0%,100%{ transform:scale(1); } 50%{ transform:scale(1.12); } }
+.rm-card { position:relative; border-radius:14px; cursor:pointer; overflow:hidden;
+  background:var(--panel,#fff); border:0.5px solid var(--border,#e6e6ec);
+  box-shadow:0 4px 14px rgba(0,0,0,.09);
+  transition:transform .14s cubic-bezier(.2,.7,.3,1), box-shadow .14s ease; will-change:transform; }
+.rm-card:hover { transform:translateY(-3px); box-shadow:0 10px 24px rgba(0,0,0,.14); }
+.rm-card:active { transform:translateY(0); box-shadow:0 3px 10px rgba(0,0,0,.10); }
+.rm-ahead { animation:rmAheadZoom 1.6s ease-in-out infinite; display:inline-block; }
 `;
 
 function shortDate(iso) {
@@ -1276,33 +1276,43 @@ export default function Desk() {
                 due  = Math.max(0, (bk.invoiceTotal ?? bk.amount ?? 0) - paid);
               }
               return (
-                <div key={r.id} className="rm-card" onClick={() => ds === "cleaning" ? setCleanTarget(r) : setSel(r)} style={{ ["--rm-shadow"]:st.shadow }}>
-                  {/* Status ribbon */}
-                  <div style={{ background:st.ribbon, color:st.ribbonTx, fontSize:10.5, fontWeight:700, padding:"3px 9px", display:"flex", justifyContent:"space-between", alignItems:"center", gap:6 }}>
-                    <span style={{ textTransform:"capitalize", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}><i className={"ti " + statusIcon} style={{ fontSize:12, marginRight:3, verticalAlign:"-1px" }} />{st.label}</span>
-                    {ribbonNote && <span className={(!bk && fc>0) ? "rm-ahead" : ""} style={{ whiteSpace:"nowrap", fontWeight:800 }}>{ribbonNote}</span>}
+                <div key={r.id} className="rm-card" onClick={() => ds === "cleaning" ? setCleanTarget(r) : setSel(r)}>
+                  {/* Soft tinted status strip */}
+                  <div style={{ background:st.tint, color:st.stripTx, fontSize:11, padding:"6px 12px", display:"flex", justifyContent:"space-between", alignItems:"center", gap:6 }}>
+                    <span style={{ whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
+                      <span style={{ display:"inline-block", width:7, height:7, borderRadius:"50%", background:st.dot, marginRight:6, verticalAlign:"1px" }} />{st.label}
+                    </span>
+                    {ribbonNote && <span className={(!bk && fc>0) ? "rm-ahead" : ""} style={{ whiteSpace:"nowrap" }}>{ribbonNote}</span>}
                   </div>
                   {/* Body */}
-                  <div style={{ padding:"9px 11px 10px" }}>
-                    <div style={{ display:"flex", alignItems:"baseline", gap:6 }}>
-                      <span style={{ fontSize:21, fontWeight:900, color:st.numColor, letterSpacing:-.5, lineHeight:1 }}>{r.number}</span>
-                      <span style={{ fontSize:11, fontWeight:600, color:"var(--text3)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{r.name || r.type}</span>
+                  <div style={{ padding:"12px 13px 13px" }}>
+                    <div style={{ display:"flex", alignItems:"baseline", justifyContent:"space-between", gap:6 }}>
+                      <span style={{ fontSize:26, fontWeight:500, color:"var(--text)", letterSpacing:-.5, lineHeight:1 }}>{r.number}</span>
+                      <span style={{ fontSize:11, color:"var(--text3)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", maxWidth:"60%" }}>{r.name || r.type}</span>
                     </div>
                     {ds === "cleaning" ? (
-                      <div style={{ marginTop:5, fontSize:11, color:st.numColor, fontWeight:700 }}>Needs cleaning</div>
+                      <div style={{ fontSize:14, color:"var(--text2)", marginTop:6 }}>Needs cleaning</div>
                     ) : bk ? (<>
-                      <div style={{ fontSize:12.5, fontWeight:800, color:"var(--text)", marginTop:3, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{bk.guest}</div>
-                      <div style={{ fontSize:11, color:"var(--text3)", marginTop:1 }}>{rn} night{rn>1?"s":""} · ৳{total.toLocaleString()}{isCombined ? " (Rm " + roomList.join("+") + ")" : ""}</div>
-                      <div style={{ marginTop:6 }}>
+                      <div style={{ fontSize:14, color:"var(--text)", marginTop:6, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{bk.guest}</div>
+                      <div style={{ height:"0.5px", background:"var(--border)", margin:"11px 0 9px" }} />
+                      <div style={{ display:"flex", alignItems:"flex-end", justifyContent:"space-between" }}>
+                        <span style={{ fontSize:12, color:"var(--text3)" }}>{rn} night{rn>1?"s":""}{isCombined ? " · Rm "+roomList.join("+") : ""}</span>
+                        <span style={{ fontSize:18, fontWeight:500, color:"var(--text)" }}>{money(total)}</span>
+                      </div>
+                      <div style={{ marginTop:8 }}>
                         {due > 0
-                          ? <span style={{ fontSize:11, fontWeight:800, background:"#fdecec", color:"#b02a2a", padding:"2px 9px", borderRadius:20 }}>due ৳{due.toLocaleString()}</span>
-                          : <span style={{ fontSize:11, fontWeight:800, background:"#e7f6ec", color:"#137a3f", padding:"2px 9px", borderRadius:20 }}>paid <i className="ti ti-check" style={{ fontSize:11 }} /></span>}
+                          ? <span style={{ fontSize:11, background:"#FDECEC", color:"#A32D2D", padding:"2px 9px", borderRadius:20 }}>due {money(due)}</span>
+                          : <span style={{ fontSize:11, background:"#EDF7E8", color:"#3B6D11", padding:"2px 9px", borderRadius:20 }}>paid <i className="ti ti-check" style={{ fontSize:11 }} /></span>}
                       </div>
                     </>) : (<>
-                      <div style={{ fontSize:12.5, fontWeight:700, color:"var(--text3)", marginTop:3 }}>Available</div>
-                      <div style={{ fontSize:11, color:"var(--text3)", marginTop:1 }}>{money(r.rate)} / night</div>
-                      <div style={{ marginTop:6 }}>
-                        <span style={{ fontSize:11, fontWeight:700, background:"var(--bg3)", color:"var(--text3)", padding:"2px 9px", borderRadius:20 }}>tap to book</span>
+                      <div style={{ fontSize:14, color:"var(--text2)", marginTop:6 }}>Available now</div>
+                      <div style={{ height:"0.5px", background:"var(--border)", margin:"11px 0 9px" }} />
+                      <div style={{ display:"flex", alignItems:"flex-end", justifyContent:"space-between" }}>
+                        <span style={{ fontSize:12, color:"var(--text3)" }}>per night</span>
+                        <span style={{ fontSize:18, fontWeight:500, color:"var(--text)" }}>{money(r.rate)}</span>
+                      </div>
+                      <div style={{ marginTop:8 }}>
+                        <span style={{ fontSize:11, background:"var(--bg3)", color:"var(--text3)", padding:"2px 9px", borderRadius:20 }}>tap to book</span>
                       </div>
                     </>)}
                   </div>
