@@ -1070,6 +1070,9 @@ export default function Desk() {
   const [confirmRes, setConfirmRes] = useState(null);          // reservation to open as invoice for check-in confirmation
   const [completeBooking, setCompleteBooking] = useState(null); // reservation being completed (prefilled form)
   const [editResTarget, setEditResTarget] = useState(null);    // reservation being edited (dates / room)
+  const [pnlDate, setPnlDate] = useState(() => todayStr());    // which day the P&L panel shows
+  const [pnlRevOpen, setPnlRevOpen] = useState(false);         // revenue breakdown expanded
+  const [pnlExpOpen, setPnlExpOpen] = useState(false);         // expenses breakdown expanded
   const [checkoutTarget, setCheckoutTarget] = useState(null);
   const [postCheckout, setPostCheckout] = useState(null);
   const [surveyBooking, setSurveyBooking] = useState(null);
@@ -1097,6 +1100,17 @@ export default function Desk() {
     isPast12pmBST
   );
 
+  // Classify a payment into a plain revenue type for the P&L breakdown
+  function revKind(note, type, status) {
+    const n = (note || "").toLowerCase();
+    if (/extend/.test(n)) return "Extension";
+    if (type === "service" || /service|restaurant|extra service/.test(n)) return "Service";
+    if (/check-in/.test(n)) return "Balance at check-in";
+    if (/advance/.test(n)) return status === "confirmed" ? "Reservation deposit" : "New booking advance";
+    if (/balance|rest|collect/.test(n)) return "Balance collected";
+    return "Payment";
+  }
+
   // Derive revenue from booking paymentHistory (same as Admin Finance) — avoids test/orphan entries
   const bookingRevEntries = useMemo(() => {
     const entries = [];
@@ -1106,11 +1120,15 @@ export default function Desk() {
       if (history.length > 0) {
         history.forEach(p => {
           const date = p.ts ? p.ts.split("T")[0] : b.checkin;
-          entries.push({ date, amount: parseFloat(p.amount) || 0, bookingId: b.id, note: `${p.note||p.type||"payment"} (${p.method||"Cash"})` });
+          entries.push({ date, amount: parseFloat(p.amount) || 0, bookingId: b.id, room: b.room,
+            method: p.method || "Cash", kind: revKind(p.note, p.type, b.status),
+            note: `${p.note||p.type||"payment"} (${p.method||"Cash"})` });
         });
       } else {
         const totalPaid = (parseFloat(b.advance)||0) + (parseFloat(b.restPayment)||0) + (parseFloat(b.extrasAdvance)||0);
-        if (totalPaid > 0) entries.push({ date: b.checkin, amount: totalPaid, bookingId: b.id, note: `advance payment (${b.paymentMethod||"Cash"})` });
+        if (totalPaid > 0) entries.push({ date: b.checkin, amount: totalPaid, bookingId: b.id, room: b.room,
+          method: b.paymentMethod || "Cash", kind: b.status === "confirmed" ? "Reservation deposit" : "New booking advance",
+          note: `advance payment (${b.paymentMethod||"Cash"})` });
       }
     });
     return entries;
@@ -1690,17 +1708,69 @@ export default function Desk() {
             </div>
           )}
 
-          {/* Today P&L */}
-          <div className="panel">
-            <div className="panel-header" style={{ padding:"9px 12px" }}>
-              <div className="panel-title" style={{ fontSize:12 }}><i className="ti ti-chart-pie" /> Today P&amp;L</div>
-            </div>
-            <div style={{ padding:"5px 12px 7px" }}>
-              <div style={{ display:"flex", justifyContent:"space-between", padding:"3px 0", fontSize:12.5 }}><span style={{ color:"var(--text2)" }}>Revenue</span><span style={{ fontWeight:700, color:"var(--green)" }}>{money(dRev)}</span></div>
-              <div style={{ display:"flex", justifyContent:"space-between", padding:"3px 0 6px", fontSize:12.5, borderBottom:"1.5px solid var(--border)" }}><span style={{ color:"var(--text2)" }}>Expenses</span><span style={{ fontWeight:700, color:"var(--red)" }}>{money(dExp)}</span></div>
-              <div style={{ display:"flex", justifyContent:"space-between", padding:"6px 0 1px", fontSize:14, fontWeight:800 }}><span>Net</span><span style={{ color:dRev-dExp>=0?"var(--green)":"var(--red2)" }}>{money(dRev-dExp)}</span></div>
-            </div>
-          </div>
+          {/* Day P&L — plain by default; tap Revenue/Expenses to see the breakdown; date arrows to see past days */}
+          {(() => {
+            const pRev = allRevEntries.filter(r => r.date === pnlDate);
+            const pExp = bizExpenses.filter(e => e.date === pnlDate);
+            const pRevTot = pRev.reduce((s,r)=>s+r.amount, 0);
+            const pExpTot = pExp.reduce((s,e)=>s+e.amount, 0);
+            const isToday = pnlDate === today;
+            const minDate = addDaysIso(today, -30);
+            const canBack = pnlDate > minDate;
+            return (
+              <div className="panel">
+                <div className="panel-header" style={{ padding:"9px 12px", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+                  <div className="panel-title" style={{ fontSize:12 }}><i className="ti ti-chart-pie" style={{ color:"var(--gold2)" }} /> {isToday ? "Today P&L" : "Day P&L"}</div>
+                  <div style={{ display:"flex", alignItems:"center", gap:4, background:"var(--bg3)", borderRadius:8, padding:"2px 4px" }}>
+                    <button type="button" disabled={!canBack} onClick={() => canBack && setPnlDate(addDaysIso(pnlDate,-1))}
+                      style={{ background:"none", border:"none", cursor:canBack?"pointer":"default", opacity:canBack?1:.3, color:"var(--text2)", padding:"2px 4px", lineHeight:1 }}><i className="ti ti-chevron-left" style={{ fontSize:16 }} /></button>
+                    <span style={{ fontSize:11.5, fontWeight:800, minWidth:44, textAlign:"center", color:"var(--text)" }}>{isToday ? "Today" : shortDate(pnlDate)}</span>
+                    <button type="button" disabled={isToday} onClick={() => !isToday && setPnlDate(addDaysIso(pnlDate,1))}
+                      style={{ background:"none", border:"none", cursor:isToday?"default":"pointer", opacity:isToday?.3:1, color:"var(--text2)", padding:"2px 4px", lineHeight:1 }}><i className="ti ti-chevron-right" style={{ fontSize:16 }} /></button>
+                  </div>
+                </div>
+                <div style={{ padding:"5px 12px 8px" }}>
+                  {/* Revenue row */}
+                  <div onClick={() => setPnlRevOpen(o=>!o)} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"6px 0", fontSize:12.5, cursor:"pointer" }}>
+                    <span style={{ color:"var(--text2)", display:"flex", alignItems:"center", gap:4 }}><i className={"ti "+(pnlRevOpen?"ti-chevron-down":"ti-chevron-right")} style={{ fontSize:14, color:pnlRevOpen?"var(--green)":"var(--text3)" }} /> Revenue</span>
+                    <span style={{ fontWeight:800, color:"var(--green)" }}>{money(pRevTot)}</span>
+                  </div>
+                  {pnlRevOpen && (
+                    <div style={{ background:"#f7faf7", borderRadius:8, padding:"2px 10px", marginBottom:4 }}>
+                      {pRev.length ? pRev.map((r,i) => (
+                        <div key={i} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"6px 0", borderBottom:i<pRev.length-1?"1px solid #eef3ee":"none", fontSize:12 }}>
+                          <span style={{ minWidth:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                            {r.room ? <span style={{ fontWeight:800, color:"#356010" }}>Rm {r.room}</span> : <span style={{ fontWeight:800, color:"#356010" }}>Other</span>}
+                            <span style={{ color:"var(--text3)", fontSize:11 }}> · {r.kind || r.source || "revenue"}</span>
+                          </span>
+                          <span style={{ fontWeight:700, color:"var(--green)", flexShrink:0, marginLeft:8 }}>{money(r.amount)}</span>
+                        </div>
+                      )) : <div style={{ color:"var(--text3)", fontSize:11.5, textAlign:"center", padding:"8px 0" }}>No revenue this day</div>}
+                    </div>
+                  )}
+                  {/* Expenses row */}
+                  <div onClick={() => setPnlExpOpen(o=>!o)} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"6px 0", fontSize:12.5, cursor:"pointer", borderTop:"1px solid var(--border)", borderBottom:"1.5px solid var(--border)" }}>
+                    <span style={{ color:"var(--text2)", display:"flex", alignItems:"center", gap:4 }}><i className={"ti "+(pnlExpOpen?"ti-chevron-down":"ti-chevron-right")} style={{ fontSize:14, color:pnlExpOpen?"var(--red2)":"var(--text3)" }} /> Expenses</span>
+                    <span style={{ fontWeight:800, color:"var(--red)" }}>{money(pExpTot)}</span>
+                  </div>
+                  {pnlExpOpen && (
+                    <div style={{ background:"#fdf6f5", borderRadius:8, padding:"2px 10px", margin:"4px 0" }}>
+                      {pExp.length ? pExp.map((e,i) => (
+                        <div key={i} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"6px 0", borderBottom:i<pExp.length-1?"1px solid #f5e6e4":"none", fontSize:12 }}>
+                          <span style={{ minWidth:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                            <span style={{ fontWeight:800, color:"#8f2323" }}>{e.type || e.category || "Expense"}</span>
+                            {e.note && <span style={{ color:"var(--text3)", fontSize:11 }}> · {e.note}</span>}
+                          </span>
+                          <span style={{ fontWeight:700, color:"var(--red)", flexShrink:0, marginLeft:8 }}>{money(e.amount)}</span>
+                        </div>
+                      )) : <div style={{ color:"var(--text3)", fontSize:11.5, textAlign:"center", padding:"8px 0" }}>No expenses this day</div>}
+                    </div>
+                  )}
+                  <div style={{ display:"flex", justifyContent:"space-between", padding:"8px 0 1px", fontSize:14, fontWeight:800 }}><span>Net</span><span style={{ color:pRevTot-pExpTot>=0?"var(--green)":"var(--red2)" }}>{money(pRevTot-pExpTot)}</span></div>
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Cleaning log — admin oversight of who cleaned which room, when */}
           {curRole === "admin" && (
