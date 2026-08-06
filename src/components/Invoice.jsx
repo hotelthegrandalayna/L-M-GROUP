@@ -63,7 +63,9 @@ export function buildInvoiceHTML(b, rooms, invExtras, mode) {
 
   const overallStatus = balanceDue <= 0 && grandTotal > 0 ? "paid" : totalAdv > 0 ? "partial" : "unpaid";
   const invNum = "GA-" + String(b.id).padStart(4,"0");
-  const invDate = b.invoiceDate || todayStr();
+  // Invoice date = the day the invoice/booking was actually made (not today).
+  // Prefer an explicit invoiceDate, else the booking's creation date, else today as last resort.
+  const invDate = b.invoiceDate || (b.createdAt ? String(b.createdAt).slice(0, 10) : todayStr());
 
   const ro = (rooms || []).find(x => x.number === b.room);
   const rName = ro && ro.name ? " — " + ro.name : "";
@@ -291,6 +293,22 @@ export function buildInvoiceHTML(b, rooms, invExtras, mode) {
     + '<div>'+totals+'</div>'
     + '</div>';
 
+  // Reservation change history (dates / room edited after booking)
+  const cLog = (b.changeLog || []);
+  const changeLogBlock = cLog.length
+    ? '<div style="padding:6px 24px 12px;">'
+      + '<div style="border:1px solid #e0dbd2;border-radius:6px;overflow:hidden;">'
+      + '<div style="background:#faf6ee;padding:6px 12px;font-size:8.5px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase;color:#8a6200;border-bottom:1px solid #eee;">Reservation Change History</div>'
+      + cLog.map(c =>
+          '<div style="padding:5px 12px;font-size:10px;color:#555;border-bottom:1px solid #f2efe8;display:flex;gap:8px;">'
+          + '<span style="color:#999;min-width:70px;">'+fmtDate(c.at)+'</span>'
+          + '<span><strong style="color:#333;">'+c.field+':</strong> '
+          + ((/heck|date/i).test(c.field) ? fmtDate(c.from)+' → '+fmtDate(c.to) : c.from+' → '+c.to)
+          + ' <span style="color:#aaa;">· by '+(c.by||'staff')+'</span></span>'
+          + '</div>').join("")
+      + '</div></div>'
+    : "";
+
   const sig = '<div style="padding:10px 24px 0;border-top:1px solid #e0dbd2;">'
     + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;padding-bottom:12px;">'
       + '<div>'
@@ -319,7 +337,7 @@ export function buildInvoiceHTML(b, rooms, invExtras, mode) {
     + '</div>';
 
   return '<div style="width:100%;min-height:257mm;border:1.5px solid #1a1a2e;border-radius:6px;overflow:hidden;font-family:DM Sans,sans-serif;background:#fff;color:#1a1a2e;box-sizing:border-box;display:flex;flex-direction:column;">'
-    + header + table + mid
+    + header + table + mid + changeLogBlock
     + '<div style="flex:1;min-height:4px;"></div>'
     + sig + footer + '</div>';
 }

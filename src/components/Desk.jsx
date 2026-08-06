@@ -965,6 +965,103 @@ function CheckInPreviewModal({ booking, rooms, onConfirm, onEdit, onClose }) {
   );
 }
 
+function EditReservationModal({ booking, rooms, bookings, onClose, onSave }) {
+  const isMulti = !!(booking.isMultiRoomBooking && (booking.multiRooms || []).length);
+  const [newCi, setNewCi] = useState(booking.checkin);
+  const [newCo, setNewCo] = useState(booking.checkout);
+  const [newRoom, setNewRoom] = useState(String(booking.room || ""));
+
+  const nights = newCi && newCo && new Date(newCo) > new Date(newCi)
+    ? Math.round((new Date(newCo) - new Date(newCi)) / 86400000) : 0;
+
+  // Rooms available for the chosen dates (single-room only). Always include the current room.
+  const availRooms = rooms.filter(r =>
+    String(r.number) === String(booking.room) ||
+    !bookingConflicts(r.number, newCi, newCo, booking.id, bookings));
+
+  // Live conflict flag for the currently chosen room/dates
+  const conflict = isMulti
+    ? booking.multiRooms.some(mr => bookingConflicts(mr.number, newCi, newCo, booking.id, bookings))
+    : bookingConflicts(newRoom || booking.room, newCi, newCo, booking.id, bookings);
+
+  const log = booking.changeLog || [];
+
+  return (
+    <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && onClose()} style={{ zIndex:10001 }}>
+      <div className="modal-box" style={{ maxWidth:540, padding:0, overflow:"hidden" }}>
+        <div style={{ background:"var(--navy)", padding:"14px 20px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+          <span style={{ color:"#fff", fontWeight:800, fontSize:15 }}>
+            <i className="ti ti-edit" style={{ marginRight:8, color:"var(--gold)" }} />
+            Edit Reservation — {booking.guest} · Rm {booking.room}
+          </span>
+          <button onClick={onClose} style={{ background:"rgba(255,255,255,.15)", color:"#fff", border:"none", borderRadius:8, padding:"6px 11px", cursor:"pointer", fontSize:16 }}><i className="ti ti-x" /></button>
+        </div>
+
+        <div style={{ padding:"18px 20px", maxHeight:"72vh", overflowY:"auto" }}>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:14 }}>
+            <div>
+              <label style={{ fontSize:11, fontWeight:700, color:"var(--text3)", display:"block", marginBottom:5 }}>Check-in</label>
+              <DateDMY value={newCi} min={todayStr()} onChange={v => { setNewCi(v); if (new Date(newCo) <= new Date(v)) setNewCo(addDaysIso(v, 1)); }} />
+            </div>
+            <div>
+              <label style={{ fontSize:11, fontWeight:700, color:"var(--text3)", display:"block", marginBottom:5 }}>Check-out</label>
+              <DateDMY value={newCo} min={addDaysIso(newCi, 1)} onChange={setNewCo} />
+            </div>
+          </div>
+
+          {!isMulti ? (
+            <div style={{ marginBottom:14 }}>
+              <label style={{ fontSize:11, fontWeight:700, color:"var(--text3)", display:"block", marginBottom:5 }}>Room <span style={{ color:"var(--green)", fontWeight:600 }}>— only available rooms shown</span></label>
+              <select value={newRoom} onChange={e => setNewRoom(e.target.value)}
+                style={{ width:"100%", padding:"9px 10px", borderRadius:8, border:"1.5px solid var(--border)", fontSize:14, fontWeight:700, background:"var(--bg2)" }}>
+                {availRooms.map(r => (
+                  <option key={r.number} value={r.number}>{r.number}{r.name ? " — " + r.name : ""} · {r.type}</option>
+                ))}
+              </select>
+            </div>
+          ) : (
+            <div style={{ marginBottom:14, fontSize:12, color:"var(--text3)", background:"var(--bg3)", borderRadius:8, padding:"9px 12px" }}>
+              Multi-room reservation ({booking.multiRooms.map(m => m.number).join(", ")}) — dates apply to all rooms. Room numbers can't be swapped here.
+            </div>
+          )}
+
+          <div style={{ fontSize:12.5, color:"var(--text2)", marginBottom:14 }}>
+            <strong>{nights || "—"}</strong> night{nights === 1 ? "" : "s"} · new stay {newCi.split("-").reverse().join("/")} → {newCo.split("-").reverse().join("/")}
+          </div>
+
+          {conflict && (
+            <div style={{ background:"#fff1f2", border:"1.5px solid #f04444", borderRadius:9, padding:"9px 13px", marginBottom:14, color:"#a11", fontSize:12.5, fontWeight:700, display:"flex", alignItems:"center", gap:7 }}>
+              <i className="ti ti-alert-triangle" style={{ fontSize:17 }} /> That room isn't available for the selected dates. Pick another room or dates.
+            </div>
+          )}
+
+          {log.length > 0 && (
+            <div style={{ borderTop:"1px dashed var(--border)", paddingTop:12, marginBottom:6 }}>
+              <div style={{ fontSize:10.5, fontWeight:800, color:"var(--text3)", textTransform:"uppercase", letterSpacing:1, marginBottom:7 }}>
+                <i className="ti ti-history" style={{ marginRight:5 }} />Change History
+              </div>
+              {log.slice().reverse().map((c, i) => (
+                <div key={i} style={{ fontSize:11.5, color:"var(--text2)", padding:"3px 0", display:"flex", gap:6 }}>
+                  <span style={{ color:"var(--text3)", minWidth:64 }}>{formatDate(c.at)}</span>
+                  <span><strong>{c.field}:</strong> {c.field.includes("date") || c.field.includes("heck") ? formatDate(c.from) + " → " + formatDate(c.to) : c.from + " → " + c.to} <span style={{ color:"var(--text3)" }}>· by {c.by}</span></span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div style={{ display:"flex", gap:10, padding:"14px 20px", borderTop:"1px solid var(--border)", background:"var(--bg2)" }}>
+          <button onClick={onClose} style={{ flex:"0 0 auto", padding:"10px 18px", borderRadius:8, border:"1.5px solid var(--border)", background:"transparent", fontWeight:700, cursor:"pointer", fontFamily:"inherit" }}>Cancel</button>
+          <button disabled={!nights || conflict} onClick={() => onSave({ newCi, newCo, newRoom })}
+            style={{ flex:1, padding:"10px 18px", borderRadius:8, border:"none", cursor: (!nights || conflict) ? "not-allowed" : "pointer", opacity: (!nights || conflict) ? .5 : 1, fontWeight:800, fontFamily:"inherit", background:"#1a7040", color:"#fff", fontSize:14 }}>
+            <i className="ti ti-device-floppy" style={{ marginRight:6 }} />Save changes
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Desk() {
   const { curRole, curUser, rooms, bookings, revenues, expenses, expTypes, tasks, taskDone, setTaskDone, dirtyRooms, setDirtyRooms, cleaningLog, setCleaningLog, updateBookings, updateRevenues, notify, setActiveTab, setPendingInvoiceId } = useApp();
   const isMobile = useIsMobile();
@@ -972,6 +1069,7 @@ export default function Desk() {
   const [newBooking, setNewBooking] = useState(null);          // prefill for the full New Booking form
   const [confirmRes, setConfirmRes] = useState(null);          // reservation to open as invoice for check-in confirmation
   const [completeBooking, setCompleteBooking] = useState(null); // reservation being completed (prefilled form)
+  const [editResTarget, setEditResTarget] = useState(null);    // reservation being edited (dates / room)
   const [checkoutTarget, setCheckoutTarget] = useState(null);
   const [postCheckout, setPostCheckout] = useState(null);
   const [surveyBooking, setSurveyBooking] = useState(null);
@@ -1122,6 +1220,75 @@ export default function Desk() {
     notify(b.guest + " extended to " + newCheckout + (advance > 0 ? " · Advance ৳" + advance.toLocaleString() : ""), "success");
     setExtendTarget(null);
     setExpandedRow(null);
+  }
+
+  // Edit a reservation's dates / room (managers + admins). Only saves if the target room is free.
+  function handleEditReservation(b, { newCi, newCo, newRoom }) {
+    const isMulti = !!(b.isMultiRoomBooking && (b.multiRooms || []).length);
+    const nights = Math.max(1, Math.round((new Date(newCo) - new Date(newCi)) / 86400000));
+    const changes = [];
+    const stamp = { at: today, by: curUser || "staff", ts: new Date().toISOString() };
+
+    // Conflict checks (exclude this booking itself)
+    if (isMulti) {
+      for (const mr of b.multiRooms) {
+        if (bookingConflicts(mr.number, newCi, newCo, b.id, bookings)) {
+          notify(`Room ${mr.number} is not available for ${newCi.split("-").reverse().join("/")}–${newCo.split("-").reverse().join("/")}`, "error");
+          return false;
+        }
+      }
+    } else {
+      const roomNum = newRoom || b.room;
+      if (bookingConflicts(roomNum, newCi, newCo, b.id, bookings)) {
+        notify(`Room ${roomNum} is not available for those dates`, "error");
+        return false;
+      }
+    }
+
+    // Build change log entries
+    if (b.checkin !== newCi)  changes.push({ ...stamp, field: "Check-in",  from: b.checkin, to: newCi });
+    if (b.checkout !== newCo) changes.push({ ...stamp, field: "Check-out", from: b.checkout, to: newCo });
+    if (!isMulti && newRoom && String(newRoom) !== String(b.room))
+      changes.push({ ...stamp, field: "Room", from: String(b.room), to: String(newRoom) });
+
+    if (!changes.length) { notify("No changes made", "info"); return false; }
+
+    let updated;
+    if (isMulti) {
+      // Shift every room to the new common window; recompute each room's net from its own rate
+      const newRooms = b.multiRooms.map(mr => {
+        const r = rooms.find(x => String(x.number) === String(mr.number)) || {};
+        const dual = !!(r.acRate && r.nonAcRate);
+        const rate = dual ? (mr.acChoice === "AC" ? r.acRate : r.nonAcRate) : (r.rate || mr.rate || 0);
+        const gross = nights * rate;
+        const disc = Math.min(parseFloat(mr.discAmt) || 0, gross);
+        return { ...mr, checkin: newCi, checkout: newCo, rate, amount: Math.max(0, gross - disc) };
+      });
+      const newTotal = newRooms.reduce((s, r) => s + (r.amount || 0), 0);
+      updated = { ...b, checkin: newCi, checkout: newCo, nights, multiRooms: newRooms,
+        amount: newTotal, invoiceTotal: newTotal,
+        changeLog: [...(b.changeLog || []), ...changes] };
+    } else {
+      const roomNum = newRoom || b.room;
+      const r = rooms.find(x => String(x.number) === String(roomNum)) || {};
+      const dual = !!(r.acRate && r.nonAcRate);
+      const rate = dual ? (b.acChoice === "AC" ? r.acRate : r.nonAcRate) : (r.rate || b.roomRate || 0);
+      const gross = nights * rate;
+      const disc = Math.min(b.discAmt || 0, gross);
+      const newTotal = Math.max(0, gross - disc) + (b.extraPersonCharge?.total || 0);
+      updated = { ...b, checkin: newCi, checkout: newCo, nights,
+        room: String(roomNum), type: r.type || b.type, roomRate: rate,
+        baseAmount: gross, amount: newTotal, invoiceTotal: newTotal,
+        dueAmount: Math.max(0, newTotal - (parseFloat(b.advance) || 0)),
+        changeLog: [...(b.changeLog || []), ...changes] };
+    }
+
+    updateBookings(prev => prev.map(x => x.id === b.id ? updated : x));
+    void persistHotelBookingBundle(updated).catch(() => {});
+    notify("Reservation updated · " + changes.map(c => c.field).join(", ") + " changed", "success");
+    setEditResTarget(null);
+    setConfirmRes(null);
+    return true;
   }
 
   // Print invoice from Desk
@@ -1630,8 +1797,11 @@ export default function Desk() {
       {newBooking && <NewBookingModal prefill={newBooking} onClose={() => setNewBooking(null)} />}
       {confirmRes && <InvoicePreviewModal booking={confirmRes} rooms={rooms}
         onClose={() => setConfirmRes(null)}
+        onEdit={(bk) => { setConfirmRes(null); setEditResTarget(bk); }}
         onComplete={(bk) => { setConfirmRes(null); setCompleteBooking(bk); }} />}
       {completeBooking && <NewBookingModal editBooking={completeBooking} onClose={() => setCompleteBooking(null)} />}
+      {editResTarget && <EditReservationModal booking={editResTarget} rooms={rooms} bookings={bookings}
+        onClose={() => setEditResTarget(null)} onSave={(data) => handleEditReservation(editResTarget, data)} />}
       {checkoutTarget && <CheckoutModal b={checkoutTarget} onConfirm={doCheckout} onClose={() => setCheckoutTarget(null)} />}
       {extendTarget && <ExtendStayModal booking={extendTarget} rooms={rooms} onClose={() => setExtendTarget(null)} onConfirm={(data) => handleExtendStay(extendTarget, data)} />}
       {cleanTarget && <CleaningModal room={cleanTarget} info={dirtyRooms[String(cleanTarget.number)]} onClose={() => setCleanTarget(null)} onConfirm={(checklist) => markRoomClean(cleanTarget, checklist)} />}

@@ -23,7 +23,7 @@ import { logEvent } from "../utils/auditLog";
 import { persistHotelBookingBundle } from "../lib/hotelSupabase";
 import { buildInvoiceHTML, buildTCHtml, hotelPrint } from "./Invoice";
 
-export function InvoicePreviewModal({ booking, rooms, onClose, onComplete }) {
+export function InvoicePreviewModal({ booking, rooms, onClose, onComplete, onEdit }) {
   const html = buildInvoiceHTML(booking, rooms, booking.extras || [], "room");
   const isReservation = booking.status === "confirmed";
   const print = () => {
@@ -47,6 +47,12 @@ export function InvoicePreviewModal({ booking, rooms, onClose, onComplete }) {
             Invoice — {booking.guest} · Rm {booking.room}
           </span>
           <div style={{ display:"flex", gap:8 }}>
+            {isReservation && onEdit && (
+              <button onClick={() => onEdit(booking)} style={{ background:"var(--gold)", color:"#fff", border:"none",
+                borderRadius:8, padding:"7px 14px", fontWeight:800, cursor:"pointer", fontSize:13 }}>
+                <i className="ti ti-edit" style={{ marginRight:6 }} />Edit dates / room
+              </button>
+            )}
             {isReservation && onComplete && (
               <button onClick={() => onComplete(booking)} style={{ background:"#1a7040", color:"#fff", border:"none",
                 borderRadius:8, padding:"7px 18px", fontWeight:800, cursor:"pointer", fontSize:13 }}>
