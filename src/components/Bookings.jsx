@@ -604,6 +604,45 @@ export function NewBookingModal({ onClose, prefill, editBooking }) {
     return !bookingConflicts(r.number, ci, co, eb ? eb.id : null, bookings);
   });
 
+  // Booking from the room map: the room is pre-selected, so lock it (no multi-room, no room picker)
+  const lockRoom = !isEdit && !!(prefill && prefill.room);
+
+  // Real-time conflict for the selected/locked room (persistent, unlike the submit toast)
+  const roomConflict = !!(selRoom && ci && co && nights &&
+    bookingConflicts(selRoom.number, ci, co, eb ? eb.id : null, bookings));
+
+  // 30-day availability strip for the selected room — so booked/reserved days are visible in the form
+  const roomAvailStrip = useMemo(() => {
+    if (!selRoom) return [];
+    const base = new Date(today + "T00:00:00");
+    const out = [];
+    for (let i = 0; i < 30; i++) {
+      const d = new Date(base); d.setDate(base.getDate() + i);
+      const ds = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+      const nextDs = addDaysIso(ds, 1);
+      // a night is "booked" if some active booking covers [ds, nextDs)
+      const bk = bookings.find(b => {
+        if (b.status === "cancelled" || b.status === "checked-out") return false;
+        if (eb && b.id === eb.id) return false;
+        const nums = b.multiRooms && b.multiRooms.length
+          ? b.multiRooms.map(m => String(m.number))
+          : [String(b.room), ...((b.extraRooms||[]).map(r => String(r.number)))];
+        if (!nums.includes(String(selRoom.number))) return false;
+        let bci = b.checkin, bco = b.checkout;
+        if (b.multiRooms && b.multiRooms.length) {
+          const mr = b.multiRooms.find(m => String(m.number) === String(selRoom.number));
+          if (mr) { bci = mr.checkin || b.checkin; bco = mr.checkout || b.checkout; }
+        }
+        return new Date(ds) < new Date(bco) && new Date(nextDs) > new Date(bci);
+      });
+      const state = bk ? (bk.status === "checked-in" ? "occupied" : "reserved") : "free";
+      // is this night within the currently-selected stay?
+      const inStay = !!(ci && co && new Date(ds) >= new Date(ci) && new Date(ds) < new Date(co));
+      out.push({ ds, dnum: d.getDate(), wd: d.toLocaleDateString("en-GB",{weekday:"short"}).slice(0,2), state, inStay, isToday: ds === today });
+    }
+    return out;
+  }, [selRoom, bookings, ci, co, today, eb]);
+
   function handlePhotoUpload(idx, side, files) {
     const fileArr = Array.from(files || []);
     if (!fileArr.length) return;
@@ -843,8 +882,8 @@ export function NewBookingModal({ onClose, prefill, editBooking }) {
           </div>
         )}
 
-        {/* ── BOOKING MODE TOGGLE ── */}
-        <div style={{ display:"flex", gap:0, marginBottom:14, borderRadius:10, overflow:"hidden", border:"2px solid var(--navy)" }}>
+        {/* ── BOOKING MODE TOGGLE (hidden when booking from the room map) ── */}
+        {!lockRoom && <div style={{ display:"flex", gap:0, marginBottom:14, borderRadius:10, overflow:"hidden", border:"2px solid var(--navy)" }}>
           {[["single","🛏  Single Room"],["multi","🛏🛏  Multiple Rooms"]].map(([mode,label]) => (
             <button key={mode} type="button" onClick={() => setBookingMode(mode)} style={{
               flex:1, padding:"12px 0", border:"none", cursor:"pointer",
@@ -853,7 +892,7 @@ export function NewBookingModal({ onClose, prefill, editBooking }) {
               color: bookingMode===mode ? "#fff" : "var(--text2)",
             }}>{label}</button>
           ))}
-        </div>
+        </div>}
 
         <div style={{ display:"flex", flexDirection:"column", gap:0 }}>
 
@@ -892,6 +931,16 @@ export function NewBookingModal({ onClose, prefill, editBooking }) {
                 <i className="ti ti-calendar" style={{ marginRight:6 }} />Set check-in and check-out dates first
               </div>
             ) : (<>
+              {lockRoom ? (
+                <div style={{ marginBottom:10, display:"flex", alignItems:"center", gap:10, background:"var(--bg3)", border:"2px solid var(--navy)", borderRadius:10, padding:"12px 16px" }}>
+                  <i className="ti ti-bed" style={{ fontSize:22, color:"var(--navy)" }} />
+                  <div>
+                    <div style={{ fontSize:18, fontWeight:900, color:"var(--navy)", lineHeight:1.1 }}>Room {selRoom?.number}</div>
+                    <div style={{ fontSize:12, color:"var(--text3)" }}>{selRoom?.name ? selRoom.name+" · " : ""}{selRoom?.type}{selRoom?.acRate&&selRoom?.nonAcRate?" · AC ৳"+selRoom.acRate+" / Non-AC ৳"+selRoom.nonAcRate:selRoom?" · ৳"+(selRoom.rate||0).toLocaleString()+"/night":""}</div>
+                  </div>
+                  <span style={{ marginLeft:"auto", fontSize:11, fontWeight:700, color:"var(--green)" }}>from room map</span>
+                </div>
+              ) : (
               <div className="form-group" style={{ marginBottom:10 }}>
                 <label>Room * <span style={{ color:"var(--green)", fontSize:11, fontWeight:600 }}>— showing available rooms for selected dates</span></label>
                 <select value={room} onChange={e=>{ setRoom(e.target.value); setAcChoice("AC"); }} style={{ fontWeight:700 }}>
@@ -903,6 +952,41 @@ export function NewBookingModal({ onClose, prefill, editBooking }) {
                   ))}
                 </select>
               </div>
+              )}
+              {/* Availability strip — shows which nights this room is booked / reserved / free */}
+              {selRoom && (
+                <div style={{ marginBottom:12 }}>
+                  <div style={{ display:"flex", gap:14, fontSize:10.5, color:"var(--text3)", marginBottom:5, flexWrap:"wrap" }}>
+                    <span><span style={{ display:"inline-block", width:9, height:9, borderRadius:2, background:"#E24B4A", marginRight:4, verticalAlign:"middle" }} />Occupied</span>
+                    <span><span style={{ display:"inline-block", width:9, height:9, borderRadius:2, background:"#7F77DD", marginRight:4, verticalAlign:"middle" }} />Reserved</span>
+                    <span><span style={{ display:"inline-block", width:9, height:9, borderRadius:2, background:"#fff", border:"1px solid #ccc", marginRight:4, verticalAlign:"middle" }} />Free</span>
+                    <span><span style={{ display:"inline-block", width:9, height:9, borderRadius:2, background:"#c9a84c", marginRight:4, verticalAlign:"middle" }} />Your stay</span>
+                  </div>
+                  <div style={{ display:"flex", gap:3, overflowX:"auto", paddingBottom:4 }}>
+                    {roomAvailStrip.map(c => {
+                      const bg = c.state==="occupied" ? "#E24B4A" : c.state==="reserved" ? "#7F77DD" : "#fff";
+                      const fg = c.state==="free" ? "#555" : "#fff";
+                      return (
+                        <div key={c.ds} title={c.ds+" — "+c.state} style={{
+                          minWidth:30, textAlign:"center", borderRadius:6, padding:"4px 0",
+                          background:bg, color:fg,
+                          border: c.inStay ? "2px solid #c9a84c" : (c.state==="free" ? "1px solid #ddd" : "1px solid transparent"),
+                          boxShadow: c.isToday ? "inset 0 0 0 1.5px var(--navy)" : "none",
+                        }}>
+                          <div style={{ fontSize:8.5, opacity:.8, lineHeight:1 }}>{c.wd}</div>
+                          <div style={{ fontSize:12, fontWeight:800, lineHeight:1.2 }}>{c.dnum}</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+              {roomConflict && (
+                <div style={{ background:"#fff1f2", border:"1.5px solid #f04444", borderRadius:10, padding:"10px 14px", marginBottom:10, display:"flex", alignItems:"center", gap:8, color:"#a11", fontSize:12.5, fontWeight:700 }}>
+                  <i className="ti ti-alert-triangle" style={{ fontSize:18 }} />
+                  Room {selRoom?.number} is already booked/reserved for {ci?.split("-").reverse().join("/")} – {co?.split("-").reverse().join("/")}. Pick different dates.
+                </div>
+              )}
               {isDual && (
                 <div className="form-group" style={{ marginBottom:10 }}>
                   <label><i className="ti ti-wind" style={{ color:"var(--navy)", marginRight:4 }} />AC or Non-AC? *</label>
