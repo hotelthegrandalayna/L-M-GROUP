@@ -511,6 +511,26 @@ export default function AdminInvoices() {
     return [...set].sort().reverse();
   }, [bookings]);
 
+  // Detect the same stay recorded more than once (same guest + room + check-in).
+  // These are real duplicate rows from an earlier id mismatch. Read-only — it only
+  // groups them so you can see both and delete the wrong one yourself.
+  const duplicateGroups = useMemo(() => {
+    const groups = new Map();
+    bookings.forEach(b => {
+      if (!b || !b.guest || b.status === "cancelled") return;
+      const key = [String(b.guest).trim().toLowerCase(), String(b.room || ""), b.checkin || ""].join("|");
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(b);
+    });
+    // Only groups with more than one record are duplicates. Within each, mark the
+    // one to KEEP (latest check-out, then most paid) so the choice is obvious.
+    return [...groups.values()].filter(g => g.length > 1).map(g => {
+      const sorted = [...g].sort((a, b) =>
+        (b.checkout || "").localeCompare(a.checkout || "") || (calcPaid(b) - calcPaid(a)));
+      return { keep: sorted[0], list: sorted };
+    });
+  }, [bookings]);
+
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
     return bookings.filter(bk => {
@@ -695,6 +715,41 @@ export default function AdminInvoices() {
               <button onClick={() => setSelectedMonths([])} style={{ fontSize: 12, color: "var(--text3)", background: "none", border: "none", cursor: "pointer" }}>✕ Clear</button>
             )}
           </div>
+        </div>
+      )}
+
+      {/* Possible duplicate invoices — read-only finder */}
+      {duplicateGroups.length > 0 && (
+        <div style={{ border: "2px solid #e0a800", borderRadius: 10, background: "#fffbea", padding: "14px 16px", marginBottom: 16 }}>
+          <div style={{ fontSize: 14, fontWeight: 800, color: "#8a5a00", marginBottom: 4 }}>
+            <i className="ti ti-alert-triangle" style={{ marginRight: 6 }} />Possible duplicate invoices ({duplicateGroups.length})
+          </div>
+          <div style={{ fontSize: 12, color: "#7a5c00", marginBottom: 12 }}>
+            The same stay appears to be recorded more than once. Keep the correct copy (marked <strong>KEEP</strong> — the latest check-out / most paid) and delete the others. Nothing is removed until you confirm with the admin password.
+          </div>
+          {duplicateGroups.map((grp, gi) => (
+            <div key={gi} style={{ border: "1px solid #e8d48a", borderRadius: 8, background: "#fff", padding: "8px 10px", marginBottom: 10 }}>
+              {grp.list.map(b => {
+                const isKeep = b === grp.keep;
+                return (
+                  <div key={b.id} style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", padding: "7px 4px", borderBottom: "1px solid #f0ecdc" }}>
+                    <span style={{ fontSize: 10, fontWeight: 800, padding: "2px 8px", borderRadius: 10, background: isKeep ? "#d1fae5" : "#fee2e2", color: isKeep ? "#065f46" : "#991b1b" }}>
+                      {isKeep ? "KEEP" : "DUPLICATE"}
+                    </span>
+                    <span style={{ fontSize: 12.5 }}>
+                      <strong>{b.guest}</strong> · Rm {b.room} · {fmtDate(b.checkin)} → {fmtDate(b.checkout)} · {b.nights || "?"}n · {fmtMoney(b.invoiceTotal ?? b.amount)} · paid {fmtMoney(calcPaid(b))} · <span style={{ textTransform: "capitalize" }}>{b.status}</span> <span style={{ color: "var(--text3)", fontSize: 10 }}>#{b.id}</span>
+                    </span>
+                    <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
+                      <button onClick={() => setDetail(b)} style={{ padding: "4px 10px", borderRadius: 6, border: "1.5px solid var(--border)", background: "#fff", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>View</button>
+                      {!isKeep && (
+                        <button onClick={() => { setDeleteTarget(b); setDelPw(""); }} style={{ padding: "4px 10px", borderRadius: 6, border: "1.5px solid #fca5a5", background: "#fee2e2", color: "#991b1b", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>Delete this duplicate</button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ))}
         </div>
       )}
 
