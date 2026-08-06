@@ -465,7 +465,7 @@ function SMSSendModal({ booking, refName, refPhone, status, onClose }) {
   );
 }
 
-function NewBookingModal({ onClose, prefill, editBooking }) {
+export function NewBookingModal({ onClose, prefill, editBooking }) {
   const { curUser, rooms, bookings, updateBookings, revenues, updateRevenues, notify, extraPersonRules } = useApp();
   const today = todayStr();
   const yesterday = addDaysIso(today, -1);
@@ -493,8 +493,8 @@ function NewBookingModal({ onClose, prefill, editBooking }) {
         : [{ idType:"", idNum:"", front:[], back:[] }]
   );
   // Stay
-  const [room,     setRoom]     = useState(eb ? String(eb.room || "") : "");
-  const [acChoice, setAcChoice] = useState(eb ? (eb.acChoice || "AC") : "AC");
+  const [room,     setRoom]     = useState(eb ? String(eb.room || "") : (prefill?.room ? String(prefill.room) : ""));
+  const [acChoice, setAcChoice] = useState(eb ? (eb.acChoice || "AC") : (prefill?.acChoice || "AC"));
   const [ci,       setCi]       = useState(eb ? (eb.checkin || today) : (prefill?.ci || today));
   const [co,       setCo]       = useState(eb ? (eb.checkout || tmr) : (prefill?.co || tmr));
   // Extra rooms (multi-room booking)

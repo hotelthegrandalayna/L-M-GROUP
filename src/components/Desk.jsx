@@ -3,6 +3,7 @@ import { useApp } from "../context/AppContext";
 import useIsMobile from "../hall/useIsMobile";
 import { todayStr, money, bookingConflicts, getRoomDisplayStatus, bookingCoversRoom, roomBookingWindow, maxId, formatDate } from "../utils/helpers";
 import { buildInvoiceHTML, buildTCHtml, hotelPrint } from "./Invoice";
+import { NewBookingModal } from "./Bookings";
 import { sendNtfyAlert } from "../utils/ntfy";
 import { hotelBusinessOnly } from "../utils/expenseType";
 import { pendingTasks, freqLabel } from "../utils/tasks";
@@ -93,7 +94,7 @@ function getHotelDue(b) {
   return Math.max(0, total - paid);
 }
 
-function RoomModal({ room, onClose, onCheckout, onExtend, onCollect, onService, onInvoice }) {
+function RoomModal({ room, onClose, onCheckout, onExtend, onCollect, onService, onInvoice, onNewBooking }) {
   const { curUser, curRole, bookings, updateBookings, revenues, updateRevenues, notify, setActiveTab, setPendingCompleteId } = useApp();
   const today = todayStr();
 
@@ -415,11 +416,16 @@ function RoomModal({ room, onClose, onCheckout, onExtend, onCollect, onService, 
 
         {!bIn && !bRes && (<>
           {future.length > 0 && <><div style={{ fontSize:10, fontWeight:800, color:"var(--text3)", textTransform:"uppercase", marginBottom:6 }}>Upcoming Reservations</div>{future.map(b => <FRow key={b.id} b={b} />)}<div style={{ borderTop:"1px dashed var(--border)", margin:"12px 0 10px" }} /></>}
-          <div style={{ fontSize:11, fontWeight:800, color:"var(--text3)", textTransform:"uppercase", marginBottom:12 }}>New Reservation</div>
+          {/* Full new booking — opens the existing booking form with this room pre-filled */}
+          <button className="rm-act" style={{ ...actBtn("#1a7040","#0d3d22"), width:"100%", marginBottom:14, padding:"12px" }}
+            onClick={() => onNewBooking && onNewBooking({ room: room.number, ci: today, co: addDaysIso(today, 1), acChoice: isDual ? acChoice : undefined })}>
+            <i className="ti ti-calendar-plus" /> New booking — full details
+          </button>
+          <div style={{ fontSize:11, fontWeight:800, color:"var(--text3)", textTransform:"uppercase", marginBottom:12 }}>Or quick reserve (name + phone)</div>
           {qrForm()}
           <div className="modal-actions">
             <button className="btn" onClick={onClose}>Cancel</button>
-            <button className="btn primary" onClick={doRes}><i className="ti ti-calendar-check" /> Reserve Room</button>
+            <button className="btn primary" onClick={doRes}><i className="ti ti-calendar-check" /> Quick reserve</button>
           </div>
         </>)}
       </div>
@@ -964,6 +970,7 @@ export default function Desk() {
   const { curRole, curUser, rooms, bookings, revenues, expenses, expTypes, tasks, taskDone, setTaskDone, dirtyRooms, setDirtyRooms, cleaningLog, setCleaningLog, updateBookings, updateRevenues, notify, setActiveTab, setPendingInvoiceId } = useApp();
   const isMobile = useIsMobile();
   const [sel, setSel] = useState(null);
+  const [newBooking, setNewBooking] = useState(null);          // prefill for the full New Booking form
   const [checkoutTarget, setCheckoutTarget] = useState(null);
   const [postCheckout, setPostCheckout] = useState(null);
   const [surveyBooking, setSurveyBooking] = useState(null);
@@ -1311,8 +1318,12 @@ export default function Desk() {
         {/* Left: Room map + In-House below */}
         <div style={{ minWidth:0 }}>
           {/* Room map */}
-          <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:9 }}>
+          <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:9, flexWrap:"wrap" }}>
             <span style={{ fontSize:10, fontWeight:800, color:"var(--text3)", textTransform:"uppercase", letterSpacing:.8 }}>Room Map</span>
+            <button className="rm-act" style={{ ...actBtn("#1a7040","#0d3d22"), fontSize:11.5, padding:"7px 13px" }}
+              onClick={() => setNewBooking({ ci: todayStr(), co: addDaysIso(todayStr(), 1) })}>
+              <i className="ti ti-plus" /> New booking
+            </button>
             <div style={{ display:"flex", gap:10, marginLeft:"auto" }}>
               {[["#5AA82F","Vacant"],["#E24B4A","Occupied"],["#7F77DD","Reserved"],["#E0A400","Cleaning"]].map(([c,l])=>(
                 <span key={l} style={{ display:"flex", alignItems:"center", gap:5, fontSize:10, color:"var(--text3)", fontWeight:600 }}>
@@ -1663,7 +1674,9 @@ export default function Desk() {
         onExtend={(b) => { setSel(null); setExtendTarget(b); }}
         onCollect={(b) => { setSel(null); setCollectTarget(b); }}
         onService={(b) => { setSel(null); setServiceTarget(b); }}
-        onInvoice={(b) => { setSel(null); setInvoiceTarget(b); }} />}
+        onInvoice={(b) => { setSel(null); setInvoiceTarget(b); }}
+        onNewBooking={(prefill) => { setSel(null); setNewBooking(prefill); }} />}
+      {newBooking && <NewBookingModal prefill={newBooking} onClose={() => setNewBooking(null)} />}
       {checkoutTarget && <CheckoutModal b={checkoutTarget} onConfirm={doCheckout} onClose={() => setCheckoutTarget(null)} />}
       {extendTarget && <ExtendStayModal booking={extendTarget} rooms={rooms} onClose={() => setExtendTarget(null)} onConfirm={(data) => handleExtendStay(extendTarget, data)} />}
       {cleanTarget && <CleaningModal room={cleanTarget} info={dirtyRooms[String(cleanTarget.number)]} onClose={() => setCleanTarget(null)} onConfirm={(checklist) => markRoomClean(cleanTarget, checklist)} />}
