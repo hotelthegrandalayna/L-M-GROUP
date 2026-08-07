@@ -88,15 +88,47 @@ function legacyExtensionsFromPayments(b) {
     .filter(e => e.billed > 0 && e.month);
 }
 
-// Split one booking into monthly parts per RULE 1: base stay → check-in month,
-// each extension → its extra-night month. Payments are allocated base-first, then
-// to extensions in order, so `collected` lands in the same month as the money owed.
+function addDaysLocal(iso, k) {
+  const d = new Date(iso + "T00:00:00");
+  d.setDate(d.getDate() + k);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+// How many nights of a stay fall in each month, e.g. Jul 31 → Aug 2 = {2026-07:1, 2026-08:1}
+function nightsByMonth(ciIso, coIso) {
+  const out = new Map();
+  if (!ciIso) return { map: out, nights: 0 };
+  const nights = Math.max(0, Math.round((new Date(coIso + "T00:00:00") - new Date(ciIso + "T00:00:00")) / 86400000));
+  for (let i = 0; i < nights; i++) {
+    const m = addDaysLocal(ciIso, i).slice(0, 7);
+    out.set(m, (out.get(m) || 0) + 1);
+  }
+  return { map: out, nights };
+}
+
+// Split one booking into monthly parts per RULE 1 — MONEY FOLLOWS THE NIGHT STAYED.
+// A stay that crosses a month boundary is split night by night: a guest who checks
+// in Jul 31 and leaves Aug 2 puts the Jul-31 night in July and the Aug-1 night in
+// August. Recorded extensions keep their own exact amount and month.
 export function bookingMonthlyParts(b) {
   const logged = (b.extensions || []).map(e => ({ billed: parseFloat(e.amount) || 0, month: extensionMonth(e, b) }));
   const exts = logged.length ? logged : legacyExtensionsFromPayments(b);
   const extTotal = exts.reduce((s, e) => s + e.billed, 0);
   const baseBilled = Math.max(0, bookingTotal(b) - extTotal);
-  const parts = [{ month: bookingMonth(b), billed: baseBilled }, ...exts];
+
+  // The base stay ends where the first recorded extension begins (if any)
+  const extFrom = logged.length
+    ? (b.extensions || []).map(e => e.from).filter(Boolean).sort()[0]
+    : null;
+  const baseCi = b.checkin;
+  const baseCo = extFrom || b.checkout;
+
+  const { map: nm, nights } = nightsByMonth(baseCi, baseCo);
+  const baseParts = nights > 0
+    ? [...nm.entries()].map(([month, n]) => ({ month, billed: baseBilled * n / nights }))
+    : [{ month: bookingMonth(b), billed: baseBilled }];
+
+  const parts = [...baseParts, ...exts];
   let paid = bookingPaid(b);
   parts.forEach(p => { const c = Math.min(paid, p.billed); p.collected = c; paid -= c; });
   // MONEY IS NEVER DROPPED. Anything paid beyond the room invoice (service charges
