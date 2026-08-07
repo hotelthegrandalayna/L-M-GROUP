@@ -52,7 +52,20 @@ export function buildInvoiceHTML(b, rooms, invExtras, mode) {
     ? Math.max(0, Math.round(primaryAmount - netPrimaryRoom))
     : 0;
   const disc        = storedDisc || inferredDisc;
-  const allRoomsTotal = primaryAmount + extraRoomsOnly;
+  // Each extra room's GROSS (before its own discount). The line items show gross and
+  // then each room's discount, so the arithmetic adds up: sum(gross) − total discount
+  // = the invoice total. Using the already-discounted net here would subtract the
+  // extra rooms' discounts twice and make the sub-total disagree with the total.
+  const extraRoomGross = er => {
+    if (er.grossAmt != null) return er.grossAmt;
+    if (er.rate != null) return er.rate * (b.nights || 1);
+    return (er.amount || 0) + (er.discAmt || 0);
+  };
+  const extraRoomsGrossTotal = (b.extraRooms || []).reduce((s, r) => s + extraRoomGross(r), 0);
+  const extraRoomsDisc       = (b.extraRooms || []).reduce((s, r) => s + (r.discAmt || 0), 0);
+  // The primary room's own share of the discount (total discount minus the extras')
+  const primaryDisc = Math.max(0, disc - extraRoomsDisc);
+  const allRoomsTotal = primaryAmount + extraRoomsGrossTotal;
   const roomTotal   = Math.max(0, allRoomsTotal - disc);
   const grandTotal  = Math.max(roomTotal + combinedExtras, b.invoiceTotal ?? b.amount ?? 0);
   const advance     = b.advance || 0;
@@ -155,9 +168,15 @@ export function buildInvoiceHTML(b, rooms, invExtras, mode) {
     + '<th style="'+thS+'text-align:right;">Amount (\u09F3)</th>'
     + '</tr></thead>';
 
-  const discLabel = b.discReason ? "Discount — " + b.discReason : "Discount";
-  const dRow = disc > 0
-    ? '<tr style="background:#fffbf5;"><td style="padding:7px 10px;border-bottom:1px solid #eee;color:#B7770D;font-size:10px;">—</td><td style="padding:7px 10px;border-bottom:1px solid #eee;color:#B7770D;font-size:10px;">'+discLabel+'</td><td colspan="2" style="border-bottom:1px solid #eee;"></td><td style="padding:7px 10px;border-bottom:1px solid #eee;text-align:right;color:#B7770D;font-weight:700;font-size:10px;">-'+moneyH(disc)+'</td></tr>'
+  // With extra rooms each room shows its OWN discount line, so this row carries only
+  // the primary room's share — otherwise the extras' discounts would be counted twice.
+  const hasExtraRooms = (b.extraRooms || []).length > 0;
+  const dRowAmount = hasExtraRooms ? primaryDisc : disc;
+  const discLabel = hasExtraRooms
+    ? "Discount — Rm " + b.room
+    : (b.discReason ? "Discount — " + b.discReason : "Discount");
+  const dRow = dRowAmount > 0
+    ? '<tr style="background:#fffbf5;"><td style="padding:7px 10px;border-bottom:1px solid #eee;color:#B7770D;font-size:10px;">—</td><td style="padding:7px 10px;border-bottom:1px solid #eee;color:#B7770D;font-size:10px;">'+discLabel+'</td><td colspan="2" style="border-bottom:1px solid #eee;"></td><td style="padding:7px 10px;border-bottom:1px solid #eee;text-align:right;color:#B7770D;font-weight:700;font-size:10px;">-'+moneyH(dRowAmount)+'</td></tr>'
     : "";
 
   const roomRow = '<tr>'
@@ -196,13 +215,19 @@ export function buildInvoiceHTML(b, rooms, invExtras, mode) {
   const extraRoomsList = b.extraRooms || [];
   const extraRoomRows = extraRoomsList.map(er => {
     const erName = er.name ? ` — ${er.name}` : "";
-    return '<tr>'
+    const erGross = extraRoomGross(er);
+    const erDisc  = er.discAmt || 0;
+    const row = '<tr>'
       + '<td style="padding:9px 10px;border-bottom:1px solid #eee;color:#555;font-size:11px;">'+fmtDate(b.checkin)+'</td>'
       + '<td style="padding:9px 10px;border-bottom:1px solid #eee;color:#111;font-size:11px;font-weight:500;">Room '+er.number+erName+' — Accommodation ('+b.nights+' Night'+(b.nights>1?'s':'')+')'+(er.acChoice?' ['+er.acChoice+']':'')+'</td>'
       + '<td style="padding:9px 10px;border-bottom:1px solid #eee;text-align:center;color:#333;font-size:11px;">'+b.nights+'</td>'
       + '<td style="padding:9px 10px;border-bottom:1px solid #ddd;text-align:right;color:#333;font-size:11px;">'+moneyH(er.rate)+'</td>'
-      + '<td style="padding:9px 10px;border-bottom:1px solid #ddd;text-align:right;color:#000;font-weight:700;font-size:12px;">'+moneyH(er.amount)+'</td>'
+      + '<td style="padding:9px 10px;border-bottom:1px solid #ddd;text-align:right;color:#000;font-weight:700;font-size:12px;">'+moneyH(erGross)+'</td>'
       + '</tr>';
+    const discRow = erDisc > 0
+      ? '<tr style="background:#fffbf5;"><td style="padding:7px 10px;border-bottom:1px solid #eee;color:#B7770D;font-size:10px;">—</td><td style="padding:7px 10px;border-bottom:1px solid #eee;color:#B7770D;font-size:10px;">Discount — Rm '+er.number+'</td><td colspan="2" style="border-bottom:1px solid #eee;"></td><td style="padding:7px 10px;border-bottom:1px solid #eee;text-align:right;color:#B7770D;font-weight:700;font-size:10px;">-'+moneyH(erDisc)+'</td></tr>'
+      : "";
+    return row + discRow;
   }).join("");
   const extraRoomsTotal = extraRoomsList.reduce((s,r) => s+(r.amount||0), 0);
 

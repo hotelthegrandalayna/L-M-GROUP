@@ -86,6 +86,37 @@ function shortDate(iso) {
   return d.getDate() + " " + d.toLocaleDateString("en-GB", { month: "short" });
 }
 
+// Per-room money breakdown for a booking that covers more than one room.
+// Handles BOTH shapes — `multiRooms` and primary + `extraRooms` — and treats every
+// room equally (no "primary room" in the display). Returns [] for a single room.
+function roomShares(b) {
+  if (!b) return [];
+  const nights = b.nights || 1;
+  if (b.isMultiRoomBooking && (b.multiRooms || []).length) {
+    return b.multiRooms.map(r => ({
+      number: String(r.number),
+      name: r.name || "",
+      amount: r.amount ?? r.net ?? Math.max(0, (r.grossAmt ?? (r.rate || 0) * (r.nights || nights)) - (r.discAmt || 0)),
+    }));
+  }
+  const extras = b.extraRooms || [];
+  if (!extras.length) return [];
+  const extrasDisc = extras.reduce((s, r) => s + (r.discAmt || 0), 0);
+  const primaryDisc = Math.max(0, (b.discAmt || 0) - extrasDisc);
+  const primaryGross = (b.roomRate || 0) * nights;
+  const primaryNet = primaryGross > 0
+    ? Math.max(0, primaryGross - primaryDisc)
+    : Math.max(0, (b.invoiceTotal ?? b.amount ?? 0) - extras.reduce((s, r) => s + (r.amount || 0), 0));
+  return [
+    { number: String(b.room), name: b.roomName || "", amount: primaryNet },
+    ...extras.map(r => ({
+      number: String(r.number),
+      name: r.name || "",
+      amount: r.amount ?? Math.max(0, (r.grossAmt ?? (r.rate || 0) * nights) - (r.discAmt || 0)),
+    })),
+  ];
+}
+
 function getHotelDue(b) {
   if (!b) return 0;
   // invoiceTotal is always the net payable (discount already baked in at booking creation).
@@ -364,6 +395,29 @@ function RoomModal({ room, onClose, onCheckout, onExtend, onCollect, onService, 
               ))}
             </div>
             <div style={{ background:"#fff", borderRadius:8, padding:"9px 11px", marginTop:11 }}>
+              {(() => {
+                const shares = roomShares(bIn);
+                if (shares.length < 2) return null;
+                return (
+                  <div style={{ marginBottom:7, paddingBottom:7, borderBottom:"1px dashed var(--border)" }}>
+                    <div style={{ fontSize:10, fontWeight:700, color:"var(--text3)", textTransform:"uppercase", letterSpacing:.6, marginBottom:5 }}>
+                      This booking covers {shares.length} rooms
+                    </div>
+                    {shares.map(s => (
+                      <div key={s.number} style={{ display:"flex", justifyContent:"space-between", fontSize:12, padding:"2px 0" }}>
+                        <span style={{ color: String(s.number) === String(room.number) ? "var(--navy)" : "var(--text2)", fontWeight: String(s.number) === String(room.number) ? 700 : 400 }}>
+                          Room {s.number}{s.name ? " — " + s.name : ""}{String(s.number) === String(room.number) ? " (this room)" : ""}
+                        </span>
+                        <span style={{ fontWeight:700 }}>{money(s.amount)}</span>
+                      </div>
+                    ))}
+                    <div style={{ display:"flex", justifyContent:"space-between", fontSize:12, padding:"4px 0 0", marginTop:3, borderTop:"1px solid var(--border)" }}>
+                      <span style={{ color:"var(--text3)" }}>Together</span>
+                      <span style={{ fontWeight:800 }}>{money(shares.reduce((s, r) => s + r.amount, 0))}</span>
+                    </div>
+                  </div>
+                );
+              })()}
               <div style={{ display:"flex", justifyContent:"space-between", fontSize:12, padding:"2px 0" }}><span style={{ color:"var(--text3)" }}>{extSum > 0 ? "Original stay" : "Room total"}</span><span style={{ fontWeight:700 }}>{money(origTotal)}</span></div>
               {extSum > 0 && <div style={{ display:"flex", justifyContent:"space-between", fontSize:12, padding:"2px 0", color:"#332b7a" }}><span>Extended +{extNights} night{extNights>1?"s":""}</span><span style={{ fontWeight:700 }}>+{money(extSum)}</span></div>}
               <div style={{ display:"flex", justifyContent:"space-between", fontSize:13, padding:"5px 0 2px", marginTop:3, borderTop:"1px solid var(--border)", fontWeight:800 }}><span>Total</span><span>{money(totalNow)}</span></div>
