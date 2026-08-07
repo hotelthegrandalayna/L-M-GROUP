@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { useApp } from "../../context/AppContext";
+import { useApp, gaRecordDeleted } from "../../context/AppContext";
 import { checkAdminPassword } from "../../utils/auth";
 import { deleteHotelBooking, deleteHotelBookings, loadHotelGuestImages, persistHotelBookingBundle } from "../../lib/hotelSupabase";
 import { useMonthBookings, monthMoney } from "../../lib/hotelMoney";
@@ -721,6 +721,8 @@ export default function AdminInvoices() {
       ids.push(String(sbId), String(target.id));
       localStorage.setItem('ga_deleted_booking_ids', JSON.stringify([...new Set(ids)]));
     } catch {}
+    // Cross-device tombstone so it stays deleted on every device, not just this one
+    gaRecordDeleted('bkg', sbId); gaRecordDeleted('bkg', target.id);
     void deleteHotelBooking(sbId, target.guest_id).catch(err => console.error("Supabase delete failed:", err));
   }
 
@@ -741,6 +743,8 @@ export default function AdminInvoices() {
       const merged = [...new Set([...existing, ...sbIds.map(String), ...localIds.map(String)])];
       localStorage.setItem('ga_deleted_booking_ids', JSON.stringify(merged));
     } catch {}
+    // Cross-device tombstones so these stay deleted on every device
+    [...sbIds, ...localIds].forEach(id => gaRecordDeleted('bkg', id));
     const guestIds = toDelete.map(b => b.guest_id).filter(Boolean);
     void deleteHotelBookings(sbIds, guestIds).catch(err => console.error("Supabase bulk delete failed:", err));
   }

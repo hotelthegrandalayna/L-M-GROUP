@@ -81,15 +81,50 @@ const AppContext = createContext(null);
 // ── Hotel deleted-ID ledger — a record deleted here can never be re-pushed
 // from a stale cache on this or another sync cycle (prevents resurrection).
 const GA_DELETED_KEY = 'ga_deleted_ids_v1';
+const CLOUD_DELETED_KEY = 'hotel_deleted_ids'; // cross-device tombstones (app_config)
 export function gaLoadDeleted() {
   try { return JSON.parse(localStorage.getItem(GA_DELETED_KEY) || '{}'); } catch { return {}; }
 }
+// Record a deletion so it stays deleted EVERYWHERE: locally, and as a cloud
+// tombstone every device honors on sync. kind: 'bkg' | 'rev' | 'exp'.
 export function gaRecordDeleted(kind, id) {
+  const sid = String(id);
   try {
     const m = gaLoadDeleted();
-    m[kind] = [...new Set([...(m[kind] || []), String(id)])].slice(-500);
+    m[kind] = [...new Set([...(m[kind] || []), sid])].slice(-2000);
     localStorage.setItem(GA_DELETED_KEY, JSON.stringify(m));
+    // Bookings are also honored via the legacy list used by the booking merges
+    if (kind === 'bkg') {
+      const legacy = JSON.parse(localStorage.getItem('ga_deleted_booking_ids') || '[]');
+      localStorage.setItem('ga_deleted_booking_ids', JSON.stringify([...new Set([...legacy, sid])]));
+    }
   } catch {}
+  // Cloud tombstone — merge then save so other devices delete it too (fire-and-forget)
+  if (hasSupabase()) {
+    loadConfig(CLOUD_DELETED_KEY).then(cur => {
+      const m = cur && typeof cur === 'object' ? cur : {};
+      m[kind] = [...new Set([...(m[kind] || []), sid])].slice(-4000);
+      return saveConfig(CLOUD_DELETED_KEY, m);
+    }).catch(() => {});
+  }
+}
+
+// Pull cloud tombstones into the local deleted sets so this device honors deletions
+// made on other devices. Returns the cloud tombstone map (or null).
+export async function gaSyncDeletedFromCloud() {
+  if (!hasSupabase()) return null;
+  const cloud = await loadConfig(CLOUD_DELETED_KEY).catch(() => null);
+  if (!cloud || typeof cloud !== 'object') return null;
+  try {
+    const local = gaLoadDeleted();
+    ['bkg', 'rev', 'exp'].forEach(k => {
+      local[k] = [...new Set([...(local[k] || []), ...((cloud[k] || []).map(String))])];
+    });
+    localStorage.setItem(GA_DELETED_KEY, JSON.stringify(local));
+    const legacy = JSON.parse(localStorage.getItem('ga_deleted_booking_ids') || '[]');
+    localStorage.setItem('ga_deleted_booking_ids', JSON.stringify([...new Set([...legacy, ...(local.bkg || [])])]));
+  } catch {}
+  return cloud;
 }
 
 export function AppProvider({ children }) {
@@ -204,6 +239,10 @@ export function AppProvider({ children }) {
   const syncFromSupabase = useCallback((opts = {}) => {
     if (!hasHotelSupabaseConfig()) return;
     const { silent = true } = opts;
+
+    // Pull cross-device deletion tombstones FIRST, so the merges below honor
+    // deletions made on other devices (delete once → gone everywhere).
+    gaSyncDeletedFromCloud().catch(() => {});
 
     // Always sync ntfy config so notifications work from any device
     syncNtfyConfigFromSupabase().catch(() => {});
