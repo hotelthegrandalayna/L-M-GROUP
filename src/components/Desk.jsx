@@ -1494,16 +1494,16 @@ export default function Desk() {
             { label:"This Month Cost",   value:money(mExp),     sub:"month to date",                icon:"ti-receipt",       color:"var(--red2)" },
             { label:"This Month Profit", value:money(mRev-mExp), sub:"month to date",               icon:"ti-trending-up",   color:(mRev-mExp)>=0?"var(--green)":"var(--red2)" },
           ] : []),
-        ].map(s => (
-          <div key={s.label} onClick={s.onClick} style={{ background:"var(--bg2)", border:"1.5px solid var(--border)", borderRadius:10, padding:(curRole==="admin"&&!isMobile)?"7px 9px":"9px 12px", display:"flex", alignItems:"center", gap:(curRole==="admin"&&!isMobile)?6:9, cursor:s.onClick?"pointer":"default" }}>
-            <i className={"ti "+s.icon} style={{ fontSize:(curRole==="admin"&&!isMobile)?16:19, color:s.color, flexShrink:0 }} />
-            <div style={{ minWidth:0 }}>
-              <div style={{ fontSize:(curRole==="admin"&&!isMobile)?12:14, fontWeight:800, color:s.color, lineHeight:1.1 }}>{s.value}</div>
-              <div style={{ fontSize:8, color:"var(--text3)", fontWeight:600, textTransform:"uppercase", letterSpacing:.5, marginTop:2 }}>{s.label}</div>
-              <div style={{ fontSize:7.5, color:"var(--text3)", marginTop:1 }}>{s.sub}</div>
-            </div>
+        ].map(s => {
+          const vc = /Revenue|Profit/.test(s.label) ? "var(--green)" : /Cost|Balance/.test(s.label) ? "var(--red2)" : "var(--text)";
+          return (
+          <div key={s.label} onClick={s.onClick} style={{ background:"var(--bg2)", border:"1px solid var(--border)", borderRadius:12, padding:"11px 13px", cursor:s.onClick?"pointer":"default" }}>
+            <div style={{ fontSize:9, color:"var(--text3)", fontWeight:600, textTransform:"uppercase", letterSpacing:.7 }}>{s.label}</div>
+            <div style={{ fontSize:(curRole==="admin"&&!isMobile)?16:18, fontWeight:600, color:vc, lineHeight:1.15, marginTop:3, fontVariantNumeric:"tabular-nums" }}>{s.value}</div>
+            <div style={{ fontSize:9, color:"var(--text3)", marginTop:2 }}>{s.sub}</div>
           </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* ── Front-desk strip: the common tabs, side by side, right above the room map ── */}
@@ -1513,55 +1513,55 @@ export default function Desk() {
           { title:"Today's Departures", icon:"ti-logout",        list:departures, color:"var(--red2)",  bg:"var(--red-bg)" },
           { title:"Today's Extensions", icon:"ti-calendar-plus", list:extensions, color:"#7a4dd6",      bg:"#efe9fb" },
         ].map(sec => (
-          <div className="panel" key={sec.title} style={{ margin:0 }}>
-            <div className="panel-header" style={{ padding:"9px 12px" }}>
-              <div className="panel-title" style={{ fontSize:12.5, gap:7, minWidth:0, flex:1, alignItems:"center" }}>
-                <i className={"ti "+sec.icon} style={{ color:sec.color, flexShrink:0 }} />
-                <span style={{ fontWeight:800, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{sec.title}</span>
-                <span style={{ marginLeft:"auto", flexShrink:0, background:sec.bg, color:sec.color, fontWeight:800, fontSize:11, padding:"2px 9px", borderRadius:9 }}>{sec.list.reduce((n,b)=>n+roomsOf(b).length,0)}</span>
+          <div className="panel" key={sec.title} style={{ margin:0, border:"1px solid var(--border)", borderRadius:12 }}>
+            <div className="panel-header" style={{ padding:"11px 13px" }}>
+              <div className="panel-title" style={{ fontSize:12, gap:8, minWidth:0, flex:1, alignItems:"center" }}>
+                <span style={{ width:24, height:24, borderRadius:7, background:sec.bg, display:"inline-flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}><i className={"ti "+sec.icon} style={{ color:sec.color, fontSize:14 }} /></span>
+                <span style={{ fontWeight:600, fontSize:10.5, letterSpacing:.8, textTransform:"uppercase", color:"var(--text2)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{sec.title}</span>
+                <span style={{ marginLeft:"auto", flexShrink:0, background:sec.bg, color:sec.color, fontWeight:600, fontSize:10.5, padding:"1px 8px", borderRadius:20 }}>{sec.list.reduce((n,b)=>n+roomsOf(b).length,0)}</span>
               </div>
             </div>
             {sec.list.length ? (
-              <div style={{ display:"flex", flexWrap:"wrap", gap:6, padding:"10px 12px" }}>
+              <div style={{ display:"flex", flexWrap:"wrap", gap:6, padding:"4px 13px 12px" }}>
                 {sec.list.flatMap(b => roomsOf(b).map(rm => (
-                  <span key={b.id+"-"+rm} style={{ minWidth:36, textAlign:"center", background:sec.bg, color:sec.color, border:"1.5px solid "+sec.color, borderRadius:9, padding:"5px 10px", fontWeight:900, fontSize:14, lineHeight:1 }}>{rm}</span>
+                  <span key={b.id+"-"+rm} style={{ minWidth:36, textAlign:"center", background:"var(--bg2)", color:sec.color, border:"1px solid "+sec.color, borderRadius:8, padding:"5px 10px", fontWeight:600, fontSize:14, lineHeight:1, fontVariantNumeric:"tabular-nums" }}>{rm}</span>
                 )))}
               </div>
             ) : (
-              <div style={{ color:"var(--text3)", fontSize:11.5, textAlign:"center", padding:"12px 4px" }}>None today</div>
+              <div style={{ color:"var(--text3)", fontSize:11.5, textAlign:"center", padding:"6px 4px 14px" }}>None today</div>
             )}
           </div>
         ))}
 
         {/* Upcoming Reservations — room + arrival date; call-to-confirm folded in */}
-        <div className="panel" style={{ margin:0, ...(toConfirm.length ? { border:"2px solid var(--gold2)" } : {}) }}>
-          <div className="panel-header" style={{ padding:"9px 12px" }}>
-            <div className="panel-title" style={{ fontSize:12.5, gap:7, minWidth:0, flex:1, alignItems:"center" }}>
-              <i className="ti ti-calendar-event" style={{ color:"#2a7ab8", flexShrink:0 }} />
-              <span style={{ fontWeight:800, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>Upcoming</span>
-              <span style={{ marginLeft:"auto", flexShrink:0, background:"#e4f0fa", color:"#2a7ab8", fontWeight:800, fontSize:11, padding:"2px 9px", borderRadius:9 }}>{upcoming.reduce((n,b)=>n+roomsOf(b).length,0)}</span>
+        <div className="panel" style={{ margin:0, borderRadius:12, border:"1px solid "+(toConfirm.length ? "var(--gold2)" : "var(--border)") }}>
+          <div className="panel-header" style={{ padding:"11px 13px" }}>
+            <div className="panel-title" style={{ fontSize:12, gap:8, minWidth:0, flex:1, alignItems:"center" }}>
+              <span style={{ width:24, height:24, borderRadius:7, background:"#eef2f7", display:"inline-flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}><i className="ti ti-calendar-event" style={{ color:"#3a6ea5", fontSize:14 }} /></span>
+              <span style={{ fontWeight:600, fontSize:10.5, letterSpacing:.8, textTransform:"uppercase", color:"var(--text2)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>Upcoming</span>
+              <span style={{ marginLeft:"auto", flexShrink:0, background:"#eef2f7", color:"#3a6ea5", fontWeight:600, fontSize:10.5, padding:"1px 8px", borderRadius:20 }}>{upcoming.reduce((n,b)=>n+roomsOf(b).length,0)}</span>
             </div>
           </div>
           {toConfirm.length > 0 && (
-            <div style={{ background:"#fff8e6", borderBottom:"1px solid var(--gold2)", padding:"6px 12px", fontSize:11, fontWeight:800, color:"#8a6200", display:"flex", alignItems:"center", gap:6 }}>
+            <div style={{ background:"#fbf6e7", borderTop:"1px solid var(--border)", borderBottom:"1px solid var(--border)", padding:"7px 13px", fontSize:10.5, fontWeight:600, color:"#8a6200", display:"flex", alignItems:"center", gap:6, letterSpacing:.3 }}>
               <i className="ti ti-phone-call" style={{ fontSize:14 }} /> Call to confirm — arriving tomorrow
             </div>
           )}
           {upcoming.length ? (
-            <div style={{ display:"flex", flexWrap:"wrap", gap:6, padding:"10px 12px" }}>
+            <div style={{ display:"flex", flexWrap:"wrap", gap:6, padding:"4px 13px 12px" }}>
               {upcoming.flatMap(b => {
                 const soon = b.checkin === tomorrowStr;
                 return roomsOf(b).map(rm => (
                   <button key={b.id+"-"+rm} type="button" title={(b.guest || "")+" — click to confirm check-in"} onClick={() => setConfirmRes(b)}
-                    style={{ display:"inline-flex", flexDirection:"column", alignItems:"center", gap:1, minWidth:44, cursor:"pointer", fontFamily:"inherit", background: soon ? "#fff8e6" : "#e4f0fa", color: soon ? "#8a6200" : "#2a7ab8", border:"1.5px solid "+(soon ? "var(--gold2)" : "#2a7ab8"), borderRadius:9, padding:"5px 10px", lineHeight:1.1 }}>
-                    <span style={{ fontWeight:900, fontSize:14 }}>{rm}</span>
-                    <span style={{ fontSize:9.5, fontWeight:700, opacity:.9 }}>{shortDate(roomBookingWindow(b, rm).checkin)}</span>
+                    style={{ display:"inline-flex", flexDirection:"column", alignItems:"center", gap:1, minWidth:44, cursor:"pointer", fontFamily:"inherit", background:"var(--bg2)", color: soon ? "#8a6200" : "#3a6ea5", border:"1px solid "+(soon ? "var(--gold2)" : "#3a6ea5"), borderRadius:8, padding:"5px 10px", lineHeight:1.15 }}>
+                    <span style={{ fontWeight:600, fontSize:14, fontVariantNumeric:"tabular-nums" }}>{rm}</span>
+                    <span style={{ fontSize:9.5, fontWeight:500, color:"var(--text3)" }}>{shortDate(roomBookingWindow(b, rm).checkin)}</span>
                   </button>
                 ));
               })}
             </div>
           ) : (
-            <div style={{ color:"var(--text3)", fontSize:11.5, textAlign:"center", padding:"12px 4px" }}>None</div>
+            <div style={{ color:"var(--text3)", fontSize:11.5, textAlign:"center", padding:"6px 4px 14px" }}>None</div>
           )}
         </div>
       </div>
@@ -1571,7 +1571,7 @@ export default function Desk() {
         <div>
           {/* Room map */}
           <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:9, flexWrap:"wrap" }}>
-            <span style={{ fontSize:10, fontWeight:800, color:"var(--text3)", textTransform:"uppercase", letterSpacing:.8 }}>Room Map</span>
+            <span style={{ fontSize:10.5, fontWeight:600, color:"var(--text2)", textTransform:"uppercase", letterSpacing:1 }}>Room Map</span>
             <div style={{ display:"flex", gap:10, marginLeft:"auto" }}>
               {[["#5AA82F","Vacant"],["#E24B4A","Occupied"],["#7F77DD","Reserved"],["#E0A400","Cleaning"]].map(([c,l])=>(
                 <span key={l} style={{ display:"flex", alignItems:"center", gap:5, fontSize:10, color:"var(--text3)", fontWeight:600 }}>
@@ -1660,9 +1660,9 @@ export default function Desk() {
           <div className={pendingT.length ? (pendingT.some(p=>p.overdue) ? "task-flash-red" : "task-flash-gold") : ""}
             style={{ background:"#fff", border:`2px solid ${pendingT.some(p=>p.overdue)?"var(--red2)":(pendingT.length?"var(--gold2)":"#86EFB0")}`, borderRadius:14, padding:"14px 16px", marginTop:14 }}>
             <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8, marginBottom:pendingT.length?12:0 }}>
-              <div style={{ fontSize:16, fontWeight:900, color:"var(--navy)", display:"flex", alignItems:"center", gap:8 }}>
-                <i className="ti ti-checklist" style={{ color:"var(--gold2)", fontSize:20 }} /> Today's Tasks
-                <span style={{ background:pendingT.length?"var(--red-bg)":"var(--green-bg)", color:pendingT.length?"var(--red2)":"var(--green)", fontWeight:800, fontSize:12, padding:"2px 10px", borderRadius:10 }}>{pendingT.length ? `${pendingT.length} to do` : "All done"}</span>
+              <div style={{ fontSize:15, fontWeight:600, color:"var(--navy)", display:"flex", alignItems:"center", gap:9 }}>
+                <span style={{ width:26, height:26, borderRadius:8, background:"var(--bg3)", display:"inline-flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}><i className="ti ti-checklist" style={{ color:"var(--gold2)", fontSize:16 }} /></span> Today's Tasks
+                <span style={{ background:pendingT.length?"var(--red-bg)":"var(--green-bg)", color:pendingT.length?"var(--red2)":"var(--green)", fontWeight:600, fontSize:11, padding:"1px 9px", borderRadius:20 }}>{pendingT.length ? `${pendingT.length} to do` : "All done"}</span>
               </div>
               <button onClick={()=>setActiveTab("tasks")} style={{ fontSize:12, fontWeight:700, background:"transparent", border:"1.5px solid var(--border)", borderRadius:8, padding:"6px 12px", color:"var(--navy)", cursor:"pointer" }}>Open all ▸</button>
             </div>
@@ -1685,24 +1685,28 @@ export default function Desk() {
         </div>
 
         {/* Below the map: less-used panels in a row (off the main scroll path) */}
-        <div style={{ display:"grid", gridTemplateColumns:isMobile ? "minmax(0,1fr)" : "repeat(3,minmax(0,1fr))", gap:10, marginTop:14, alignItems:"start" }}>
+        <div style={{ display:"grid", gridTemplateColumns:isMobile ? "minmax(0,1fr)" : "repeat(3,minmax(0,1fr))", gap:12, marginTop:14, alignItems:"stretch" }}>
 
           {/* Pending Balances */}
           {pendingBal.length > 0 && (
-            <div className="panel">
-              <div className="panel-header" style={{ padding:"9px 12px" }}>
-                <div className="panel-title" style={{ fontSize:12 }}>
-                  <i className="ti ti-alert-circle" style={{ color:"var(--red2)" }} /> Pending Balances
-                  <span style={{ marginLeft:6, background:"var(--red-bg)", color:"var(--red2)", fontWeight:800, fontSize:10, padding:"1px 7px", borderRadius:8 }}>{pendingBal.length}</span>
+            <div className="panel" style={{ margin:0, border:"1px solid var(--border)", borderRadius:12 }}>
+              <div className="panel-header" style={{ padding:"12px 14px" }}>
+                <div className="panel-title" style={{ fontSize:12, gap:8, alignItems:"center" }}>
+                  <span style={{ width:24, height:24, borderRadius:7, background:"var(--red-bg)", display:"inline-flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}><i className="ti ti-alert-circle" style={{ color:"var(--red2)", fontSize:14 }} /></span>
+                  <span style={{ fontWeight:600, fontSize:10.5, letterSpacing:.8, textTransform:"uppercase", color:"var(--text2)" }}>Pending Balances</span>
+                  <span style={{ marginLeft:"auto", background:"var(--red-bg)", color:"var(--red2)", fontWeight:600, fontSize:10.5, padding:"1px 8px", borderRadius:20 }}>{pendingBal.length}</span>
                 </div>
               </div>
               {pendingBal.slice(0,5).map(b => (
-                <div key={b.id} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"7px 12px", borderBottom:"1px solid var(--border)", fontSize:12 }}>
-                  <div>
-                    <div style={{ fontWeight:700 }}>{b.guest} <span style={{ fontSize:10, color:"var(--text3)", fontWeight:400 }}>Rm {b.room}</span></div>
-                    <div style={{ fontSize:10, color:"var(--text3)", textTransform:"capitalize" }}>{b.status}</div>
+                <div key={b.id} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:10, padding:"9px 14px", borderTop:"1px solid var(--border)", fontSize:12 }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:9, minWidth:0 }}>
+                    <span style={{ width:28, height:28, borderRadius:"50%", background:"var(--bg3)", display:"inline-flex", alignItems:"center", justifyContent:"center", fontSize:10, fontWeight:600, color:"var(--text2)", flexShrink:0 }}>{(b.guest||"?").split(" ").map(w=>w[0]).slice(0,2).join("").toUpperCase()}</span>
+                    <div style={{ minWidth:0 }}>
+                      <div style={{ fontWeight:600, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{b.guest}</div>
+                      <div style={{ fontSize:10, color:"var(--text3)", textTransform:"capitalize" }}>Room {b.room} · {b.status}</div>
+                    </div>
                   </div>
-                  <div style={{ fontWeight:800, color:"var(--red2)", fontSize:13 }}>{money(b.due)}</div>
+                  <div style={{ fontWeight:600, color:"var(--red2)", fontSize:13, fontVariantNumeric:"tabular-nums", flexShrink:0 }}>{money(b.due)}</div>
                 </div>
               ))}
             </div>
@@ -1718,22 +1722,25 @@ export default function Desk() {
             const minDate = addDaysIso(today, -30);
             const canBack = pnlDate > minDate;
             return (
-              <div className="panel">
-                <div className="panel-header" style={{ padding:"9px 12px", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-                  <div className="panel-title" style={{ fontSize:12 }}><i className="ti ti-chart-pie" style={{ color:"var(--gold2)" }} /> {isToday ? "Today P&L" : "Day P&L"}</div>
-                  <div style={{ display:"flex", alignItems:"center", gap:4, background:"var(--bg3)", borderRadius:8, padding:"2px 4px" }}>
+              <div className="panel" style={{ margin:0, border:"1px solid var(--border)", borderRadius:12 }}>
+                <div className="panel-header" style={{ padding:"12px 14px", display:"flex", alignItems:"center", justifyContent:"space-between", gap:8 }}>
+                  <div className="panel-title" style={{ fontSize:12, gap:8, alignItems:"center", minWidth:0 }}>
+                    <span style={{ width:24, height:24, borderRadius:7, background:"var(--bg3)", display:"inline-flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}><i className="ti ti-chart-pie" style={{ color:"var(--gold2)", fontSize:14 }} /></span>
+                    <span style={{ fontWeight:600, fontSize:10.5, letterSpacing:.8, textTransform:"uppercase", color:"var(--text2)" }}>{isToday ? "Today P&L" : "Day P&L"}</span>
+                  </div>
+                  <div style={{ display:"flex", alignItems:"center", gap:2, background:"var(--bg3)", borderRadius:8, padding:"2px 3px", flexShrink:0 }}>
                     <button type="button" disabled={!canBack} onClick={() => canBack && setPnlDate(addDaysIso(pnlDate,-1))}
-                      style={{ background:"none", border:"none", cursor:canBack?"pointer":"default", opacity:canBack?1:.3, color:"var(--text2)", padding:"2px 4px", lineHeight:1 }}><i className="ti ti-chevron-left" style={{ fontSize:16 }} /></button>
-                    <span style={{ fontSize:11.5, fontWeight:800, minWidth:44, textAlign:"center", color:"var(--text)" }}>{isToday ? "Today" : shortDate(pnlDate)}</span>
+                      style={{ background:"none", border:"none", cursor:canBack?"pointer":"default", opacity:canBack?1:.3, color:"var(--text2)", padding:"2px 4px", lineHeight:1 }}><i className="ti ti-chevron-left" style={{ fontSize:15 }} /></button>
+                    <span style={{ fontSize:11, fontWeight:600, minWidth:42, textAlign:"center", color:"var(--text)" }}>{isToday ? "Today" : shortDate(pnlDate)}</span>
                     <button type="button" disabled={isToday} onClick={() => !isToday && setPnlDate(addDaysIso(pnlDate,1))}
-                      style={{ background:"none", border:"none", cursor:isToday?"default":"pointer", opacity:isToday?.3:1, color:"var(--text2)", padding:"2px 4px", lineHeight:1 }}><i className="ti ti-chevron-right" style={{ fontSize:16 }} /></button>
+                      style={{ background:"none", border:"none", cursor:isToday?"default":"pointer", opacity:isToday?.3:1, color:"var(--text2)", padding:"2px 4px", lineHeight:1 }}><i className="ti ti-chevron-right" style={{ fontSize:15 }} /></button>
                   </div>
                 </div>
                 <div style={{ padding:"5px 12px 8px" }}>
                   {/* Revenue row */}
                   <div onClick={() => setPnlRevOpen(o=>!o)} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"6px 0", fontSize:12.5, cursor:"pointer" }}>
                     <span style={{ color:"var(--text2)", display:"flex", alignItems:"center", gap:4 }}><i className={"ti "+(pnlRevOpen?"ti-chevron-down":"ti-chevron-right")} style={{ fontSize:14, color:pnlRevOpen?"var(--green)":"var(--text3)" }} /> Revenue</span>
-                    <span style={{ fontWeight:800, color:"var(--green)" }}>{money(pRevTot)}</span>
+                    <span style={{ fontWeight:600, color:"var(--green)", fontVariantNumeric:"tabular-nums" }}>{money(pRevTot)}</span>
                   </div>
                   {pnlRevOpen && (
                     <div style={{ background:"#f7faf7", borderRadius:8, padding:"2px 10px", marginBottom:4 }}>
@@ -1751,7 +1758,7 @@ export default function Desk() {
                   {/* Expenses row */}
                   <div onClick={() => setPnlExpOpen(o=>!o)} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"6px 0", fontSize:12.5, cursor:"pointer", borderTop:"1px solid var(--border)", borderBottom:"1.5px solid var(--border)" }}>
                     <span style={{ color:"var(--text2)", display:"flex", alignItems:"center", gap:4 }}><i className={"ti "+(pnlExpOpen?"ti-chevron-down":"ti-chevron-right")} style={{ fontSize:14, color:pnlExpOpen?"var(--red2)":"var(--text3)" }} /> Expenses</span>
-                    <span style={{ fontWeight:800, color:"var(--red)" }}>{money(pExpTot)}</span>
+                    <span style={{ fontWeight:600, color:"var(--red)", fontVariantNumeric:"tabular-nums" }}>{money(pExpTot)}</span>
                   </div>
                   {pnlExpOpen && (
                     <div style={{ background:"#fdf6f5", borderRadius:8, padding:"2px 10px", margin:"4px 0" }}>
@@ -1766,7 +1773,7 @@ export default function Desk() {
                       )) : <div style={{ color:"var(--text3)", fontSize:11.5, textAlign:"center", padding:"8px 0" }}>No expenses this day</div>}
                     </div>
                   )}
-                  <div style={{ display:"flex", justifyContent:"space-between", padding:"8px 0 1px", fontSize:14, fontWeight:800 }}><span>Net</span><span style={{ color:pRevTot-pExpTot>=0?"var(--green)":"var(--red2)" }}>{money(pRevTot-pExpTot)}</span></div>
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"9px 0 1px", marginTop:5, borderTop:"1.5px solid var(--border)", fontSize:14, fontWeight:600 }}><span>Net</span><span style={{ color:pRevTot-pExpTot>=0?"var(--green)":"var(--red2)", fontSize:16, fontVariantNumeric:"tabular-nums" }}>{money(pRevTot-pExpTot)}</span></div>
                 </div>
               </div>
             );
@@ -1774,19 +1781,22 @@ export default function Desk() {
 
           {/* Cleaning log — admin oversight of who cleaned which room, when */}
           {curRole === "admin" && (
-            <div className="panel">
-              <div className="panel-header" style={{ padding:"9px 12px" }}>
-                <div className="panel-title" style={{ fontSize:12 }}><i className="ti ti-spray" style={{ color:"#CA8A04" }} /> Cleaning Log</div>
+            <div className="panel" style={{ margin:0, border:"1px solid var(--border)", borderRadius:12 }}>
+              <div className="panel-header" style={{ padding:"12px 14px" }}>
+                <div className="panel-title" style={{ fontSize:12, gap:8, alignItems:"center" }}>
+                  <span style={{ width:24, height:24, borderRadius:7, background:"var(--bg3)", display:"inline-flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}><i className="ti ti-spray" style={{ color:"#a6832c", fontSize:14 }} /></span>
+                  <span style={{ fontWeight:600, fontSize:10.5, letterSpacing:.8, textTransform:"uppercase", color:"var(--text2)" }}>Cleaning Log</span>
+                </div>
               </div>
               {(!cleaningLog || cleaningLog.length === 0) ? (
-                <div style={{ color:"var(--text3)", fontSize:12, textAlign:"center", padding:"10px 0" }}>No cleanings recorded yet</div>
+                <div style={{ color:"var(--text3)", fontSize:12, textAlign:"center", padding:"12px 0" }}>No cleanings recorded yet</div>
               ) : [...cleaningLog].slice(-6).reverse().map((c,i) => (
-                <div key={i} style={{ padding:"7px 12px", borderBottom:"1px solid var(--border)", fontSize:11.5 }}>
+                <div key={i} style={{ padding:"9px 14px", borderTop:"1px solid var(--border)", fontSize:11.5 }}>
                   <div style={{ display:"flex", justifyContent:"space-between" }}>
-                    <span style={{ fontWeight:800 }}>Room {c.room}</span>
+                    <span style={{ fontWeight:600 }}>Room {c.room}</span>
                     <span style={{ color:"var(--text3)" }}>{c.at ? new Date(c.at).toLocaleString("en-GB",{ day:"2-digit", month:"short", hour:"2-digit", minute:"2-digit" }) : ""}</span>
                   </div>
-                  <div style={{ color:"var(--text3)", marginTop:1 }}>by {c.by} · {(c.checklist||[]).length}/6 items</div>
+                  <div style={{ color:"var(--text3)", marginTop:2 }}>by {c.by} · {(c.checklist||[]).length}/6 items</div>
                 </div>
               ))}
             </div>
