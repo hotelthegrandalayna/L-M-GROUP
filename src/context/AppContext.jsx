@@ -326,6 +326,9 @@ export function AppProvider({ children }) {
             extrasAdvance:    l.extrasAdvance != null  ? l.extrasAdvance  : (sb.extrasAdvance  || 0),
             paymentHistory:   (Array.isArray(l.paymentHistory) && l.paymentHistory.length) ? l.paymentHistory : (Array.isArray(sb.paymentHistory) ? sb.paymentHistory : []),
             extraPersonCharge: l.extraPersonCharge || sb.extraPersonCharge || null,
+            // Extension log has no Supabase column — always restore from local, or the
+            // month-split rule loses track of which nights were an extension.
+            extensions:       (Array.isArray(l.extensions) && l.extensions.length) ? l.extensions : (Array.isArray(sb.extensions) ? sb.extensions : []),
             invoiceDate:      l.invoiceDate    || sb.invoiceDate    || "",
             tcPrinted:        l.tcPrinted      || sb.tcPrinted      || false,
             guestType:        l.guestType      || sb.guestType      || comp?.guestType || "single",
