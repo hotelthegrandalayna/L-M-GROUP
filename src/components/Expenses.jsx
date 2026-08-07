@@ -2,6 +2,7 @@ import { useState, useMemo, useRef, useEffect } from "react";
 import { useApp } from "../context/AppContext";
 import { todayStr, money } from "../utils/helpers";
 import { loadHotelBookingsForMonth, hasHotelSupabaseConfig } from "../lib/hotelSupabase";
+import { monthMoney } from "../lib/hotelMoney";
 import { deleteRow, hasSupabase } from "../utils/supabaseSync";
 import { gaRecordDeleted } from "../context/AppContext";
 import { hotelExpenseType } from "../utils/expenseType";
@@ -149,15 +150,14 @@ export default function Expenses() {
     return entries;
   }, [revBookings, revenues]);
 
-  // ── Row 1: billing — Collected matches Desk "This Month Revenue" exactly ─────
+  // ── Row 1: billing — single source of truth (check-in / stay month basis) ────
+  // Uses the shared hotelMoney helper so this matches Admin Invoices, Admin
+  // Finance and the Desk to the taka. revBookings is the COMPLETE month.
   const { monthBilled, monthRevenue, monthOutstanding } = useMemo(() => {
     const m = filterMonth || thisMonth;
-    const collected = allRevEntries.filter(r => r.date && r.date.startsWith(m)).reduce((s,r) => s+r.amount, 0);
-    const outstanding = revBookings
-      .filter(b => b.status !== "cancelled" && (b.checkin||"").startsWith(m))
-      .reduce((s,b) => s + getHotelDue(b), 0);
-    return { monthBilled: collected + outstanding, monthRevenue: collected, monthOutstanding: outstanding };
-  }, [allRevEntries, revBookings, filterMonth, thisMonth]);
+    const mm = monthMoney({ bookings: revBookings, revenues, month: m });
+    return { monthBilled: mm.billed, monthRevenue: mm.collected, monthOutstanding: mm.outstanding };
+  }, [revBookings, revenues, filterMonth, thisMonth]);
 
   // ── Expense stats ─────────────────────────────────────────────────────────────
   const { businessTotal, nonBusinessTotal } = useMemo(() => {

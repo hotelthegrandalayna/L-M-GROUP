@@ -3,6 +3,7 @@ import { useApp } from "../../context/AppContext";
 import { money, todayStr, maxId } from "../../utils/helpers";
 import { checkAdminPassword } from "../../utils/auth";
 import { hotelBusinessOnly } from "../../utils/expenseType";
+import { monthMoney } from "../../lib/hotelMoney";
 
 const REV_SOURCES = ["Room Rent","Food & Beverage","Laundry","Parking","Other"];
 
@@ -68,8 +69,11 @@ export default function AdminFinance() {
 
   // Profit maths use business expenses only — non-business transfers excluded
   const bizExpenses = hotelBusinessOnly(expenses, expTypes || {});
-  const mRev = allRevenues.filter(r=>r.date?.startsWith(thisMonth)).reduce((s,r)=>s+r.amount,0);
-  const mExp = bizExpenses.filter(e=>e.date?.startsWith(thisMonth)).reduce((s,e)=>s+e.amount,0);
+  // Headline monthly figures come from the shared source of truth (check-in / stay
+  // month basis) so Admin Finance matches Admin Invoices, Expenses & Cash and Desk.
+  const mMoney = useMemo(() => monthMoney({ bookings, revenues, expenses: bizExpenses, month: thisMonth }), [bookings, revenues, bizExpenses, thisMonth]);
+  const mRev = mMoney.collected;
+  const mExp = mMoney.expenses;
   const allRev = allRevenues.reduce((s,r)=>s+r.amount,0);
   const allExp = bizExpenses.reduce((s,e)=>s+e.amount,0);
   const todayRev = allRevenues.filter(r=>r.date===today).reduce((s,r)=>s+r.amount,0);
@@ -93,8 +97,13 @@ export default function AdminFinance() {
 
   const bySource = useMemo(()=>{
     const map={};
-    allRevenues.filter(r=>r.date?.startsWith(thisMonth)).forEach(r=>{ map[r.source]=(map[r.source]||0)+r.amount; });
-    return Object.entries(map).sort((a,b)=>b[1]-a[1]);
+    // Cash basis, consistent with the headline: manual revenues by their own source,
+    // and everything else (room bookings) is the remaining collected cash = Room Rent.
+    const manualThisMonth = revenues.filter(r => !r.bookingId && !r.fromBooking && (r.date||"").startsWith(thisMonth));
+    manualThisMonth.forEach(r => { map[r.source||"Other"] = (map[r.source||"Other"]||0) + (r.amount||0); });
+    const manualTotal = manualThisMonth.reduce((s,r)=>s+(r.amount||0),0);
+    map["Room Rent"] = (map["Room Rent"]||0) + (mMoney.collected - manualTotal);
+    return Object.entries(map).filter(([,v])=>v).sort((a,b)=>b[1]-a[1]);
   },[allRevenues,thisMonth]);
 
   // ── Last 6 months ──

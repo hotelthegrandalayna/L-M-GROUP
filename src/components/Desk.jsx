@@ -4,6 +4,7 @@ import useIsMobile from "../hall/useIsMobile";
 import { todayStr, money, bookingConflicts, getRoomDisplayStatus, bookingCoversRoom, roomBookingWindow, maxId, formatDate } from "../utils/helpers";
 import { buildInvoiceHTML, buildTCHtml, hotelPrint } from "./Invoice";
 import { NewBookingModal, InvoicePreviewModal } from "./Bookings";
+import { monthMoney } from "../lib/hotelMoney";
 import { sendNtfyAlert } from "../utils/ntfy";
 import { hotelBusinessOnly } from "../utils/expenseType";
 import { pendingTasks, freqLabel } from "../utils/tasks";
@@ -1144,8 +1145,11 @@ export default function Desk() {
   const thisMonth = today.slice(0, 7); // "YYYY-MM"
   const tRev  = allRevEntries.reduce((s,r) => s+r.amount, 0);
   const tExp  = bizExpenses.reduce((s,e) => s+e.amount, 0);
-  const mRev  = allRevEntries.filter(r => r.date && r.date.startsWith(thisMonth)).reduce((s,r) => s+r.amount, 0);
-  const mExp  = bizExpenses.filter(e => e.date && e.date.startsWith(thisMonth)).reduce((s,e) => s+e.amount, 0);
+  // Month figures from the shared source of truth (check-in / stay basis) so the
+  // Desk KPIs match Admin Invoices, Admin Finance and Expenses & Cash exactly.
+  const mMoney = monthMoney({ bookings, revenues, expenses: bizExpenses, month: thisMonth });
+  const mRev  = mMoney.collected;
+  const mExp  = mMoney.expenses;
   const inhouse    = bookings.filter(b => b.status === "checked-in");
   const arrivals   = bookings.filter(b => b.checkin === today && (b.status === "confirmed" || b.status === "checked-in"));
   const departures = bookings.filter(b => b.checkout === today && b.status === "checked-in");

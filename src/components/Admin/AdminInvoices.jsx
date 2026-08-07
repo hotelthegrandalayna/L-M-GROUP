@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from "react";
 import { useApp } from "../../context/AppContext";
 import { checkAdminPassword } from "../../utils/auth";
 import { deleteHotelBooking, deleteHotelBookings, loadHotelGuestImages, persistHotelBookingBundle } from "../../lib/hotelSupabase";
+import { useMonthBookings, monthMoney } from "../../lib/hotelMoney";
 import { logEvent } from "../../utils/auditLog";
 
 const STATUS_OPTS = ["All", "checked-in", "reserved", "checked-out", "cancelled"];
@@ -594,7 +595,7 @@ function InvoiceDetail({ bk, onClose }) {
 
 // ── Main component ────────────────────────────────────────────────────────────
 export default function AdminInvoices() {
-  const { bookings, updateBookings, notify } = useApp();
+  const { bookings, updateBookings, notify, revenues } = useApp();
 
   const [search,         setSearch]         = useState("");
   const [filterMonth,    setFilterMonth]    = useState("");
@@ -607,10 +608,14 @@ export default function AdminInvoices() {
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false); // bulk delete modal
   const [delPw,          setDelPw]          = useState("");
 
+  // Complete set of bookings for the selected month (live + on-demand cloud fetch
+  // for past months), so totals never shrink as old bookings age out of memory.
+  const { bookings: srcBookings, loading: loadingMonth } = useMonthBookings(filterMonth, bookings);
+
   const allMonths = useMemo(() => {
-    const set = new Set(bookings.map(getBookingMonth).filter(Boolean));
+    const set = new Set(srcBookings.map(getBookingMonth).filter(Boolean));
     return [...set].sort().reverse();
-  }, [bookings]);
+  }, [srcBookings]);
 
   // Detect the same stay recorded more than once (same guest + room + check-in).
   // These are real duplicate rows from an earlier id mismatch. Read-only — it only
@@ -634,7 +639,7 @@ export default function AdminInvoices() {
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
-    return bookings.filter(bk => {
+    return srcBookings.filter(bk => {
       if (filterStatus !== "All" && bk.status !== filterStatus) return false;
       if (filterMonth && getBookingMonth(bk) !== filterMonth) return false;
       if (filterRoom && !String(bk.room || "").toLowerCase().includes(filterRoom.toLowerCase())) return false;
@@ -646,14 +651,20 @@ export default function AdminInvoices() {
       )) return false;
       return true;
     }).sort((a, b) => (b.checkin || b.createdAt || "") > (a.checkin || a.createdAt || "") ? 1 : -1);
-  }, [bookings, search, filterStatus, filterMonth, filterRoom]);
+  }, [srcBookings, search, filterStatus, filterMonth, filterRoom]);
 
   const totals = useMemo(() => {
+    // For a whole selected month (no manual row-selection), show the canonical cash
+    // figures from the shared source of truth so this matches Desk / Finance / Expenses.
+    if (selectedIds.size === 0 && filterMonth) {
+      const mm = monthMoney({ bookings: srcBookings, revenues, month: filterMonth });
+      return { total: mm.billed, paid: mm.collected, balance: mm.outstanding };
+    }
     const rows = selectedIds.size > 0 ? filtered.filter(b => selectedIds.has(b.id)) : filtered;
     const paid  = rows.reduce((s, bk) => s + calcPaid(bk), 0);
     const total = rows.reduce((s, bk) => s + (bk.invoiceTotal ?? bk.amount ?? 0), 0);
     return { total, paid, balance: Math.max(0, total - paid) };
-  }, [filtered, selectedIds]);
+  }, [filtered, selectedIds, filterMonth, srcBookings, revenues]);
 
   const selCount   = filtered.filter(b => selectedIds.has(b.id)).length;
   const allChecked = filtered.length > 0 && filtered.every(b => selectedIds.has(b.id));
@@ -672,7 +683,7 @@ export default function AdminInvoices() {
 
   function getDownloadRows() {
     if (selCount > 0) return filtered.filter(b => selectedIds.has(b.id));
-    if (selectedMonths.length > 0) return bookings.filter(bk => selectedMonths.includes(getBookingMonth(bk)));
+    if (selectedMonths.length > 0) return srcBookings.filter(bk => selectedMonths.includes(getBookingMonth(bk)));
     return filtered;
   }
 
