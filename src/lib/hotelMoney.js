@@ -24,6 +24,33 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { useEffect, useMemo, useState } from "react";
 import { hasHotelSupabaseConfig, loadHotelBookingsForMonth } from "./hotelSupabase";
+import { saveConfig, loadConfig } from "../utils/supabaseSync";
+
+// ── RULE 2: month locking ────────────────────────────────────────────────────
+// A locked month is frozen: its saved figures are the official record and never
+// move again, even if bookings are later edited. Stored cross-device in app_config.
+const LOCKS_KEY = "hotel_month_locks";
+
+export async function loadMonthLocks() {
+  try { const v = await loadConfig(LOCKS_KEY); return (v && typeof v === "object") ? v : {}; }
+  catch { return {}; }
+}
+export async function saveMonthLock(month, figures, by) {
+  const cur = await loadMonthLocks();
+  cur[month] = {
+    billed: figures.billed, collected: figures.collected, outstanding: figures.outstanding,
+    expenses: figures.expenses, netProfit: figures.netProfit,
+    lockedAt: new Date().toISOString(), lockedBy: by || "admin",
+  };
+  await saveConfig(LOCKS_KEY, cur);
+  return cur;
+}
+export async function unlockMonth(month) {
+  const cur = await loadMonthLocks();
+  delete cur[month];
+  await saveConfig(LOCKS_KEY, cur);
+  return cur;
+}
 
 export function bookingPaid(b) {
   const hist = b.paymentHistory || [];

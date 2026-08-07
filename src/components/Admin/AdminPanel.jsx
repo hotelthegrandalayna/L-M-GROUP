@@ -6,6 +6,7 @@ import AdminStaff   from "./AdminStaff";
 import AdminData    from "./AdminData";
 import AdminSMS       from "./AdminSMS";
 import AdminInvoices  from "./AdminInvoices";
+import AdminReports   from "./AdminReports";
 import AuditLogViewer from "../AuditLogViewer";
 import { checkAdminPassword } from "../../utils/auth";
 import { hasSupabase, upsertRows, saveConfig } from "../../utils/supabaseSync";
@@ -15,6 +16,7 @@ const TABS = [
   { key:"finance",  label:"Finance",  icon:"ti-currency-taka"  },
   { key:"rooms",    label:"Rooms",    icon:"ti-building"       },
   { key:"invoices", label:"Invoices", icon:"ti-file-invoice"   },
+  { key:"reports",  label:"Reports",  icon:"ti-report-money"   },
   { key:"sms",      label:"Messages", icon:"ti-message-circle" },
   { key:"audit",    label:"Audit Log",icon:"ti-eye"            },
   { key:"staff",    label:"Staff",    icon:"ti-users"          },
@@ -61,6 +63,7 @@ export default function AdminPanel() {
       {tab==="finance"  && <AdminFinance />}
       {tab==="rooms"    && <AdminRooms />}
       {tab==="invoices" && <AdminInvoices />}
+      {tab==="reports"  && <AdminReports />}
       {tab==="sms"      && <AdminSMS />}
       {tab==="audit"    && <AuditLogViewer scope="hotel" title="Hotel — Activity Audit Log" checkPassword={checkAdminPassword} notify={notify} />}
       {tab==="staff"   && curRole==="admin" && <AdminStaff />}
