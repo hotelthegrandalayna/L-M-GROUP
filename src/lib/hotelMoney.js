@@ -5,13 +5,17 @@
 // use these helpers. Do not compute monthly revenue anywhere else — that is what
 // caused four screens to disagree.
 //
-// ATTRIBUTION RULE (fixed, do not change without changing it everywhere):
-//   A booking belongs to the month of its CHECK-IN (its stay month). ALL of that
-//   booking's money is that month's revenue, even if a payment lands in a later
-//   month. So: billed = sum of the month's bookings' invoice totals; collected =
-//   sum of what those bookings have been paid; outstanding = the difference.
-//   This is how the owner reconciles ("all of a July stay is July revenue") and
-//   it makes the Invoices list rows sum exactly to the headline.
+// ATTRIBUTION RULES (fixed — do not change without the owner's explicit say-so):
+//   RULE 1 — a booking's BASE stay counts in its CHECK-IN month. An EXTENSION
+//     counts in the month of its extra night, not the check-in month. So a guest
+//     who checks in Jul 31 (that night = July) and extends into Aug 1 (~৳3,000)
+//     puts the ৳3,000 in AUGUST. Money follows the night that was stayed, never
+//     the date the cash happened to be handed over.
+//   RULE 2 — a month, once locked (Admin › Reports), is frozen: its saved figures
+//     never move again regardless of later edits.
+//   billed = base(check-in month) + extensions(their own month); collected = what
+//   has actually been paid, allocated base-first then to extensions; outstanding
+//   = billed − collected. Manual (non-booking) revenues use their own date.
 //
 // COMPLETENESS RULE:
 //   Past-month figures must be computed from the COMPLETE month loaded from the
@@ -38,19 +42,45 @@ export function bookingMonth(b) {
 
 const inMonth = (dateStr, month) => typeof dateStr === "string" && dateStr.slice(0, 7) === month;
 
+// The month an extension's extra night belongs to: the first extra night (`from`
+// = the old checkout), falling back to when it was recorded / the new checkout.
+function extensionMonth(ext, b) {
+  return String(ext.from || ext.at || ext.to || b.checkout || b.checkin || "").slice(0, 7);
+}
+
+// Split one booking into monthly parts per RULE 1: base stay → check-in month,
+// each extension → its extra-night month. Payments are allocated base-first, then
+// to extensions in order, so `collected` lands in the same month as the money owed.
+export function bookingMonthlyParts(b) {
+  const exts = (b.extensions || []).map(e => ({ billed: parseFloat(e.amount) || 0, month: extensionMonth(e, b) }));
+  const extTotal = exts.reduce((s, e) => s + e.billed, 0);
+  const baseBilled = Math.max(0, bookingTotal(b) - extTotal);
+  const parts = [{ month: bookingMonth(b), billed: baseBilled }, ...exts];
+  let paid = bookingPaid(b);
+  parts.forEach(p => { const c = Math.min(paid, p.billed); p.collected = c; paid -= c; });
+  return parts;
+}
+
 // Canonical monthly figures. `bookings` must already be de-duplicated and must
 // exclude deleted rows (useMonthBookings does this). Cancelled are ignored here.
-//   billed      = invoice totals of bookings that CHECK IN this month
-//   collected   = what those bookings have been paid (regardless of pay date)
-//   outstanding = billed - collected (their unpaid balance)
 export function monthMoney({ bookings = [], revenues = [], expenses = [], month }) {
-  const monthB = bookings.filter(b => b.status !== "cancelled" && bookingMonth(b) === month);
+  let roomBilled = 0, roomCollected = 0;
+  const monthB = [];
+  bookings.forEach(b => {
+    if (b.status === "cancelled") return;
+    let touches = false;
+    bookingMonthlyParts(b).forEach(p => {
+      if (p.month !== month) return;
+      roomBilled += p.billed;
+      roomCollected += p.collected;
+      touches = true;
+    });
+    if (touches) monthB.push(b);
+  });
+
   const manual = revenues
     .filter(r => !r.bookingId && !r.fromBooking && inMonth(r.date, month))
     .reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
-
-  const roomBilled    = monthB.reduce((s, b) => s + bookingTotal(b), 0);
-  const roomCollected = monthB.reduce((s, b) => s + bookingPaid(b), 0);
 
   const billed      = roomBilled + manual;
   const collected   = roomCollected + manual;      // manual revenue is money in hand
