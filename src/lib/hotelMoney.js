@@ -99,6 +99,32 @@ export function bookingMonthlyParts(b) {
   const parts = [{ month: bookingMonth(b), billed: baseBilled }, ...exts];
   let paid = bookingPaid(b);
   parts.forEach(p => { const c = Math.min(paid, p.billed); p.collected = c; paid -= c; });
+  // MONEY IS NEVER DROPPED. Anything paid beyond the room invoice (service charges
+  // like restaurant/laundry, extras, or a later top-up) is counted as revenue in the
+  // month it was actually received — not silently discarded.
+  if (paid > 0.005) {
+    const extraPays = (b.paymentHistory || [])
+      .filter(p => p.ts && (p.type === "service" || /service|extra|restaurant|laundry/i.test(p.note || "")))
+      .map(p => ({ amount: parseFloat(p.amount) || 0, month: String(p.ts).slice(0, 7) }))
+      .filter(p => p.amount > 0);
+    const byMonth = new Map();
+    let left = paid;
+    for (const p of extraPays) {
+      if (left <= 0.005) break;
+      const take = Math.min(left, p.amount);
+      byMonth.set(p.month, (byMonth.get(p.month) || 0) + take);
+      left -= take;
+    }
+    if (left > 0.005) {
+      // Can't tell which payment it was — attribute to the latest payment's month,
+      // falling back to the stay month.
+      const last = (b.paymentHistory || []).filter(p => p.ts)
+        .sort((x, y) => String(y.ts).localeCompare(String(x.ts)))[0];
+      const m = last ? String(last.ts).slice(0, 7) : bookingMonth(b);
+      byMonth.set(m, (byMonth.get(m) || 0) + left);
+    }
+    byMonth.forEach((amount, month) => parts.push({ month, billed: amount, collected: amount }));
+  }
   return parts;
 }
 
