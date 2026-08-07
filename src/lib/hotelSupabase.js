@@ -235,10 +235,25 @@ function fromDbBooking(row, guest) {
   return booking;
 }
 
+// Guard against the same booking being saved twice at once (e.g. a background
+// sync firing while a save is still in flight). One booking = one cloud row.
+const inFlightSaves = new Map(); // localId -> Promise
+
 export async function persistHotelBookingBundle(booking) {
   if (!hasHotelSupabaseConfig() || !booking?.guest) {
     return { skipped: true, booking };
   }
+  const guardKey = String(booking.supabaseBookingId ?? booking.id ?? "");
+  if (guardKey && inFlightSaves.has(guardKey)) return inFlightSaves.get(guardKey);
+  const run = _persistHotelBookingBundle(booking);
+  if (guardKey) {
+    inFlightSaves.set(guardKey, run);
+    run.finally(() => inFlightSaves.delete(guardKey));
+  }
+  return run;
+}
+
+async function _persistHotelBookingBundle(booking) {
 
   const guestId = booking.guest_id ?? booking.guestId ?? null;
   const bookingId = toInt(booking.supabaseBookingId ?? booking.bookingDbId);
@@ -292,12 +307,35 @@ export async function persistHotelBookingBundle(booking) {
       });
       bookingResult = Array.isArray(bookingRows) ? bookingRows[0] : bookingRows;
     } else {
-      const bookingRows = await request("bookings", {
-        method: "POST",
-        body: bookingRow,
-        extraHeaders: { Prefer: "return=representation" },
-      });
-      bookingResult = Array.isArray(bookingRows) ? bookingRows[0] : bookingRows;
+      // Before inserting, check whether this exact stay already exists in the cloud
+      // (same guest + room + dates). If it does, UPDATE that row instead of creating
+      // a second one — a guest cannot book the same room for the same nights twice.
+      const existing = await request("bookings", {
+        query: {
+          guest_id: `eq.${guest.id}`,
+          room_id: `eq.${bookingRow.room_id}`,
+          checkin_date: `eq.${bookingRow.checkin_date}`,
+          checkout_date: `eq.${bookingRow.checkout_date}`,
+          limit: 1,
+        },
+      }).catch(() => null);
+      const dupe = Array.isArray(existing) ? existing[0] : null;
+      if (dupe?.id) {
+        const patched = await request("bookings", {
+          method: "PATCH",
+          query: { id: `eq.${dupe.id}` },
+          body: bookingRow,
+          extraHeaders: { Prefer: "return=representation" },
+        });
+        bookingResult = Array.isArray(patched) ? patched[0] : patched;
+      } else {
+        const bookingRows = await request("bookings", {
+          method: "POST",
+          body: bookingRow,
+          extraHeaders: { Prefer: "return=representation" },
+        });
+        bookingResult = Array.isArray(bookingRows) ? bookingRows[0] : bookingRows;
+      }
     }
   } catch (err) {
     // If booking insert failed and we just created a new guest, clean it up

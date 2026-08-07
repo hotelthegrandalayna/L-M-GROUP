@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
-import { hasHotelSupabaseConfig, loadHotelBookingsFromSupabase, loadRoomsFromSupabase, saveRoomsToSupabase, persistHotelBookingBundle } from "../lib/hotelSupabase";
+import { hasHotelSupabaseConfig, loadHotelBookingsFromSupabase, loadRoomsFromSupabase, saveRoomsToSupabase, persistHotelBookingBundle, deleteHotelBooking } from "../lib/hotelSupabase";
 import { hasSupabase, upsertRows, loadRows, saveConfig, loadConfig, deleteRow } from "../utils/supabaseSync";
 import { restoreUserPasswords } from "../utils/userPass";
 import { onRemoteChange } from "../utils/realtimeSync";
@@ -125,6 +125,33 @@ export async function gaSyncDeletedFromCloud() {
     localStorage.setItem('ga_deleted_booking_ids', JSON.stringify([...new Set([...legacy, ...(local.bkg || [])])]));
   } catch {}
   return cloud;
+}
+
+// Collapse EXACT duplicate bookings (same guest + room + dates + total). Such rows
+// can only be accidental copies — a guest can't book the same room for the same
+// nights twice. Keeps the best copy (has a cloud id, then more payment history),
+// returns the survivors plus the losing copies so their cloud rows can be purged.
+export function dedupeBookings(list) {
+  const keyOf = b => [
+    String(b.guest || '').trim().toLowerCase(),
+    String(b.room || ''),
+    b.checkin || '', b.checkout || '',
+    String(b.invoiceTotal ?? b.amount ?? ''),
+  ].join('|');
+  const score = b => (b.supabaseBookingId ? 4 : 0) + Math.min(3, (b.paymentHistory?.length || 0)) + ((b.status === 'checked-in' || b.status === 'confirmed') ? 1 : 0);
+  const winners = new Map();
+  const keep = [];   // rows never eligible for dedupe (cancelled / no guest) — kept as-is
+  const losers = [];
+  for (const b of list) {
+    if (!b) continue;
+    if (!b.guest || b.status === 'cancelled') { keep.push(b); continue; }
+    const k = keyOf(b);
+    const cur = winners.get(k);
+    if (!cur) { winners.set(k, b); continue; }
+    if (score(b) > score(cur)) { losers.push(cur); winners.set(k, b); }
+    else { losers.push(b); }
+  }
+  return { deduped: [...winners.values(), ...keep], losers };
 }
 
 export function AppProvider({ children }) {
@@ -311,19 +338,30 @@ export function AppProvider({ children }) {
         // keep them visible and retry the push, so a save failure can't silently
         // lose a booking on the next sync.
         const remoteIds2 = new Set(filtered.map(b => String(b.id)));
+        // Re-push ONLY bookings that genuinely never reached the cloud. A booking
+        // that already has a cloud id (supabaseBookingId) is NEVER re-inserted, and
+        // we give a fresh save 2 minutes to finish before considering it "failed" —
+        // this closes the race that used to create duplicate rows every 8 seconds.
         const localOnly = localSnap.filter(l =>
           l && l.id != null && l.guest &&
+          !l.supabaseBookingId &&
+          (Date.now() - new Date(l.createdAt || 0).getTime() > 120000) &&
           !remoteIds2.has(String(l.id)) &&
-          !remoteIds2.has(String(l.supabaseBookingId ?? '')) &&
-          !deletedIds.has(String(l.id)) &&
-          !deletedIds.has(String(l.supabaseBookingId ?? ''))
+          !deletedIds.has(String(l.id))
         );
         localOnly.forEach(b => { persistHotelBookingBundle(b).catch(() => {}); });
-        const withLocalOnly = [...merged, ...localOnly];
-        setBookings(withLocalOnly);
+        // Collapse any accidental duplicate bookings and purge the extra cloud rows,
+        // so existing duplicates self-heal and can never come back.
+        const { deduped, losers } = dedupeBookings([...merged, ...localOnly]);
+        losers.forEach(l => {
+          gaRecordDeleted('bkg', l.supabaseBookingId ?? l.id);
+          gaRecordDeleted('bkg', l.id);
+          if (l.supabaseBookingId) deleteHotelBooking(l.supabaseBookingId, l.guest_id).catch(() => {});
+        });
+        setBookings(deduped);
         const cutoff2 = new Date(); cutoff2.setMonth(cutoff2.getMonth() - 6);
         const cutoffStr2 = cutoff2.toISOString().slice(0, 10);
-        const trimmed2 = withLocalOnly.filter(b => ['confirmed','checked-in'].includes(b.status) || (b.checkout && b.checkout >= cutoffStr2));
+        const trimmed2 = deduped.filter(b => ['confirmed','checked-in'].includes(b.status) || (b.checkout && b.checkout >= cutoffStr2));
         try { localStorage.setItem('ga_bookings', JSON.stringify(slimForCache(trimmed2))); } catch { /* quota full */ }
       })
       .catch((err) => {
@@ -509,7 +547,14 @@ export function AppProvider({ children }) {
           loadHotelBookingsFromSupabase().then(remoteBookings => {
             if (!Array.isArray(remoteBookings) || !remoteBookings.length) return;
             const deletedIds = (() => { try { return new Set(JSON.parse(localStorage.getItem('ga_deleted_booking_ids') || '[]')); } catch { return new Set(); } })();
-            const filtered = remoteBookings.filter(b => !deletedIds.has(String(b.supabaseBookingId ?? b.id ?? '')) && !deletedIds.has(String(b.id ?? '')));
+            const raw = remoteBookings.filter(b => !deletedIds.has(String(b.supabaseBookingId ?? b.id ?? '')) && !deletedIds.has(String(b.id ?? '')));
+            // Same self-healing dedupe as the poll, so duplicates can't slip in here either
+            const { deduped: filtered, losers } = dedupeBookings(raw);
+            losers.forEach(l => {
+              gaRecordDeleted('bkg', l.supabaseBookingId ?? l.id);
+              gaRecordDeleted('bkg', l.id);
+              if (l.supabaseBookingId) deleteHotelBooking(l.supabaseBookingId, l.guest_id).catch(() => {});
+            });
             setBookings(filtered);
             const cutoff = new Date(); cutoff.setMonth(cutoff.getMonth() - 6);
             const cutoffStr = cutoff.toISOString().slice(0, 10);
