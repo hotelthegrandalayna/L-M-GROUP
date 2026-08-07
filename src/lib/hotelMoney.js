@@ -75,11 +75,25 @@ function extensionMonth(ext, b) {
   return String(ext.from || ext.at || ext.to || b.checkout || b.checkin || "").slice(0, 7);
 }
 
+// Extensions recorded BEFORE the `extensions` log existed show up only as a
+// payment noted "Extend stay …". Recover those so an older cross-month extension
+// is still counted in the month of its extra night (= when it was paid/recorded).
+function legacyExtensionsFromPayments(b) {
+  return (b.paymentHistory || [])
+    .filter(p => /extend/i.test(p.note || ""))
+    .map(p => ({
+      billed: parseFloat(p.amount) || 0,
+      month: String(p.ts || b.checkout || b.checkin || "").slice(0, 7),
+    }))
+    .filter(e => e.billed > 0 && e.month);
+}
+
 // Split one booking into monthly parts per RULE 1: base stay → check-in month,
 // each extension → its extra-night month. Payments are allocated base-first, then
 // to extensions in order, so `collected` lands in the same month as the money owed.
 export function bookingMonthlyParts(b) {
-  const exts = (b.extensions || []).map(e => ({ billed: parseFloat(e.amount) || 0, month: extensionMonth(e, b) }));
+  const logged = (b.extensions || []).map(e => ({ billed: parseFloat(e.amount) || 0, month: extensionMonth(e, b) }));
+  const exts = logged.length ? logged : legacyExtensionsFromPayments(b);
   const extTotal = exts.reduce((s, e) => s + e.billed, 0);
   const baseBilled = Math.max(0, bookingTotal(b) - extTotal);
   const parts = [{ month: bookingMonth(b), billed: baseBilled }, ...exts];
