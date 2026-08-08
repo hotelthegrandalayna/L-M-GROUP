@@ -9,6 +9,21 @@ import { logEvent } from "../../utils/auditLog";
 
 const STATUS_OPTS = ["All", "checked-in", "reserved", "checked-out", "cancelled"];
 
+// Shared column widths so the header and the rows can never drift apart
+const INV_COLS = "30px 92px 1.5fr 1.1fr 1.2fr 90px 90px 250px";
+
+// Quiet outlined row-action button, matching the front-desk system
+function invBtn(danger) {
+  return {
+    display: "inline-flex", alignItems: "center", gap: 4,
+    padding: "4px 9px", borderRadius: 7, cursor: "pointer",
+    fontSize: 11, fontWeight: 600, fontFamily: "inherit", whiteSpace: "nowrap",
+    border: "1px solid " + (danger ? "#e0b3b0" : "var(--border)"),
+    background: danger ? "#fdf4f3" : "var(--bg2)",
+    color: danger ? "#8f2323" : "var(--text2)",
+  };
+}
+
 function fmtDate(iso) {
   if (!iso) return "—";
   return new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
@@ -132,7 +147,104 @@ function exportPDF(rows, label) {
 }
 
 // ── Invoice detail modal ──────────────────────────────────────────────────────
-function InvoiceDetail({ bk, onClose }) {
+// ── ID documents view ────────────────────────────────────────────────────────
+// Guest identity papers only — no invoice figures. Uses the same on-demand photo
+// loader as the invoice detail, so it's the same data in its own clean window.
+function GuestIdView({ bk, onClose }) {
+  const [fetched, setFetched] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [zoom, setZoom] = useState(null);
+  const hasLocal = (bk.idDocs || []).length > 0 || bk.idFront || bk.idBack;
+
+  useEffect(() => {
+    let alive = true;
+    const gid = bk.guest_id ?? bk.guestId;
+    if (hasLocal || !gid) return;
+    setLoading(true);
+    loadHotelGuestImages(gid)
+      .then(res => { if (alive) { setFetched(res); setLoading(false); } })
+      .catch(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
+  }, [bk.guest_id, bk.guestId, hasLocal]);
+
+  const persons = useMemo(() => {
+    const src = hasLocal ? bk : { ...bk, ...(fetched || {}) };
+    const list = [];
+    if ((src.idDocs || []).length > 0) {
+      src.idDocs.forEach((doc, i) => list.push({
+        label: `Guest ${i + 1}`, idType: doc.idType || src.idType || "", idNum: doc.idNum || "",
+        images: [
+          ...((doc.front || []).map(img => ({ img, side: "Front" }))),
+          ...((doc.back  || []).map(img => ({ img, side: "Back"  }))),
+        ],
+      }));
+    } else {
+      const imgs = [];
+      if (src.idFront) imgs.push({ img: src.idFront, side: "Front" });
+      if (src.idBack)  imgs.push({ img: src.idBack,  side: "Back"  });
+      list.push({ label: "Guest 1", idType: src.idType || "", idNum: src.idNum || "", images: imgs });
+    }
+    return list;
+  }, [bk, fetched, hasLocal]);
+
+  return (
+    <div className="modal-overlay open" onClick={ev => ev.target === ev.currentTarget && onClose()} style={{ zIndex: 10000 }}>
+      <div className="modal-box" style={{ maxWidth: 620, maxHeight: "90vh", overflowY: "auto", padding: 0 }}>
+        <div style={{ background: "var(--navy)", color: "#fff", padding: "14px 18px", borderRadius: "10px 10px 0 0", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+          <span style={{ fontWeight: 600, fontSize: 14 }}>
+            <i className="ti ti-id" style={{ marginRight: 8, color: "var(--gold)" }} />
+            Guest ID — {bk.guest}
+          </span>
+          <button onClick={onClose} style={{ background: "rgba(255,255,255,.15)", color: "#fff", border: "none", borderRadius: 8, padding: "6px 11px", cursor: "pointer", fontSize: 15 }}><i className="ti ti-x" /></button>
+        </div>
+
+        <div style={{ padding: "16px 18px" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
+            {[["Guest", bk.guest], ["Phone", bk.phone], ["Nationality", bk.nationality || "—"], ["Rooms", allRoomNumbers(bk).join(", ") || "—"]].map(([l, v]) => (
+              <div key={l}>
+                <div style={{ fontSize: 10, color: "var(--text3)", textTransform: "uppercase", letterSpacing: .6 }}>{l}</div>
+                <div style={{ fontSize: 13, fontWeight: 600 }}>{v || "—"}</div>
+              </div>
+            ))}
+          </div>
+
+          {loading && <div style={{ fontSize: 12.5, color: "var(--text3)", padding: "10px 0" }}>Loading ID documents…</div>}
+
+          {persons.map((p, i) => (
+            <div key={i} style={{ border: "1px solid var(--border)", borderRadius: 10, padding: "11px 13px", marginBottom: 10 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 9, flexWrap: "wrap" }}>
+                <span style={{ fontSize: 10.5, fontWeight: 600, textTransform: "uppercase", letterSpacing: .7, color: "var(--text3)" }}>{p.label}</span>
+                {p.idType && <span style={{ fontSize: 11.5, color: "var(--text2)" }}>{p.idType}</span>}
+                {p.idNum && <span style={{ fontSize: 11.5, fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{p.idNum}</span>}
+              </div>
+              {p.images.length ? (
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 9 }}>
+                  {p.images.map((im, j) => (
+                    <div key={j} style={{ border: "1px solid var(--border)", borderRadius: 9, overflow: "hidden", cursor: "zoom-in" }} onClick={() => setZoom(im.img)}>
+                      <img src={im.img} alt={im.side} style={{ width: "100%", display: "block", maxHeight: 190, objectFit: "cover" }} />
+                      <div style={{ fontSize: 10.5, color: "var(--text3)", padding: "4px 8px", background: "var(--bg3)" }}>{im.side}</div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ fontSize: 12, color: "var(--text3)" }}>{loading ? "" : "No ID photo on file for this guest."}</div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {zoom && (
+        <div onClick={() => setZoom(null)}
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.85)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 10001, cursor: "zoom-out" }}>
+          <img src={zoom} alt="ID" style={{ maxWidth: "94vw", maxHeight: "94vh", borderRadius: 8 }} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function InvoiceDetail({ bk, onClose, autoEdit }) {
   const { curRole, curUser, updateBookings, notify, rooms } = useApp();
   const isMultiRoom = !!(bk.isMultiRoomBooking && (bk.multiRooms || []).length);
   // Use the shared calcPaid so this modal matches the list, the summary,
@@ -171,6 +283,12 @@ function InvoiceDetail({ bk, onClose }) {
     });
     setEditing(true);
   }
+
+  // "Edit" pressed on the row — open this invoice straight into edit mode.
+  // Saving still requires the admin password, exactly as before.
+  useEffect(() => {
+    if (autoEdit && canEdit && !editing) startEdit();
+  }, [autoEdit]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Rate for a room given its AC choice (falls back to stored rate / room config)
   function roomRateFor(number, acChoice, storedRate) {
@@ -605,6 +723,8 @@ export default function AdminInvoices() {
   const [filterRoom,     setFilterRoom]     = useState("");
   const [dateFrom,       setDateFrom]       = useState("");
   const [dateTo,         setDateTo]         = useState("");
+  const [idTarget,       setIdTarget]       = useState(null); // guest ID documents view
+  const [editIntent,     setEditIntent]     = useState(null); // open detail straight into edit
   const [selectedIds,    setSelectedIds]    = useState(new Set());
   const [selectedMonths, setSelectedMonths] = useState([]);
   const [detail,         setDetail]         = useState(null);
@@ -871,30 +991,8 @@ export default function AdminInvoices() {
         </div>
       </div>
 
-      {/* Month picker — only shown when no rows selected */}
-      {selCount === 0 && (
-        <div style={{ border: "1.5px solid var(--gold)", borderRadius: 10, padding: "12px 16px", marginBottom: 16, background: "#fffbee" }}>
-          <div style={{ fontSize: 11, fontWeight: 800, color: "#6b4a00", marginBottom: 8 }}>
-            <i className="ti ti-calendar-month" style={{ marginRight: 6 }} />
-            Export by month — select months below, or leave blank to export all filtered results
-          </div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 7, alignItems: "center" }}>
-            {allMonths.map(m => (
-              <button key={m} onClick={() => toggleMonth(m)} style={{
-                padding: "4px 12px", borderRadius: 20, border: "1.5px solid",
-                borderColor: selectedMonths.includes(m) ? "var(--gold2)" : "var(--border)",
-                background: selectedMonths.includes(m) ? "var(--gold)" : "#fff",
-                color: selectedMonths.includes(m) ? "#fff" : "var(--text3)",
-                fontSize: 12, fontWeight: 600, cursor: "pointer",
-              }}>{monthLabel(m)}</button>
-            ))}
-            {!allMonths.length && <span style={{ fontSize: 12, color: "var(--text3)" }}>No invoices yet.</span>}
-            {selectedMonths.length > 0 && (
-              <button onClick={() => setSelectedMonths([])} style={{ fontSize: 12, color: "var(--text3)", background: "none", border: "none", cursor: "pointer" }}>✕ Clear</button>
-            )}
-          </div>
-        </div>
-      )}
+      {/* Export-by-month panel removed — the PDF / Excel buttons at the top already
+          export whatever the search is currently showing. */}
 
       {/* Possible duplicate invoices — read-only finder */}
       {duplicateGroups.length > 0 && (
@@ -932,20 +1030,20 @@ export default function AdminInvoices() {
       )}
 
       {/* Table */}
-      <div style={{ border: "1px solid var(--border)", borderRadius: 10, overflow: "hidden" }}>
+      <div style={{ border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden", background: "var(--bg2)" }}>
         {/* Header row */}
-        <div style={{ display: "grid", gridTemplateColumns: "36px 1fr 1.2fr 60px 100px 100px 80px 80px", gap: 6, background: "var(--navy)", color: "#f0e8ff", fontSize: 10, fontWeight: 800, textTransform: "uppercase", letterSpacing: 0.5, padding: "9px 12px", alignItems: "center" }}>
+        <div style={{ display: "grid", gridTemplateColumns: INV_COLS, gap: 8, background: "var(--bg3)", color: "var(--text3)", fontSize: 9.5, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.7, padding: "10px 12px", alignItems: "center" }}>
           <input type="checkbox" checked={allChecked}
             ref={el => { if (el) el.indeterminate = someChecked && !allChecked; }}
             onChange={toggleAll}
-            style={{ width: 15, height: 15, cursor: "pointer", accentColor: "var(--gold)" }} />
+            style={{ width: 14, height: 14, cursor: "pointer", accentColor: "var(--navy)" }} />
+          <span>Invoice</span>
           <span>Guest</span>
-          <span>Room / Dates</span>
-          <span>Nights</span>
-          <span>Total</span>
-          <span>Paid</span>
-          <span>Balance</span>
-          <span>Delete</span>
+          <span>Rooms</span>
+          <span>Stay</span>
+          <span style={{ textAlign: "right" }}>Total</span>
+          <span style={{ textAlign: "right" }}>Balance</span>
+          <span style={{ textAlign: "center" }}>Actions</span>
         </div>
 
         {filtered.length === 0 && (
@@ -960,50 +1058,73 @@ export default function AdminInvoices() {
           const sColor  = { "checked-out": "#065f46", "checked-in": "#1e3a8a", "cancelled": "#991b1b" }[bk.status] || "#92400e";
           const sBg     = { "checked-out": "#d1fae5", "checked-in": "#dbeafe", "cancelled": "#fee2e2"  }[bk.status] || "#fef3c7";
 
+          const rooms = allRoomNumbers(bk);
           return (
             <div key={bk.id}
               onClick={() => setDetail(bk)}
-              style={{ display: "grid", gridTemplateColumns: "36px 1fr 1.2fr 60px 100px 100px 80px 80px", gap: 6, padding: "10px 12px", borderBottom: "1px solid var(--border)", fontSize: 12, alignItems: "center", cursor: "pointer", background: checked ? "rgba(45,27,105,.06)" : "", transition: "background .1s" }}
+              style={{ display: "grid", gridTemplateColumns: INV_COLS, gap: 8, padding: "11px 12px", borderTop: "1px solid var(--border)", fontSize: 12.5, alignItems: "center", cursor: "pointer", background: checked ? "var(--bg3)" : "", transition: "background .1s" }}
               onMouseEnter={e => { if (!checked) e.currentTarget.style.background = "var(--bg4)"; }}
               onMouseLeave={e => { if (!checked) e.currentTarget.style.background = ""; }}>
 
               <div onClick={e => e.stopPropagation()}>
                 <input type="checkbox" checked={checked} onChange={() => toggleOne(bk.id)}
-                  style={{ width: 15, height: 15, cursor: "pointer", accentColor: "var(--navy)" }} />
+                  style={{ width: 14, height: 14, cursor: "pointer", accentColor: "var(--navy)" }} />
               </div>
 
-              <div>
-                <div style={{ fontWeight: 700, marginBottom: 2 }}>{bk.guest || "—"}</div>
-                <div style={{ color: "var(--text3)", fontSize: 11 }}>{bk.phone || ""}</div>
-                <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 10, background: sBg, color: sColor }}>
+              {/* Invoice no + status */}
+              <div style={{ minWidth: 0 }}>
+                <div style={{ color: "var(--text3)", fontSize: 11.5, fontVariantNumeric: "tabular-nums" }}>GA-{String(bk.id).padStart(4, "0")}</div>
+                <span style={{ display: "inline-block", marginTop: 3, fontSize: 10, fontWeight: 600, padding: "1px 8px", borderRadius: 20, background: sBg, color: sColor, whiteSpace: "nowrap" }}>
                   {bk.status || "reserved"}
                 </span>
               </div>
 
-              <div>
-                <div style={{ fontWeight: 600 }}>Rm {bk.room}</div>
-                <div style={{ color: "var(--text3)", fontSize: 11 }}>{fmtDate(bk.checkin)} → {fmtDate(bk.checkout)}</div>
-                <div style={{ color: "var(--text3)", fontSize: 10 }}>#{bk.id}</div>
+              {/* Guest */}
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{bk.guest || "—"}</div>
+                <div style={{ color: "var(--text3)", fontSize: 10.5 }}>{bk.phone || ""}</div>
               </div>
 
-              <div style={{ fontWeight: 600 }}>{bk.nights || "—"}</div>
-              <div style={{ fontWeight: 700 }}>{fmtMoney(total)}</div>
-              <div style={{ fontWeight: 700, color: "#065f46" }}>{fmtMoney(paid)}</div>
-              <div style={{ fontWeight: 700, color: balance > 0 ? "#991b1b" : "#065f46" }}>{fmtMoney(balance)}</div>
+              {/* Rooms — every room, not just the first */}
+              <div style={{ minWidth: 0, fontWeight: 600 }}>{rooms.join(", ") || "—"}</div>
 
-              <div onClick={e => e.stopPropagation()}>
-                <button onClick={() => { setDeleteTarget(bk); setDelPw(""); }} style={{
-                  padding: "5px 9px", borderRadius: 6, border: "1.5px solid #fca5a5",
-                  background: "#fee2e2", color: "#991b1b", fontSize: 11, fontWeight: 700, cursor: "pointer",
-                }}>🗑</button>
+              {/* Stay */}
+              <div style={{ minWidth: 0, fontSize: 11.5, color: "var(--text2)" }}>
+                {fmtDate(bk.checkin)} → {fmtDate(bk.checkout)}
+                <div style={{ color: "var(--text3)", fontSize: 10 }}>{bk.nights || "—"} night{bk.nights === 1 ? "" : "s"}</div>
+              </div>
+
+              <div style={{ textAlign: "right", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{fmtMoney(total)}</div>
+              <div style={{ textAlign: "right", fontWeight: 600, color: balance > 0 ? "#b5322a" : "#2f7d4f", fontVariantNumeric: "tabular-nums" }}>{fmtMoney(balance)}</div>
+
+              {/* Actions — View / ID open freely, Edit + Delete ask for the admin password */}
+              <div onClick={e => e.stopPropagation()} style={{ display: "flex", gap: 4, justifyContent: "center", flexWrap: "wrap" }}>
+                <button title="View full invoice" onClick={() => setDetail(bk)} style={invBtn()}>
+                  <i className="ti ti-eye" style={{ fontSize: 12 }} /> View
+                </button>
+                <button title="View guest ID documents" onClick={() => setIdTarget(bk)} style={invBtn()}>
+                  <i className="ti ti-id" style={{ fontSize: 12 }} /> ID
+                </button>
+                <button title="Edit invoice (admin password)" onClick={() => { setDetail(bk); setEditIntent(bk.id); }} style={invBtn()}>
+                  <i className="ti ti-lock" style={{ fontSize: 11 }} /> Edit
+                </button>
+                <button title="Delete invoice (admin password)" onClick={() => { setDeleteTarget(bk); setDelPw(""); }} style={invBtn(true)}>
+                  <i className="ti ti-lock" style={{ fontSize: 11 }} /> Delete
+                </button>
               </div>
             </div>
           );
         })}
       </div>
 
-      {/* Detail modal */}
-      {detail && <InvoiceDetail bk={detail} onClose={() => setDetail(null)} />}
+      {/* Detail modal — full invoice view (and edit, which asks for the password) */}
+      {detail && (
+        <InvoiceDetail bk={detail} autoEdit={editIntent === detail.id}
+          onClose={() => { setDetail(null); setEditIntent(null); }} />
+      )}
+
+      {/* Guest ID documents view */}
+      {idTarget && <GuestIdView bk={idTarget} onClose={() => setIdTarget(null)} />}
 
       {/* Bulk delete modal */}
       {bulkDeleteOpen && (
