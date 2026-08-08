@@ -81,6 +81,17 @@ export function buildInvoiceHTML(b, rooms, invExtras, mode) {
   const allRoomsTotal = primaryAmount + extraRoomsGrossTotal;
   const roomTotal   = Math.max(0, allRoomsTotal - disc);
   const grandTotal  = Math.max(roomTotal + combinedExtras, b.invoiceTotal ?? b.amount ?? 0);
+  // GUARD — the line items must add up to the total. This Math.max above is a safety
+  // net that once HID a real bug (extra rooms printed net while the full discount was
+  // subtracted again: sub-total 4,900 vs total 6,800). If they ever disagree again,
+  // say so loudly instead of silently printing a wrong sub-total. See CLAUDE.md §2.
+  if (Math.abs((roomTotal + combinedExtras) - grandTotal) > 1) {
+    console.warn(
+      "[INVOICE MATH] line items do not add up to the total — do not trust this invoice.",
+      { bookingId: b.id, roomsGross: allRoomsTotal, discount: disc, roomTotal,
+        extras: combinedExtras, computed: roomTotal + combinedExtras, storedTotal: b.invoiceTotal ?? b.amount },
+    );
+  }
   const advance     = b.advance || 0;
   const restPayment = b.restPayment || 0;
   const extAdv      = b.extrasAdvance || 0;
