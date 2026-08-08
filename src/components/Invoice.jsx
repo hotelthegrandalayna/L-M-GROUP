@@ -174,8 +174,8 @@ export function buildInvoiceHTML(b, rooms, invExtras, mode) {
               const nums = [String(b.room), ...(b.extraRooms||[]).map(r => String(r.number))];
               return mr("Rooms (" + nums.length + ")", nums.join(",  "));
             })()
-            + mr("Check-In",fmtDate(b.checkin))
-            + mr("Check-Out",fmtDate(b.checkout))
+            // Check-In / Check-Out intentionally omitted here — each charge line
+            // already carries its date, so repeating them was redundant.
             + mr("Nights",b.nights+" Night"+(b.nights>1?"s":""))
             + (function(){ const a=b.adults||b.adult||0;const c=b.children||0; if(!a&&!c)return "";
                 const g=(a?a+" Adult"+(a>1?"s":""):"")+(a&&c?", ":"")+(c?c+" Child"+(c>1?"ren":""):"");
@@ -184,8 +184,8 @@ export function buildInvoiceHTML(b, rooms, invExtras, mode) {
             mr("Room","Room "+b.room+rName)
             + (rType ? mr("Room Type",rType) : "")
             + (b.acChoice ? mr("AC / Non-AC", b.acChoice==="AC" ? "❄️  AC" : "🌬️  Non-AC") : "")
-            + mr("Check-In",fmtDate(b.checkin))
-            + mr("Check-Out",fmtDate(b.checkout))
+            // Check-In / Check-Out intentionally omitted here — each charge line
+            // already carries its date, so repeating them was redundant.
             + mr("Nights",b.nights+" Night"+(b.nights>1?"s":""))
             + (function(){ const a=b.adults||b.adult||0;const c=b.children||0; if(!a&&!c)return "";
                 const g=(a?a+" Adult"+(a>1?"s":""):"")+(a&&c?", ":"")+(c?c+" Child"+(c>1?"ren":""):"");

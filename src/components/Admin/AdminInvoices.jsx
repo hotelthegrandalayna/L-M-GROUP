@@ -3,7 +3,7 @@ import { useApp, gaRecordDeleted } from "../../context/AppContext";
 import { checkAdminPassword } from "../../utils/auth";
 import { deleteHotelBooking, deleteHotelBookings, loadHotelGuestImages, persistHotelBookingBundle, loadHotelBookingsForRange } from "../../lib/hotelSupabase";
 import { useMonthBookings, monthMoney } from "../../lib/hotelMoney";
-import { allRoomNumbers } from "../Invoice";
+import { allRoomNumbers, roomLabel, buildInvoiceHTML, buildTCHtml, hotelPrint } from "../Invoice";
 import { filterInvoices } from "../../lib/invoiceFilter";
 import { logEvent } from "../../utils/auditLog";
 
@@ -147,6 +147,36 @@ function exportPDF(rows, label) {
 }
 
 // ── Invoice detail modal ──────────────────────────────────────────────────────
+// ── Customer invoice view ────────────────────────────────────────────────────
+// The invoice exactly as the guest receives it, with Print and Print + T&C.
+function InvoiceViewModal({ bk, rooms, onClose }) {
+  const html = buildInvoiceHTML(bk, rooms, bk.invoiceExtras || [], "room");
+  return (
+    <div className="modal-overlay open" onClick={ev => ev.target === ev.currentTarget && onClose()} style={{ zIndex: 10000 }}>
+      <div style={{ background: "#fff", borderRadius: 12, width: "96vw", maxWidth: 820, maxHeight: "92vh", display: "flex", flexDirection: "column", overflow: "hidden", boxShadow: "0 8px 40px rgba(0,0,0,.18)" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "13px 18px", background: "var(--navy)" }}>
+          <span style={{ color: "#fff", fontWeight: 600, fontSize: 14, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            <i className="ti ti-file-invoice" style={{ marginRight: 8, color: "var(--gold)" }} />
+            Invoice — {bk.guest} · {roomLabel(bk)}
+          </span>
+          <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+            <button onClick={() => hotelPrint(html, null)}
+              style={{ background: "var(--gold)", color: "#fff", border: "none", borderRadius: 8, padding: "7px 16px", fontWeight: 600, cursor: "pointer", fontSize: 12.5, fontFamily: "inherit" }}>
+              <i className="ti ti-printer" style={{ marginRight: 5 }} />Print
+            </button>
+            <button onClick={() => hotelPrint(html, buildTCHtml(bk))}
+              style={{ background: "rgba(255,255,255,.15)", color: "#fff", border: "none", borderRadius: 8, padding: "7px 14px", fontWeight: 600, cursor: "pointer", fontSize: 12.5, fontFamily: "inherit" }}>
+              <i className="ti ti-printer" style={{ marginRight: 5 }} />Print + T&amp;C
+            </button>
+            <button onClick={onClose} style={{ background: "rgba(255,255,255,.15)", color: "#fff", border: "none", borderRadius: 8, padding: "7px 11px", cursor: "pointer", fontSize: 15 }}><i className="ti ti-x" /></button>
+          </div>
+        </div>
+        <div style={{ overflowY: "auto", flex: 1, padding: 20, background: "#fafaf8" }} dangerouslySetInnerHTML={{ __html: html }} />
+      </div>
+    </div>
+  );
+}
+
 // ── ID documents view ────────────────────────────────────────────────────────
 // Guest identity papers only — no invoice figures. Uses the same on-demand photo
 // loader as the invoice detail, so it's the same data in its own clean window.
@@ -776,7 +806,7 @@ function InvoiceDetail({ bk, onClose, autoEdit }) {
 
 // ── Main component ────────────────────────────────────────────────────────────
 export default function AdminInvoices() {
-  const { bookings, updateBookings, notify, revenues } = useApp();
+  const { bookings, updateBookings, notify, revenues, rooms } = useApp();
 
   const [search,         setSearch]         = useState("");
   const [filterMonth,    setFilterMonth]    = useState("");
@@ -784,6 +814,7 @@ export default function AdminInvoices() {
   const [filterRoom,     setFilterRoom]     = useState("");
   const [dateFrom,       setDateFrom]       = useState("");
   const [dateTo,         setDateTo]         = useState("");
+  const [viewTarget,     setViewTarget]     = useState(null); // customer invoice view
   const [idTarget,       setIdTarget]       = useState(null); // guest ID documents view
   const [editIntent,     setEditIntent]     = useState(null); // open detail straight into edit
   const [selectedIds,    setSelectedIds]    = useState(new Set());
@@ -1160,7 +1191,7 @@ export default function AdminInvoices() {
 
               {/* Actions — View / ID open freely, Edit + Delete ask for the admin password */}
               <div onClick={e => e.stopPropagation()} style={{ display: "flex", gap: 4, justifyContent: "center", flexWrap: "wrap" }}>
-                <button title="View full invoice" onClick={() => setDetail(bk)} style={invBtn()}>
+                <button title="View the customer invoice" onClick={() => setViewTarget(bk)} style={invBtn()}>
                   <i className="ti ti-eye" style={{ fontSize: 12 }} /> View
                 </button>
                 <button title="View guest ID documents" onClick={() => setIdTarget(bk)} style={invBtn()}>
@@ -1183,6 +1214,9 @@ export default function AdminInvoices() {
         <InvoiceDetail bk={detail} autoEdit={editIntent === detail.id}
           onClose={() => { setDetail(null); setEditIntent(null); }} />
       )}
+
+      {/* Customer invoice view */}
+      {viewTarget && <InvoiceViewModal bk={viewTarget} rooms={rooms} onClose={() => setViewTarget(null)} />}
 
       {/* Guest ID documents view */}
       {idTarget && <GuestIdView bk={idTarget} onClose={() => setIdTarget(null)} />}
