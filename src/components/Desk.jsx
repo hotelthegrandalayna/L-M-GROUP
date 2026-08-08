@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, Fragment, useMemo } from "react";
 import { useApp } from "../context/AppContext";
 import useIsMobile from "../hall/useIsMobile";
 import { todayStr, money, bookingConflicts, getRoomDisplayStatus, bookingCoversRoom, roomBookingWindow, maxId, formatDate } from "../utils/helpers";
-import { buildInvoiceHTML, buildTCHtml, hotelPrint } from "./Invoice";
+import { buildInvoiceHTML, buildTCHtml, hotelPrint, roomLabel } from "./Invoice";
 import { NewBookingModal, InvoicePreviewModal } from "./Bookings";
 import { monthMoney } from "../lib/hotelMoney";
 import { sendNtfyAlert } from "../utils/ntfy";
@@ -601,7 +601,7 @@ function DeskInvoiceModal({ booking, rooms, onClose, onPrint, onPrintTC }) {
           padding:"12px 18px", background:"var(--navy)", borderBottom:"1px solid rgba(255,255,255,.1)" }}>
           <span style={{ color:"#fff", fontWeight:800, fontSize:14 }}>
             <i className="ti ti-file-invoice" style={{ marginRight:7, color:"var(--gold)" }} />
-            Invoice — {booking.guest} · Rm {booking.room}
+            Invoice — {booking.guest} · {roomLabel(booking)}
           </span>
           <div style={{ display:"flex", gap:8 }}>
             <button onClick={onPrint} style={{ background:"var(--gold)", color:"var(--navy)", border:"none",

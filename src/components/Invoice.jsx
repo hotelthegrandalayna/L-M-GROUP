@@ -28,6 +28,19 @@ function fmtDate(d) {
 
 function moneyH(n) { return "\u09F3" + (n||0).toLocaleString("en-IN"); }
 
+// Every room number a booking covers, in order \u2014 handles both the `multiRooms`
+// shape and primary + `extraRooms`. Use wherever a booking is labelled, so a
+// multi-room booking is never shown as just one room.
+export function allRoomNumbers(b) {
+  if (!b) return [];
+  if (b.isMultiRoomBooking && (b.multiRooms || []).length) return b.multiRooms.map(r => String(r.number));
+  return [String(b.room), ...((b.extraRooms || []).map(r => String(r.number)))].filter(Boolean);
+}
+export function roomLabel(b) {
+  const n = allRoomNumbers(b);
+  return n.length > 1 ? "Rooms " + n.join(", ") : "Rm " + (n[0] || "");
+}
+
 // ─── Invoice HTML builder (mirrors original renderInvoice) ─────────────────
 export function buildInvoiceHTML(b, rooms, invExtras, mode) {
   if (!b) return "";
@@ -144,6 +157,18 @@ export function buildInvoiceHTML(b, rooms, invExtras, mode) {
             + (function(){ const a = b.adults||0; const c = b.children||0; if(!a&&!c) return "";
                 const g=(a?a+" Adult"+(a>1?"s":""):"")+(a&&c?", ":"")+(c?c+" Child"+(c>1?"ren":""):"");
                 return mr("Total Guests", g); })()
+          ) : (b.extraRooms || []).length ? (
+            // Booking covers several rooms — list them all on one line, equally.
+            (function(){
+              const nums = [String(b.room), ...(b.extraRooms||[]).map(r => String(r.number))];
+              return mr("Rooms (" + nums.length + ")", nums.join(",  "));
+            })()
+            + mr("Check-In",fmtDate(b.checkin))
+            + mr("Check-Out",fmtDate(b.checkout))
+            + mr("Nights",b.nights+" Night"+(b.nights>1?"s":""))
+            + (function(){ const a=b.adults||b.adult||0;const c=b.children||0; if(!a&&!c)return "";
+                const g=(a?a+" Adult"+(a>1?"s":""):"")+(a&&c?", ":"")+(c?c+" Child"+(c>1?"ren":""):"");
+                return mr("Guests",g); })()
           ) : (
             mr("Room","Room "+b.room+rName)
             + (rType ? mr("Room Type",rType) : "")
@@ -263,10 +288,12 @@ export function buildInvoiceHTML(b, rooms, invExtras, mode) {
   if (isMultiRoomInv) {
     tableBody = secHdr("Accommodation Charges") + multiRoomLineRows + subTot("Total Accommodation", grandTotal);
   } else if (hasExtras || hasMultiRooms) {
-    tableBody = secHdr("Accommodation Charges") + roomRow + extraRoomRows + dRow + subTot("Accommodation Sub-total", roomTotal)
+    // Each room's discount sits directly under that room's line (dRow belongs to the
+    // primary room), so every charge reads room → its discount, in order.
+    tableBody = secHdr("Accommodation Charges") + roomRow + dRow + extraRoomRows + subTot("Accommodation Sub-total", roomTotal)
       + (hasExtras ? secHdr("Additional Charges") + epRow + eRows + subTot("Additional Charges Sub-total", combinedExtras) : "");
   } else {
-    tableBody = roomRow + extraRoomRows + dRow;
+    tableBody = roomRow + dRow + extraRoomRows;
   }
 
   const payHist = b.paymentHistory || [];

@@ -21,7 +21,7 @@ import { sendWhatsAppAlert, buildHotelWaMessage } from "../utils/whatsapp";
 import { sendNtfyAlert } from "../utils/ntfy";
 import { logEvent } from "../utils/auditLog";
 import { persistHotelBookingBundle } from "../lib/hotelSupabase";
-import { buildInvoiceHTML, buildTCHtml, hotelPrint } from "./Invoice";
+import { buildInvoiceHTML, buildTCHtml, hotelPrint, roomLabel } from "./Invoice";
 
 export function InvoicePreviewModal({ booking, rooms, onClose, onComplete, onEdit }) {
   const html = buildInvoiceHTML(booking, rooms, booking.extras || [], "room");
@@ -44,7 +44,7 @@ export function InvoicePreviewModal({ booking, rooms, onClose, onComplete, onEdi
           padding:"14px 20px", borderBottom:"1px solid #eee", background:"var(--navy)" }}>
           <span style={{ color:"#fff", fontWeight:800, fontSize:15 }}>
             <i className="ti ti-file-invoice" style={{ marginRight:8, color:"var(--gold)" }} />
-            Invoice — {booking.guest} · Rm {booking.room}
+            Invoice — {booking.guest} · {roomLabel(booking)}
           </span>
           <div style={{ display:"flex", gap:8 }}>
             {isReservation && onEdit && (
