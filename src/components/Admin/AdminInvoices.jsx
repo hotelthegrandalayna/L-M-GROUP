@@ -4,6 +4,7 @@ import { checkAdminPassword } from "../../utils/auth";
 import { deleteHotelBooking, deleteHotelBookings, loadHotelGuestImages, persistHotelBookingBundle, loadHotelBookingsForRange } from "../../lib/hotelSupabase";
 import { useMonthBookings, monthMoney } from "../../lib/hotelMoney";
 import { allRoomNumbers } from "../Invoice";
+import { filterInvoices } from "../../lib/invoiceFilter";
 import { logEvent } from "../../utils/auditLog";
 
 const STATUS_OPTS = ["All", "checked-in", "reserved", "checked-out", "cancelled"];
@@ -674,25 +675,12 @@ export default function AdminInvoices() {
     });
   }, [bookings]);
 
-  const filtered = useMemo(() => {
-    const q = search.toLowerCase();
-    return srcBookings.filter(bk => {
-      if (filterStatus !== "All" && bk.status !== filterStatus) return false;
-      if (filterMonth && getBookingMonth(bk) !== filterMonth) return false;
-      // Room search matches ANY room on the booking, not just the primary one
-      if (filterRoom && !allRoomNumbers(bk).some(n => n.toLowerCase().includes(filterRoom.toLowerCase()))) return false;
-      // Calendar range — a booking matches if its stay overlaps the chosen dates
-      if (dateFrom && (bk.checkout || bk.checkin || "") < dateFrom) return false;
-      if (dateTo   && (bk.checkin  || "") > dateTo) return false;
-      if (q && !(
-        String(bk.guest || "").toLowerCase().includes(q) ||
-        String(bk.id    ?? "").toLowerCase().includes(q) ||
-        String(bk.phone || "").toLowerCase().includes(q) ||
-        allRoomNumbers(bk).some(n => n.toLowerCase().includes(q))
-      )) return false;
-      return true;
-    }).sort((a, b) => (b.checkin || b.createdAt || "") > (a.checkin || a.createdAt || "") ? 1 : -1);
-  }, [srcBookings, search, filterStatus, filterMonth, filterRoom, dateFrom, dateTo]);
+  // Uses the pure, unit-tested filter in lib/invoiceFilter.js (see its test file —
+  // the 5–8 Aug date-range bug is locked down there).
+  const filtered = useMemo(
+    () => filterInvoices(srcBookings, { search, room: filterRoom, month: filterMonth, dateFrom, dateTo, status: filterStatus }),
+    [srcBookings, search, filterStatus, filterMonth, filterRoom, dateFrom, dateTo],
+  );
 
   const totals = useMemo(() => {
     // For a whole selected month (no manual row-selection), show the canonical cash
@@ -792,68 +780,82 @@ export default function AdminInvoices() {
 
   return (
     <div>
-      <div style={{ fontSize: 15, fontWeight: 800, color: "var(--navy)", marginBottom: 4 }}>
-        <i className="ti ti-file-invoice" style={{ color: "var(--gold)", marginRight: 8 }} />All Invoices
-      </div>
-      <div style={{ fontSize: 12, color: "var(--text3)", marginBottom: 18 }}>
-        Click any row to view full details including ID documents. Use checkboxes to select — then download or delete selected. Select all with the header checkbox.
-      </div>
-
-      {/* Filters */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(155px,1fr))", gap: 10, marginBottom: 14 }}>
-        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search guest, ID, phone, room…"
-          style={{ padding: "9px 12px", border: "1.5px solid var(--border)", borderRadius: 8, fontSize: 13, fontFamily: "inherit", gridColumn: "span 2", minWidth: 0 }} />
-        <select value={filterMonth} onChange={e => setFilterMonth(e.target.value)}
-          style={{ padding: "9px 12px", border: "1.5px solid var(--border)", borderRadius: 8, fontSize: 13, fontFamily: "inherit" }}>
-          <option value="">All months</option>
-          {allMonths.map(m => <option key={m} value={m}>{monthLabel(m)}</option>)}
-        </select>
-        <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
-          style={{ padding: "9px 12px", border: "1.5px solid var(--border)", borderRadius: 8, fontSize: 13, fontFamily: "inherit" }}>
-          {STATUS_OPTS.map(s => <option key={s} value={s}>{s === "All" ? "All statuses" : s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
-        </select>
-        <input value={filterRoom} onChange={e => setFilterRoom(e.target.value)} placeholder="Room no."
-          style={{ padding: "9px 12px", border: "1.5px solid var(--border)", borderRadius: 8, fontSize: 13, fontFamily: "inherit" }} />
-        <label style={{ display: "flex", alignItems: "center", gap: 6, padding: "0 2px", fontSize: 11, color: "var(--text3)" }}>
-          From
-          <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
-            style={{ flex: 1, minWidth: 0, padding: "8px 10px", border: "1.5px solid var(--border)", borderRadius: 8, fontSize: 12.5, fontFamily: "inherit" }} />
-        </label>
-        <label style={{ display: "flex", alignItems: "center", gap: 6, padding: "0 2px", fontSize: 11, color: "var(--text3)" }}>
-          To
-          <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
-            style={{ flex: 1, minWidth: 0, padding: "8px 10px", border: "1.5px solid var(--border)", borderRadius: 8, fontSize: 12.5, fontFamily: "inherit" }} />
-        </label>
-        {(search || filterMonth || filterRoom || dateFrom || dateTo || filterStatus !== "All") && (
-          <button type="button"
-            onClick={() => { setSearch(""); setFilterMonth(""); setFilterRoom(""); setDateFrom(""); setDateTo(""); setFilterStatus("All"); }}
-            style={{ padding: "9px 12px", border: "1px solid var(--border)", background: "var(--bg2)", borderRadius: 8, fontSize: 12, fontFamily: "inherit", cursor: "pointer", color: "var(--text2)" }}>
-            Clear filters
-          </button>
-        )}
-      </div>
-
-      {/* Summary bar */}
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 14, padding: "12px 16px", background: "var(--bg4)", borderRadius: 10, alignItems: "center" }}>
-        <span style={{ fontSize: 12, color: "var(--text3)" }}>
-          {(loadingRange || loadingMonth)
-            ? <em>Searching older records…</em>
-            : <><strong>{filtered.length}</strong> invoice{filtered.length !== 1 ? "s" : ""}</>}
-          {selCount > 0 && <> · <strong style={{ color: "var(--navy)" }}>{selCount} selected</strong></>}
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "center", gap: 11, marginBottom: 14, flexWrap: "wrap" }}>
+        <span style={{ width: 30, height: 30, borderRadius: 9, background: "var(--bg3)", display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          <i className="ti ti-file-invoice" style={{ color: "var(--gold2)", fontSize: 16 }} />
         </span>
-        <span style={{ fontSize: 12, color: "var(--text3)" }}>·</span>
-        <span style={{ fontSize: 12, fontWeight: 700, color: "var(--navy)" }}>Total: {fmtMoney(totals.total)}</span>
-        <span style={{ fontSize: 12, color: "var(--text3)" }}>·</span>
-        <span style={{ fontSize: 12, fontWeight: 700, color: "#065f46" }}>Collected: {fmtMoney(totals.paid)}</span>
-        <span style={{ fontSize: 12, color: "var(--text3)" }}>·</span>
-        <span style={{ fontSize: 12, fontWeight: 700, color: totals.balance > 0 ? "#991b1b" : "#065f46" }}>Due: {fmtMoney(totals.balance)}</span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text)" }}>Invoices</div>
+          <div style={{ fontSize: 11, color: "var(--text3)" }}>View, edit, search and print every guest invoice</div>
+        </div>
+        <button onClick={doPDF} style={{ padding: "8px 14px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--bg2)", color: "var(--text)", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
+          <i className="ti ti-file-type-pdf" style={{ marginRight: 5 }} />PDF{selCount > 0 ? ` (${selCount})` : ""}
+        </button>
+        <button onClick={doExcel} style={{ padding: "8px 14px", borderRadius: 8, border: "1px solid #cfe2d5", background: "#f2f8f4", color: "#2f7d4f", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
+          <i className="ti ti-file-spreadsheet" style={{ marginRight: 5 }} />Excel{selCount > 0 ? ` (${selCount})` : ""}
+        </button>
+      </div>
+
+      {/* Summary cards */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(130px,1fr))", gap: 10, marginBottom: 12 }}>
+        {[
+          { label: "Invoices", value: (loadingRange || loadingMonth) ? "…" : filtered.length, color: "var(--text)" },
+          { label: "Total billed", value: fmtMoney(totals.total), color: "var(--text)" },
+          { label: "Collected", value: fmtMoney(totals.paid), color: "#2f7d4f" },
+          { label: "Due", value: fmtMoney(totals.balance), color: totals.balance > 0 ? "#b5322a" : "#2f7d4f" },
+        ].map(c => (
+          <div key={c.label} style={{ background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: 12, padding: "11px 13px" }}>
+            <div style={{ fontSize: 9, color: "var(--text3)", fontWeight: 600, textTransform: "uppercase", letterSpacing: .7 }}>{c.label}</div>
+            <div style={{ fontSize: 17, fontWeight: 600, color: c.color, marginTop: 3, fontVariantNumeric: "tabular-nums" }}>{c.value}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Search panel */}
+      <div style={{ background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: 12, padding: "12px 13px", marginBottom: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 9 }}>
+          <span style={{ fontSize: 9.5, letterSpacing: .9, textTransform: "uppercase", color: "var(--text3)", fontWeight: 600 }}>Search</span>
+          {(loadingRange || loadingMonth) && <span style={{ fontSize: 10.5, color: "var(--text3)" }}>· searching older records…</span>}
+          {(search || filterMonth || filterRoom || dateFrom || dateTo || filterStatus !== "All") && (
+            <button type="button"
+              onClick={() => { setSearch(""); setFilterMonth(""); setFilterRoom(""); setDateFrom(""); setDateTo(""); setFilterStatus("All"); }}
+              style={{ marginLeft: "auto", padding: "4px 11px", border: "1px solid var(--border)", background: "var(--bg3)", borderRadius: 7, fontSize: 11, fontFamily: "inherit", cursor: "pointer", color: "var(--text2)" }}>
+              Clear
+            </button>
+          )}
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px,1fr))", gap: 9 }}>
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Guest name, phone, invoice no, ID…"
+            style={{ padding: "8px 11px", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12.5, fontFamily: "inherit", gridColumn: "span 2", minWidth: 0 }} />
+          <input value={filterRoom} onChange={e => setFilterRoom(e.target.value)} placeholder="Room no."
+            style={{ padding: "8px 11px", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12.5, fontFamily: "inherit", minWidth: 0 }} />
+          <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
+            style={{ padding: "8px 11px", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12.5, fontFamily: "inherit", minWidth: 0 }}>
+            {STATUS_OPTS.map(s => <option key={s} value={s}>{s === "All" ? "All statuses" : s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
+          </select>
+          <select value={filterMonth} onChange={e => setFilterMonth(e.target.value)}
+            style={{ padding: "8px 11px", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12.5, fontFamily: "inherit", minWidth: 0 }}>
+            <option value="">All months</option>
+            {allMonths.map(m => <option key={m} value={m}>{monthLabel(m)}</option>)}
+          </select>
+          <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 10.5, color: "var(--text3)", minWidth: 0 }}>
+            From
+            <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
+              style={{ flex: 1, minWidth: 0, padding: "7px 9px", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12, fontFamily: "inherit" }} />
+          </label>
+          <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 10.5, color: "var(--text3)", minWidth: 0 }}>
+            To
+            <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
+              style={{ flex: 1, minWidth: 0, padding: "7px 9px", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12, fontFamily: "inherit" }} />
+          </label>
+        </div>
+      </div>
+
+      {/* Selection actions */}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12, alignItems: "center" }}>
+        {selCount > 0 && <span style={{ fontSize: 12, color: "var(--text2)" }}><strong>{selCount}</strong> selected</span>}
         <div style={{ marginLeft: "auto", display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <button onClick={doPDF} style={{ padding: "7px 14px", borderRadius: 8, border: "none", background: "#2D1B69", color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
-            <i className="ti ti-file-type-pdf" /> PDF{selCount > 0 ? ` (${selCount})` : ""}
-          </button>
-          <button onClick={doExcel} style={{ padding: "7px 14px", borderRadius: 8, border: "none", background: "#1a6b3c", color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
-            <i className="ti ti-file-spreadsheet" /> Excel{selCount > 0 ? ` (${selCount})` : ""}
-          </button>
           {selCount > 0 && (
             <button onClick={() => { setBulkDeleteOpen(true); setDelPw(""); }}
               style={{ padding: "7px 14px", borderRadius: 8, border: "none", background: "#c0392b", color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>

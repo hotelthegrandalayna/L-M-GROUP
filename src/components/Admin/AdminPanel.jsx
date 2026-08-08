@@ -5,7 +5,6 @@ import AdminRooms   from "./AdminRooms";
 import AdminStaff   from "./AdminStaff";
 import AdminData    from "./AdminData";
 import AdminSMS       from "./AdminSMS";
-import AdminInvoices  from "./AdminInvoices";
 import AdminReports   from "./AdminReports";
 import AuditLogViewer from "../AuditLogViewer";
 import { checkAdminPassword } from "../../utils/auth";
@@ -15,7 +14,7 @@ import { collectLocalPasswords } from "../../utils/userPass";
 const TABS = [
   { key:"finance",  label:"Finance",  icon:"ti-currency-taka"  },
   { key:"rooms",    label:"Rooms",    icon:"ti-building"       },
-  { key:"invoices", label:"Invoices", icon:"ti-file-invoice"   },
+  // Invoices now live in their own top-level admin tab — removed here to avoid duplication
   { key:"reports",  label:"Reports",  icon:"ti-report-money"   },
   { key:"sms",      label:"Messages", icon:"ti-message-circle" },
   { key:"audit",    label:"Audit Log",icon:"ti-eye"            },
@@ -62,7 +61,6 @@ export default function AdminPanel() {
 
       {tab==="finance"  && <AdminFinance />}
       {tab==="rooms"    && <AdminRooms />}
-      {tab==="invoices" && <AdminInvoices />}
       {tab==="reports"  && <AdminReports />}
       {tab==="sms"      && <AdminSMS />}
       {tab==="audit"    && <AuditLogViewer scope="hotel" title="Hotel — Activity Audit Log" checkPassword={checkAdminPassword} notify={notify} />}
