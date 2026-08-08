@@ -1,0 +1,277 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// Accounts reporting — pure functions, no React, so every figure is testable.
+// All money attribution follows the same rule as the rest of the app:
+// MONEY FOLLOWS THE NIGHT STAYED (see CLAUDE.md §1 and lib/hotelMoney.js).
+// ─────────────────────────────────────────────────────────────────────────────
+import { bookingMonthlyParts, bookingPaid, bookingTotal } from "./hotelMoney";
+
+const isLive = b => b && b.status !== "cancelled";
+
+export function localDay(iso, k = 0) {
+  const d = new Date(iso + "T00:00:00");
+  d.setDate(d.getDate() + k);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+// Every room a booking covers, with that room's own window and money
+export function roomLegs(b) {
+  if (!b) return [];
+  const nights = Math.max(1, b.nights || 1);
+  if (b.isMultiRoomBooking && (b.multiRooms || []).length) {
+    return b.multiRooms.map(r => ({
+      number: String(r.number),
+      checkin: r.checkin || b.checkin,
+      checkout: r.checkout || b.checkout,
+      acChoice: r.acChoice || "",
+      amount: r.amount ?? r.net ?? Math.max(0, (r.grossAmt ?? (r.rate || 0) * nights) - (r.discAmt || 0)),
+      discount: r.discAmt || 0,
+    }));
+  }
+  const extras = b.extraRooms || [];
+  const extrasDisc = extras.reduce((s, r) => s + (r.discAmt || 0), 0);
+  const extrasAmt = extras.reduce((s, r) => s + (r.amount ?? 0), 0);
+  const primaryDisc = Math.max(0, (b.discAmt || 0) - extrasDisc);
+  const primaryAmt = Math.max(0, bookingTotal(b) - extrasAmt);
+  return [
+    { number: String(b.room), checkin: b.checkin, checkout: b.checkout, acChoice: b.acChoice || "", amount: primaryAmt, discount: primaryDisc },
+    ...extras.map(r => ({
+      number: String(r.number), checkin: b.checkin, checkout: b.checkout, acChoice: r.acChoice || "",
+      amount: r.amount ?? 0, discount: r.discAmt || 0,
+    })),
+  ];
+}
+
+// Nights of a leg that fall inside `month` ("YYYY-MM"); month blank = all nights
+export function legNightsInMonth(leg, month) {
+  if (!leg?.checkin) return 0;
+  const total = Math.max(0, Math.round((new Date(leg.checkout + "T00:00:00") - new Date(leg.checkin + "T00:00:00")) / 86400000));
+  if (!month) return total || 1;
+  let n = 0;
+  for (let i = 0; i < total; i++) if (localDay(leg.checkin, i).slice(0, 7) === month) n++;
+  return n;
+}
+
+// ── Per-room performance ─────────────────────────────────────────────────────
+export function roomStats(bookings = [], rooms = [], month = "") {
+  const map = new Map();
+  (rooms || []).forEach(r => map.set(String(r.number), {
+    number: String(r.number), name: r.name || "", bookings: 0, nights: 0, revenue: 0, discount: 0,
+  }));
+  bookings.filter(isLive).forEach(b => {
+    roomLegs(b).forEach(leg => {
+      const nightsHere = legNightsInMonth(leg, month);
+      if (nightsHere <= 0) return;
+      const legTotal = Math.max(1, legNightsInMonth(leg, ""));
+      const row = map.get(leg.number) || { number: leg.number, name: "", bookings: 0, nights: 0, revenue: 0, discount: 0 };
+      row.bookings += 1;
+      row.nights += nightsHere;
+      row.revenue += (leg.amount || 0) * nightsHere / legTotal;
+      row.discount += (leg.discount || 0) * nightsHere / legTotal;
+      map.set(leg.number, row);
+    });
+  });
+  return [...map.values()]
+    .map(r => ({ ...r, avgRate: r.nights ? Math.round(r.revenue / r.nights) : 0 }))
+    .sort((a, b) => b.revenue - a.revenue);
+}
+
+// ── AC vs Non-AC ─────────────────────────────────────────────────────────────
+export function acStats(bookings = [], month = "") {
+  const out = { AC: { bookings: 0, nights: 0, revenue: 0 }, "Non-AC": { bookings: 0, nights: 0, revenue: 0 }, "Not set": { bookings: 0, nights: 0, revenue: 0 } };
+  bookings.filter(isLive).forEach(b => {
+    roomLegs(b).forEach(leg => {
+      const nightsHere = legNightsInMonth(leg, month);
+      if (nightsHere <= 0) return;
+      const key = leg.acChoice === "AC" ? "AC" : leg.acChoice === "Non-AC" ? "Non-AC" : "Not set";
+      const legTotal = Math.max(1, legNightsInMonth(leg, ""));
+      out[key].bookings += 1;
+      out[key].nights += nightsHere;
+      out[key].revenue += (leg.amount || 0) * nightsHere / legTotal;
+    });
+  });
+  Object.values(out).forEach(v => { v.avgRate = v.nights ? Math.round(v.revenue / v.nights) : 0; });
+  return out;
+}
+
+// ── Nights sold + occupancy ──────────────────────────────────────────────────
+export function nightsSold(bookings = [], month = "") {
+  let n = 0;
+  bookings.filter(isLive).forEach(b => roomLegs(b).forEach(leg => { n += legNightsInMonth(leg, month); }));
+  return n;
+}
+export function daysInMonth(month) {
+  if (!month) return 0;
+  const [y, m] = month.split("-").map(Number);
+  return new Date(y, m, 0).getDate();
+}
+export function occupancy(bookings, roomCount, month) {
+  const avail = roomCount * daysInMonth(month);
+  if (!avail) return { sold: nightsSold(bookings, month), available: 0, pct: 0 };
+  const sold = nightsSold(bookings, month);
+  return { sold, available: avail, pct: Math.round(sold / avail * 100) };
+}
+
+// ── Discounts ────────────────────────────────────────────────────────────────
+export function discountStats(bookings = [], month = "") {
+  let total = 0, count = 0, biggest = null;
+  bookings.filter(isLive).forEach(b => {
+    const inMonth = !month || bookingMonthlyParts(b).some(p => p.month === month);
+    if (!inMonth) return;
+    const d = parseFloat(b.discAmt) || 0;
+    if (d <= 0) return;
+    total += d; count += 1;
+    if (!biggest || d > biggest.amount) biggest = { amount: d, room: String(b.room), guest: b.guest || "" };
+  });
+  const billed = bookings.filter(isLive)
+    .filter(b => !month || bookingMonthlyParts(b).some(p => p.month === month))
+    .reduce((s, b) => s + bookingTotal(b), 0);
+  const gross = billed + total;
+  return { total, count, biggest, gross, billed, pctOfGross: gross ? Math.round(total / gross * 100) : 0,
+    avg: count ? Math.round(total / count) : 0 };
+}
+
+// ── Payment methods + cash reconciliation ────────────────────────────────────
+export function paymentStats(bookings = [], month = "", expenses = []) {
+  const byMethod = {};
+  bookings.filter(isLive).forEach(b => {
+    const hist = b.paymentHistory || [];
+    if (hist.length) {
+      hist.forEach(p => {
+        const d = p.ts ? String(p.ts).slice(0, 10) : b.checkin;
+        if (month && String(d).slice(0, 7) !== month) return;
+        const m = p.method || b.paymentMethod || "Cash";
+        byMethod[m] = (byMethod[m] || 0) + (parseFloat(p.amount) || 0);
+      });
+    } else {
+      if (month && String(b.checkin).slice(0, 7) !== month) return;
+      const m = b.paymentMethod || "Cash";
+      byMethod[m] = (byMethod[m] || 0) + bookingPaid(b);
+    }
+  });
+  const rows = Object.entries(byMethod).map(([method, amount]) => ({ method, amount }))
+    .sort((a, b) => b.amount - a.amount);
+  const cashIn = byMethod["Cash"] || 0;
+  const cashOut = (expenses || [])
+    .filter(e => (!month || String(e.date || "").slice(0, 7) === month) && (!e.method || e.method === "Cash"))
+    .reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
+  return { rows, cashIn, cashOut, cashExpected: cashIn - cashOut };
+}
+
+// ── Booking pattern ──────────────────────────────────────────────────────────
+export function patternStats(bookings = [], month = "") {
+  const live = bookings.filter(isLive).filter(b => !month || bookingMonthlyParts(b).some(p => p.month === month));
+  const stays = live.map(b => Math.max(1, b.nights || 1));
+  const avgStay = stays.length ? stays.reduce((s, n) => s + n, 0) / stays.length : 0;
+  const multiRoom = live.filter(b => (b.extraRooms || []).length || (b.multiRooms || []).length > 1).length;
+  const extensionRevenue = live.reduce((s, b) => s + (b.extensions || []).reduce((t, e) => t + (parseFloat(e.amount) || 0), 0), 0);
+  const byWeekday = {};
+  live.forEach(b => {
+    if (!b.checkin) return;
+    const wd = new Date(b.checkin + "T00:00:00").toLocaleDateString("en-GB", { weekday: "long" });
+    byWeekday[wd] = (byWeekday[wd] || 0) + 1;
+  });
+  const busiest = Object.entries(byWeekday).sort((a, b) => b[1] - a[1])[0];
+  return {
+    bookings: live.length,
+    avgStay: Math.round(avgStay * 100) / 100,
+    multiRoom,
+    extensionRevenue,
+    busiestWeekday: busiest ? busiest[0] : "—",
+  };
+}
+
+// ── Revenue series (daily / weekly / monthly) ────────────────────────────────
+// Uses the shared night-split so every bucket agrees with the rest of the app.
+export function revenueByDay(bookings = [], revenues = [], month = "") {
+  const out = new Map();
+  bookings.filter(isLive).forEach(b => {
+    roomLegs(b).forEach(leg => {
+      const total = Math.max(1, legNightsInMonth(leg, ""));
+      const perNight = (leg.amount || 0) / total;
+      for (let i = 0; i < total; i++) {
+        const day = localDay(leg.checkin, i);
+        if (month && day.slice(0, 7) !== month) continue;
+        out.set(day, (out.get(day) || 0) + perNight);
+      }
+    });
+  });
+  (revenues || []).filter(r => r && !r.bookingId && !r.fromBooking).forEach(r => {
+    const day = String(r.date || "").slice(0, 10);
+    if (!day || (month && day.slice(0, 7) !== month)) return;
+    out.set(day, (out.get(day) || 0) + (parseFloat(r.amount) || 0));
+  });
+  return [...out.entries()].map(([day, amount]) => ({ day, amount })).sort((a, b) => a.day.localeCompare(b.day));
+}
+
+export function revenueByMonth(bookings = [], revenues = []) {
+  const out = new Map();
+  bookings.filter(isLive).forEach(b => {
+    bookingMonthlyParts(b).forEach(p => {
+      if (!p.month) return;
+      out.set(p.month, (out.get(p.month) || 0) + p.collected);
+    });
+  });
+  (revenues || []).filter(r => r && !r.bookingId && !r.fromBooking).forEach(r => {
+    const m = String(r.date || "").slice(0, 7);
+    if (!m) return;
+    out.set(m, (out.get(m) || 0) + (parseFloat(r.amount) || 0));
+  });
+  return [...out.entries()].map(([month, amount]) => ({ month, amount })).sort((a, b) => a.month.localeCompare(b.month));
+}
+
+export function revenueByWeek(bookings = [], revenues = [], month = "") {
+  const days = revenueByDay(bookings, revenues, month);
+  const out = new Map();
+  days.forEach(({ day, amount }) => {
+    const d = new Date(day + "T00:00:00");
+    const week = Math.ceil(d.getDate() / 7);
+    const key = `Week ${week}`;
+    out.set(key, (out.get(key) || 0) + amount);
+  });
+  return [...out.entries()].map(([label, amount]) => ({ label, amount }));
+}
+
+export function expensesByMonth(expenses = []) {
+  const out = new Map();
+  (expenses || []).forEach(e => {
+    const m = String(e.date || "").slice(0, 7);
+    if (!m) return;
+    out.set(m, (out.get(m) || 0) + (parseFloat(e.amount) || 0));
+  });
+  return [...out.entries()].map(([month, amount]) => ({ month, amount })).sort((a, b) => a.month.localeCompare(b.month));
+}
+
+// Cost by category across the last N months — for the comparison chart
+export function costByCategoryOverMonths(expenses = [], months = []) {
+  const cats = new Map();
+  (expenses || []).forEach(e => {
+    const m = String(e.date || "").slice(0, 7);
+    if (!months.includes(m)) return;
+    const c = e.category || "Other";
+    if (!cats.has(c)) cats.set(c, { cat: c, total: 0, byMonth: {} });
+    const row = cats.get(c);
+    const amt = parseFloat(e.amount) || 0;
+    row.total += amt;
+    row.byMonth[m] = (row.byMonth[m] || 0) + amt;
+  });
+  return [...cats.values()].sort((a, b) => b.total - a.total);
+}
+
+// ── Salary ───────────────────────────────────────────────────────────────────
+export function salaryStats(expenses = [], month = "") {
+  const rows = (expenses || []).filter(e =>
+    (e.category === "Salaries") && (!month || String(e.date || "").slice(0, 7) === month));
+  const byPerson = new Map();
+  rows.forEach(e => {
+    const name = (e.empName || "").trim() || "Unnamed";
+    if (!byPerson.has(name)) byPerson.set(name, { name, role: e.empRole || "", period: e.payPeriod || "", amount: 0, count: 0 });
+    const p = byPerson.get(name);
+    p.amount += parseFloat(e.amount) || 0;
+    p.count += 1;
+    if (!p.role && e.empRole) p.role = e.empRole;
+    if (!p.period && e.payPeriod) p.period = e.payPeriod;
+  });
+  const staff = [...byPerson.values()].sort((a, b) => b.amount - a.amount);
+  const total = staff.reduce((s, p) => s + p.amount, 0);
+  return { staff, total, count: staff.length };
+}

@@ -5,6 +5,7 @@ import useIsMobile from '../hall/useIsMobile';
 const TABS = [
   { id: 'desk',      icon: 'ti-layout-dashboard', label: 'Desk'      },
   { id: 'invoices',  icon: 'ti-file-invoice',     label: 'Invoices', adminOnly: true },
+  { id: 'accounts',  icon: 'ti-report-analytics', label: 'Accounts', adminOnly: true },
   { id: 'expenses',  icon: 'ti-receipt',          label: 'Expenses & Cash' },
   { id: 'tasks',     icon: 'ti-checklist',        label: 'Tasks'     },
   { id: 'crm',       icon: 'ti-users',            label: 'CRM'       },

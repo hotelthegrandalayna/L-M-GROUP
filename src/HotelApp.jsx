@@ -7,6 +7,7 @@ import Desk         from "./components/Desk";
 // NOTE: components/Bookings.jsx stays — the front desk imports the booking form
 // (NewBookingModal / InvoicePreviewModal) from it. Only the tab is removed.
 import Invoices     from "./components/Invoices";
+import Accounts     from "./components/Accounts";
 import Expenses     from "./components/Expenses";
 import Tasks        from "./components/Tasks";
 import TaskReminderPopup from "./components/TaskReminderPopup";
@@ -30,6 +31,7 @@ function HotelInner({ onSwitchApp }) {
         <ErrorBoundary key={activeTab}>
           {activeTab === "desk"      && <Desk      />}
           {activeTab === "invoices"  && <Invoices  />}
+          {activeTab === "accounts"  && <Accounts  />}
           {activeTab === "expenses"  && <Expenses  />}
           {activeTab === "tasks"     && <Tasks     />}
           {activeTab === "crm"       && <CRM       />}
