@@ -187,20 +187,71 @@ function GuestIdView({ bk, onClose }) {
     return list;
   }, [bk, fetched, hasLocal]);
 
+  // Print the ID as a standalone document — guest, rooms and stay dates on top so
+  // the printed sheet makes sense on its own in an emergency.
+  function printId() {
+    const rows = [
+      ["Guest", bk.guest], ["Phone", bk.phone], ["Nationality", bk.nationality || "—"],
+      ["Room(s)", allRoomNumbers(bk).join(", ") || "—"],
+      ["Check-in", fmtDate(bk.checkin)], ["Check-out", fmtDate(bk.checkout)],
+      ["Nights", bk.nights || "—"],
+    ].map(([l, v]) => `<tr><td style="padding:5px 10px;color:#666;font-size:12px;white-space:nowrap;">${l}</td><td style="padding:5px 10px;font-weight:700;font-size:13px;">${v ?? "—"}</td></tr>`).join("");
+
+    const docs = persons.map(p => `
+      <div style="margin-top:14px;">
+        <div style="font-size:11px;font-weight:700;color:#333;margin-bottom:6px;">
+          ${p.label}${p.idType ? " · " + p.idType : ""}${p.idNum ? " · " + p.idNum : ""}
+        </div>
+        ${p.images.length
+          ? p.images.map(im => `<div style="margin-bottom:10px;page-break-inside:avoid;">
+              <div style="font-size:10px;color:#777;margin-bottom:3px;">${im.side}</div>
+              <img src="${im.img}" style="max-width:100%;max-height:420px;object-fit:contain;border:1px solid #ddd;border-radius:6px;" />
+            </div>`).join("")
+          : '<div style="font-size:12px;color:#888;">No ID photo on file.</div>'}
+      </div>`).join("");
+
+    const w = window.open("", "_blank");
+    if (!w) return;
+    w.document.write(`<html><head><title>Guest ID — ${bk.guest}</title></head>
+      <body style="font-family:Arial,sans-serif;padding:24px;color:#1a1a2e;">
+        <h2 style="margin:0 0 2px;">Hotel The Grand Alayna</h2>
+        <div style="color:#777;font-size:12px;margin-bottom:14px;">Guest identification record</div>
+        <table style="border-collapse:collapse;border:1px solid #eee;">${rows}</table>
+        ${docs}
+      </body></html>`);
+    w.document.close();
+    w.focus();
+    // give the images a moment to decode before printing
+    setTimeout(() => w.print(), 400);
+  }
+
   return (
     <div className="modal-overlay open" onClick={ev => ev.target === ev.currentTarget && onClose()} style={{ zIndex: 10000 }}>
-      <div className="modal-box" style={{ maxWidth: 620, maxHeight: "90vh", overflowY: "auto", padding: 0 }}>
+      <div className="modal-box" style={{ maxWidth: 700, maxHeight: "90vh", overflowY: "auto", padding: 0 }}>
         <div style={{ background: "var(--navy)", color: "#fff", padding: "14px 18px", borderRadius: "10px 10px 0 0", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
-          <span style={{ fontWeight: 600, fontSize: 14 }}>
+          <span style={{ fontWeight: 600, fontSize: 14, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             <i className="ti ti-id" style={{ marginRight: 8, color: "var(--gold)" }} />
             Guest ID — {bk.guest}
           </span>
-          <button onClick={onClose} style={{ background: "rgba(255,255,255,.15)", color: "#fff", border: "none", borderRadius: 8, padding: "6px 11px", cursor: "pointer", fontSize: 15 }}><i className="ti ti-x" /></button>
+          <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+            <button onClick={printId} style={{ background: "var(--gold)", color: "#fff", border: "none", borderRadius: 8, padding: "6px 14px", cursor: "pointer", fontSize: 12.5, fontWeight: 600, fontFamily: "inherit" }}>
+              <i className="ti ti-printer" style={{ marginRight: 5 }} />Print
+            </button>
+            <button onClick={onClose} style={{ background: "rgba(255,255,255,.15)", color: "#fff", border: "none", borderRadius: 8, padding: "6px 11px", cursor: "pointer", fontSize: 15 }}><i className="ti ti-x" /></button>
+          </div>
         </div>
 
         <div style={{ padding: "16px 18px" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
-            {[["Guest", bk.guest], ["Phone", bk.phone], ["Nationality", bk.nationality || "—"], ["Rooms", allRoomNumbers(bk).join(", ") || "—"]].map(([l, v]) => (
+          {/* Guest + stay summary — printed with the ID so the document stands alone */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(130px,1fr))", gap: 10, marginBottom: 14 }}>
+            {[
+              ["Guest", bk.guest],
+              ["Phone", bk.phone],
+              ["Nationality", bk.nationality || "—"],
+              ["Room(s)", allRoomNumbers(bk).join(", ") || "—"],
+              ["Check-in", fmtDate(bk.checkin)],
+              ["Check-out", fmtDate(bk.checkout)],
+            ].map(([l, v]) => (
               <div key={l}>
                 <div style={{ fontSize: 10, color: "var(--text3)", textTransform: "uppercase", letterSpacing: .6 }}>{l}</div>
                 <div style={{ fontSize: 13, fontWeight: 600 }}>{v || "—"}</div>
@@ -218,11 +269,21 @@ function GuestIdView({ bk, onClose }) {
                 {p.idNum && <span style={{ fontSize: 11.5, fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{p.idNum}</span>}
               </div>
               {p.images.length ? (
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 9 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(210px,1fr))", gap: 10 }}>
                   {p.images.map((im, j) => (
-                    <div key={j} style={{ border: "1px solid var(--border)", borderRadius: 9, overflow: "hidden", cursor: "zoom-in" }} onClick={() => setZoom(im.img)}>
-                      <img src={im.img} alt={im.side} style={{ width: "100%", display: "block", maxHeight: 190, objectFit: "cover" }} />
-                      <div style={{ fontSize: 10.5, color: "var(--text3)", padding: "4px 8px", background: "var(--bg3)" }}>{im.side}</div>
+                    <div key={j} style={{ border: "1px solid var(--border)", borderRadius: 9, overflow: "hidden" }}>
+                      {/* contain, not cover — the WHOLE document must be visible, never cropped */}
+                      <div style={{ background: "#f4f4f6", cursor: "zoom-in" }} onClick={() => setZoom(im.img)}>
+                        <img src={im.img} alt={im.side} style={{ width: "100%", display: "block", maxHeight: 320, objectFit: "contain" }} />
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 8px", background: "var(--bg3)" }}>
+                        <span style={{ fontSize: 10.5, color: "var(--text3)" }}>{im.side}</span>
+                        <a href={im.img} download={`ID-${(bk.guest || "guest").replace(/\s+/g, "_")}-${im.side}.jpg`}
+                          onClick={e => e.stopPropagation()}
+                          style={{ marginLeft: "auto", fontSize: 10.5, color: "var(--text2)", textDecoration: "none", border: "1px solid var(--border)", borderRadius: 6, padding: "2px 8px", background: "var(--bg2)" }}>
+                          <i className="ti ti-download" style={{ fontSize: 11, marginRight: 3 }} />Save
+                        </a>
+                      </div>
                     </div>
                   ))}
                 </div>
