@@ -4,7 +4,8 @@ import { useMemo } from "react";
 // Used by both the hotel Expenses page and the hall Expenses page.
 // Expects items pre-normalized to { cat, amount, date } — business expenses only.
 
-const BAR_COLORS = ["#E24B4A","#EF9F27","#378ADD","#7F77DD","#1D9E75","#D4537E","#0F6E56","#993C1D","#185FA5","#5F5E5A"];
+// Muted palette matching the front-desk theme — readable side by side, not loud
+const BAR_COLORS = ["#c96a63","#d9a441","#7d93b5","#9b8bbf","#89a06f","#c98fa8","#5f8f86","#b08968","#6f86ad","#8a8f99"];
 const BAR_BGS    = ["#FCEBEB","#FAEEDA","#E6F1FB","#EEEDFE","#E1F5EE","#FBEAF0","#E1F5EE","#FAECE7","#E6F1FB","#F1EFE8"];
 
 function money(n) { return "৳" + (n||0).toLocaleString(); }
@@ -82,46 +83,66 @@ export default function CostAnalysis({ items, allItems, monthKey, monthLabel, ca
         </div>
       )}
 
-      {/* Highlights */}
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))", gap:10, marginBottom:14 }}>
-        {[
-          top          && ["Biggest cost",  top.cat,          money(top.amt),            "#b5322a"],
-          mostFrequent && ["Most often",    mostFrequent.cat, mostFrequent.cnt+" times", "var(--text2)"],
-          smallest     && ["Smallest cost", smallest.cat,     money(smallest.amt),       "#2f7d4f"],
-        ].filter(Boolean).map(([label,cat,val,color])=>(
-          <div key={label} style={{ border:"1px solid var(--border)", borderRadius:9, padding:"9px 11px" }}>
-            <div style={{ fontSize:9, letterSpacing:.6, textTransform:"uppercase", color:"var(--text3)", fontWeight:600 }}>{label}</div>
-            <div style={{ fontSize:13, fontWeight:600, marginTop:3, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{cat}</div>
-            <div style={{ fontSize:14, fontWeight:600, color, fontVariantNumeric:"tabular-nums" }}>{val}</div>
-          </div>
-        ))}
-      </div>
+      {/* Donut + ranked list */}
+      <div style={{ display:"flex", gap:18, alignItems:"center", flexWrap:"wrap" }}>
 
-      {/* Category bars — aligned columns: name · bar · % · amount */}
-      <div>
-        {rows.map((r, i) => {
-          const pct = total > 0 ? Math.round(r.amt / total * 100) : 0;
-          const color = BAR_COLORS[i % BAR_COLORS.length];
-          const isAlerted = alert && alert.cat === r.cat;
-          return (
-            <div key={r.cat} onClick={() => onPickCategory && onPickCategory(r.cat)}
-              style={{ display:"flex", alignItems:"center", gap:10, padding:"7px 0", borderTop:"1px solid var(--border)", cursor: onPickCategory ? "pointer" : "default" }}
-              title={`Show only ${r.cat} in the table`}>
-              <span style={{ flex:"0 0 130px", minWidth:0, fontSize:12.5, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
-                {r.cat}
-                {isAlerted && <span style={{ background:"#fdf4f3", color:"#8f2323", fontSize:9, padding:"1px 6px", borderRadius:8, marginLeft:5, fontWeight:600 }}>HIGH</span>}
-              </span>
-              <div style={{ flex:1, minWidth:40, height:7, background:"var(--bg3)", borderRadius:20, overflow:"hidden" }}>
-                <div style={{ height:"100%", width:Math.max(pct,1)+"%", background:color, borderRadius:20, transition:"width .4s" }} />
+        {/* Donut — each slice is one category, sized by its share of total cost */}
+        <svg viewBox="0 0 42 42" style={{ width:150, height:150, flexShrink:0 }} role="img"
+          aria-label={`Cost by category, total ${money(total)}`}>
+          <circle cx="21" cy="21" r="15.9155" fill="none" stroke="var(--bg3)" strokeWidth="5.5" />
+          {(() => {
+            let offset = 25; // start at 12 o'clock
+            return rows.map((r, i) => {
+              const pct = total > 0 ? (r.amt / total) * 100 : 0;
+              const el = (
+                <circle key={r.cat} cx="21" cy="21" r="15.9155" fill="none"
+                  stroke={BAR_COLORS[i % BAR_COLORS.length]} strokeWidth="5.5"
+                  strokeDasharray={`${pct} ${100 - pct}`} strokeDashoffset={offset}
+                  onClick={() => onPickCategory && onPickCategory(r.cat)}
+                  style={{ cursor: onPickCategory ? "pointer" : "default", transition:"stroke-dasharray .4s" }}>
+                  <title>{`${r.cat} — ${money(r.amt)} (${Math.round(pct)}%)`}</title>
+                </circle>
+              );
+              offset -= pct;
+              return el;
+            });
+          })()}
+          <text x="21" y="20" textAnchor="middle" style={{ fontSize:4.2, fontWeight:600, fill:"var(--text)" }}>{money(total)}</text>
+          <text x="21" y="24.6" textAnchor="middle" style={{ fontSize:2.4, fill:"var(--text3)" }}>total cost</text>
+        </svg>
+
+        {/* Ranked list — colour, name, share, amount */}
+        <div style={{ flex:1, minWidth:230 }}>
+          {rows.map((r, i) => {
+            const pct = total > 0 ? Math.round(r.amt / total * 100) : 0;
+            const isAlerted = alert && alert.cat === r.cat;
+            return (
+              <div key={r.cat} onClick={() => onPickCategory && onPickCategory(r.cat)}
+                style={{ display:"flex", alignItems:"center", gap:9, padding:"5px 0",
+                  borderBottom: i < rows.length-1 ? "1px solid var(--border)" : "none",
+                  cursor: onPickCategory ? "pointer" : "default" }}
+                title={`Show only ${r.cat} in the table`}>
+                <span style={{ width:9, height:9, borderRadius:3, background:BAR_COLORS[i % BAR_COLORS.length], flexShrink:0 }} />
+                <span style={{ flex:1, minWidth:0, fontSize:12, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
+                  {r.cat}
+                  {isAlerted && <span style={{ background:"#fdf4f3", color:"#8f2323", fontSize:9, padding:"1px 6px", borderRadius:8, marginLeft:5, fontWeight:600 }}>HIGH</span>}
+                </span>
+                <span style={{ width:34, textAlign:"right", fontSize:10.5, color:"var(--text3)" }}>{pct}%</span>
+                <span style={{ width:70, textAlign:"right", fontSize:12, fontWeight:600, fontVariantNumeric:"tabular-nums" }}>{money(r.amt)}</span>
               </div>
-              <span style={{ flex:"0 0 38px", textAlign:"right", fontSize:10.5, color:"var(--text3)" }}>{pct}%</span>
-              <span style={{ flex:"0 0 70px", textAlign:"right", fontSize:12.5, fontWeight:600, fontVariantNumeric:"tabular-nums" }}>{money(r.amt)}</span>
-            </div>
-          );
-        })}
+            );
+          })}
+
+          {/* One-line summary */}
+          <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginTop:9, paddingTop:8, borderTop:"1px solid var(--border)", fontSize:10, color:"var(--text3)" }}>
+            {top && <span>Biggest: <strong style={{ color:"#b5322a" }}>{top.cat}</strong></span>}
+            {mostFrequent && <span>· Most often: <strong style={{ color:"var(--text2)" }}>{mostFrequent.cat} ({mostFrequent.cnt}×)</strong></span>}
+            {smallest && rows.length > 1 && <span>· Smallest: <strong style={{ color:"#2f7d4f" }}>{smallest.cat}</strong></span>}
+          </div>
+        </div>
       </div>
 
-      <div style={{ fontSize:10.5, color:"var(--text3)", marginTop:10 }}>Tap a category to filter the records below.</div>
+      <div style={{ fontSize:10.5, color:"var(--text3)", marginTop:10 }}>Tap a slice or a row to filter the records below.</div>
     </div>
   );
 }

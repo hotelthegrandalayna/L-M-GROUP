@@ -2,7 +2,7 @@ import { useState, useMemo, useRef, useEffect } from "react";
 import { useApp } from "../context/AppContext";
 import { todayStr, money } from "../utils/helpers";
 import { loadHotelBookingsForMonth, hasHotelSupabaseConfig } from "../lib/hotelSupabase";
-import { monthMoney } from "../lib/hotelMoney";
+import { monthMoney, bookingPaid } from "../lib/hotelMoney";
 import { deleteRow, hasSupabase } from "../utils/supabaseSync";
 import { gaRecordDeleted } from "../context/AppContext";
 import { hotelExpenseType } from "../utils/expenseType";
@@ -84,6 +84,7 @@ export default function Expenses() {
   const [filterMonth, setFilterMonth] = useState(() => thisMonth);
   const [delTarget, setDelTarget] = useState(null);
   const [showRecords, setShowRecords] = useState(false);
+  const [showForm,    setShowForm]    = useState(false); // add-record form starts collapsed
   const fileRef = useRef();
 
   // ── Past-month revenue accuracy (isolated) ───────────────────────────────
@@ -154,19 +155,34 @@ export default function Expenses() {
   // Uses the shared hotelMoney helper so this matches Admin Invoices, Admin
   // Finance and the Desk to the taka. revBookings is the COMPLETE month.
   const { monthBilled, monthRevenue, monthOutstanding } = useMemo(() => {
-    const m = filterMonth || thisMonth;
-    const mm = monthMoney({ bookings: revBookings, revenues, month: m });
+    // "All Months" (empty filterMonth) means EVERY month, not the current one.
+    if (!filterMonth) {
+      let billed = 0, collected = 0;
+      revBookings.forEach(b => {
+        if (!b || b.status === "cancelled") return;
+        billed    += parseFloat(b.invoiceTotal ?? b.amount ?? 0) || 0;
+        collected += bookingPaid(b);
+      });
+      const manual = (revenues || [])
+        .filter(r => !r.bookingId && !r.fromBooking)
+        .reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
+      billed += manual; collected += manual;
+      return { monthBilled: billed, monthRevenue: collected, monthOutstanding: Math.max(0, billed - collected) };
+    }
+    const mm = monthMoney({ bookings: revBookings, revenues, month: filterMonth });
     return { monthBilled: mm.billed, monthRevenue: mm.collected, monthOutstanding: mm.outstanding };
-  }, [revBookings, revenues, filterMonth, thisMonth]);
+  }, [revBookings, revenues, filterMonth]);
 
   // ── Expense stats ─────────────────────────────────────────────────────────────
+  // NOTE: startsWith("") matches every date, so an empty filterMonth correctly
+  // means "all months" here — never fall back to the current month.
   const { businessTotal, nonBusinessTotal } = useMemo(() => {
-    const mExp = normalizedExpenses.filter(e => (e.date||"").startsWith(filterMonth || thisMonth));
+    const mExp = normalizedExpenses.filter(e => (e.date||"").startsWith(filterMonth));
     return {
       businessTotal:    mExp.filter(e => e.expType === "business").reduce((s,e) => s+(e.amount||0), 0),
       nonBusinessTotal: mExp.filter(e => e.expType === "nonbusiness").reduce((s,e) => s+(e.amount||0), 0),
     };
-  }, [normalizedExpenses, filterMonth, thisMonth]);
+  }, [normalizedExpenses, filterMonth]);
 
   const netProfit   = monthRevenue - businessTotal;
   const cashInHand  = monthRevenue - businessTotal - nonBusinessTotal;
@@ -177,8 +193,8 @@ export default function Expenses() {
       .map(e => ({ cat: e.category, amount: e.amount, date: e.date })),
   [normalizedExpenses]);
   const monthBizItems = useMemo(() =>
-    allBizItems.filter(e => (e.date||"").startsWith(filterMonth || thisMonth)),
-  [allBizItems, filterMonth, thisMonth]);
+    allBizItems.filter(e => (e.date||"").startsWith(filterMonth)),
+  [allBizItems, filterMonth]);
 
   // ── Filtered list ─────────────────────────────────────────────────────────────
   const filtered = useMemo(() => {
@@ -327,34 +343,20 @@ export default function Expenses() {
         </div>
       </div>
 
-      {/* ── Money in ── */}
-      <div style={{ fontSize:9.5, letterSpacing:.9, textTransform:"uppercase", color:C.dim, fontWeight:600, margin:"0 0 7px 2px" }}>Money in</div>
-      <div style={{ display:"grid", gridTemplateColumns: isMobile?"1fr 1fr 1fr":"repeat(3,1fr)", gap:10, marginBottom:14 }}>
+      {/* ── All seven figures on one compact line ── */}
+      <div style={{ display:"grid", gridTemplateColumns: isMobile?"repeat(2,minmax(0,1fr))":"repeat(7,minmax(0,1fr))", gap:7, marginBottom:12 }}>
         {[
-          ["Total billed", monthBilled, "var(--text)"],
-          ["Collected",    monthRevenue, "#2f7d4f"],
-          ["Outstanding",  monthOutstanding, monthOutstanding>0 ? "#b5322a" : "var(--text3)"],
-        ].map(([label,val,color])=>(
-          <div key={label} style={{ background:"var(--bg2)", border:"1px solid var(--border)", borderRadius:12, padding:"11px 13px" }}>
-            <div style={{ fontSize:9, letterSpacing:.7, textTransform:"uppercase", color:C.dim, fontWeight:600 }}>{label}</div>
-            <div style={{ fontSize:19, fontWeight:600, color, marginTop:3, fontVariantNumeric:"tabular-nums" }}>{money(val)}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* ── Money out & result ── */}
-      <div style={{ fontSize:9.5, letterSpacing:.9, textTransform:"uppercase", color:C.dim, fontWeight:600, margin:"0 0 7px 2px" }}>Money out &amp; result</div>
-      <div style={{ display:"grid", gridTemplateColumns: isMobile?"1fr 1fr":"repeat(4,1fr)", gap:10, marginBottom:16 }}>
-        {[
-          ["Business expenses", businessTotal,    "#b5322a",                              "Salaries, utilities, ops",   false],
-          ["Non-business",      nonBusinessTotal, "var(--text)",                           "Transfers, withdrawals",     false],
-          ["Net profit",        netProfit,        netProfit>=0?"#2f7d4f":"#b5322a",        "Collected − business exp.",  false],
-          ["Cash in hand",      cashInHand,       cashInHand>=0?"#a6832c":"#b5322a",       "After all expenses",         true],
-        ].map(([label,val,color,sub,accent])=>(
-          <div key={label} style={{ background:"var(--bg2)", border:"1px solid "+(accent?"#e3d6a8":"var(--border)"), borderRadius:12, padding:"11px 13px" }}>
-            <div style={{ fontSize:9, letterSpacing:.7, textTransform:"uppercase", color:accent?"#a6832c":C.dim, fontWeight:600 }}>{label}</div>
-            <div style={{ fontSize:18, fontWeight:600, color, marginTop:3, fontVariantNumeric:"tabular-nums" }}>{money(val)}</div>
-            <div style={{ fontSize:10, color:C.dim, marginTop:2 }}>{sub}</div>
+          ["Billed",        monthBilled,      "var(--text)",                       false],
+          ["Collected",     monthRevenue,     "#2f7d4f",                           false],
+          ["Outstanding",   monthOutstanding, monthOutstanding>0?"#b5322a":"var(--text3)", false],
+          ["Business exp.", businessTotal,    "#b5322a",                           false],
+          ["Non-business",  nonBusinessTotal, "var(--text)",                       false],
+          ["Net profit",    netProfit,        netProfit>=0?"#2f7d4f":"#b5322a",    false],
+          ["Cash in hand",  cashInHand,       cashInHand>=0?"#a6832c":"#b5322a",   true ],
+        ].map(([label,val,color,accent])=>(
+          <div key={label} title={label} style={{ background:"var(--bg2)", border:"1px solid "+(accent?"#e3d6a8":"var(--border)"), borderRadius:10, padding:"8px 10px", minWidth:0 }}>
+            <div style={{ fontSize:8.5, letterSpacing:.5, textTransform:"uppercase", color:accent?"#a6832c":C.dim, fontWeight:600, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{label}</div>
+            <div style={{ fontSize:14.5, fontWeight:600, color, marginTop:2, fontVariantNumeric:"tabular-nums", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{money(val)}</div>
           </div>
         ))}
       </div>
@@ -373,14 +375,24 @@ export default function Expenses() {
       {/* ── Record Expense Form — whole panel tints with the selected type ── */}
       <div style={{ background:"var(--bg2)", border:"1px solid var(--border)", borderRadius:12, padding:"14px 15px", marginBottom:14 }}>
 
-        <div style={{ display:"flex", alignItems:"center", gap:9, marginBottom:11, flexWrap:"wrap" }}>
+        {/* Collapsed by default so the whole page fits one screen; auto-opens while editing */}
+        <div onClick={() => !editId && setShowForm(v => !v)}
+          style={{ display:"flex", alignItems:"center", gap:9, flexWrap:"wrap", cursor: editId ? "default" : "pointer" }}>
           <span style={{ width:24, height:24, borderRadius:7, background:"var(--bg3)", display:"inline-flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
             <i className={"ti "+(editId ? "ti-edit" : "ti-plus")} style={{ fontSize:13, color:"var(--text2)" }} />
           </span>
           <span style={{ fontSize:10.5, fontWeight:600, letterSpacing:.8, textTransform:"uppercase", color:"var(--text2)" }}>
             {editId ? "Editing record" : "Add a record"}
           </span>
+          {!editId && (
+            <span style={{ marginLeft:"auto", display:"flex", alignItems:"center", gap:5, fontSize:10.5, color:"var(--text3)" }}>
+              {(showForm ? "Hide" : "Open")}
+              <i className={"ti "+((showForm||editId) ? "ti-chevron-up" : "ti-chevron-down")} style={{ fontSize:14 }} />
+            </span>
+          )}
         </div>
+
+        {(showForm || editId) && (<div style={{ marginTop:12 }}>
 
         {/* Business / Non-Business toggle */}
         <div style={{ display:"inline-flex", border:"1px solid var(--border)", borderRadius:8, overflow:"hidden", marginBottom:11 }}>
@@ -477,11 +489,12 @@ export default function Expenses() {
         </div>
 
         <div style={{ display:"flex", justifyContent:"flex-end", gap:8 }}>
-          <button onClick={clearForm} style={{ padding:"9px 18px", borderRadius:9, border:"1.5px solid #d5dce6", background:"#fff", cursor:"pointer", fontFamily:"inherit", fontWeight:700, fontSize:13 }}>Cancel</button>
-          <button onClick={saveExpense} style={{ padding:"9px 22px", borderRadius:9, border:"none", background:isNonBusiness?C.orange:C.navy, color:"#fff", cursor:"pointer", fontFamily:"inherit", fontWeight:800, fontSize:13 }}>
-            💾 {editId ? "Update Expense" : "Save Expense"}
+          <button onClick={clearForm} style={{ padding:"9px 18px", borderRadius:9, border:"1px solid var(--border)", background:"var(--bg2)", cursor:"pointer", fontFamily:"inherit", fontWeight:600, fontSize:13 }}>Cancel</button>
+          <button onClick={saveExpense} style={{ padding:"9px 22px", borderRadius:9, border:"none", background:"var(--navy)", color:"#fff", cursor:"pointer", fontFamily:"inherit", fontWeight:600, fontSize:13 }}>
+            {editId ? "Update expense" : "Save expense"}
           </button>
         </div>
+        </div>)}
       </div>
 
       {/* ── Collapsible records section ── */}
