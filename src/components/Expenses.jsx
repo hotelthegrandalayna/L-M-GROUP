@@ -1,8 +1,8 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { useApp } from "../context/AppContext";
 import { todayStr, money } from "../utils/helpers";
-import { loadHotelBookingsForMonth, hasHotelSupabaseConfig } from "../lib/hotelSupabase";
-import { monthMoney, bookingPaid } from "../lib/hotelMoney";
+import { loadHotelBookingsForMonth, loadHotelBookingsForRange, hasHotelSupabaseConfig } from "../lib/hotelSupabase";
+import { monthMoney, bookingMonthlyParts } from "../lib/hotelMoney";
 import { deleteRow, hasSupabase } from "../utils/supabaseSync";
 import { gaRecordDeleted } from "../context/AppContext";
 import { hotelExpenseType } from "../utils/expenseType";
@@ -97,22 +97,29 @@ export default function Expenses() {
   const [loadingRevMonth, setLoadingRevMonth] = useState(null);
   useEffect(() => {
     const m = filterMonth;
-    if (!m || m >= thisMonth) return;      // current/future already fully loaded
-    if (monthBookings[m]) return;          // already fetched
     if (!hasHotelSupabaseConfig()) return;
+    // "All Months" needs EVERY booking, not just the live 30-day window —
+    // otherwise the all-time totals come out far too low.
+    const key = m || "ALL";
+    if (m && m >= thisMonth) return;        // current/future already fully loaded
+    if (monthBookings[key]) return;         // already fetched
     let alive = true;
-    setLoadingRevMonth(m);
-    loadHotelBookingsForMonth(m)
-      .then(rows => { if (alive) setMonthBookings(p => ({ ...p, [m]: rows || [] })); })
+    setLoadingRevMonth(key);
+    const load = m
+      ? loadHotelBookingsForMonth(m)
+      : loadHotelBookingsForRange("2000-01-01", "2999-12-31");
+    load
+      .then(rows => { if (alive) setMonthBookings(p => ({ ...p, [key]: rows || [] })); })
       .catch(() => {})
       .finally(() => { if (alive) setLoadingRevMonth(null); });
     return () => { alive = false; };
-  }, [filterMonth, thisMonth]);
+  }, [filterMonth, thisMonth]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Bookings used ONLY for revenue math on this page: live bookings + the
-  // on-demand past month, de-duplicated, excluding deleted ones.
+  // on-demand month (or the full history for "All Months"), de-duplicated,
+  // excluding deleted ones.
   const revBookings = useMemo(() => {
-    const extra = monthBookings[filterMonth] || [];
+    const extra = monthBookings[filterMonth || "ALL"] || [];
     if (!extra.length) return bookings;
     const have = new Set(bookings.map(b => String(b.supabaseBookingId ?? b.id)));
     const deleted = (() => { try { return new Set(JSON.parse(localStorage.getItem('ga_deleted_booking_ids') || '[]')); } catch { return new Set(); } })();
@@ -155,19 +162,25 @@ export default function Expenses() {
   // Uses the shared hotelMoney helper so this matches Admin Invoices, Admin
   // Finance and the Desk to the taka. revBookings is the COMPLETE month.
   const { monthBilled, monthRevenue, monthOutstanding } = useMemo(() => {
-    // "All Months" (empty filterMonth) means EVERY month, not the current one.
+    // "All Months" (empty filterMonth) = the SUM OF EVERY MONTH, computed with the
+    // exact same monthMoney engine as a single month. Summing the months (rather
+    // than totalling the raw bookings) guarantees All Months can never disagree
+    // with the individual months you see when you pick them one by one.
     if (!filterMonth) {
-      let billed = 0, collected = 0;
+      const months = new Set();
       revBookings.forEach(b => {
         if (!b || b.status === "cancelled") return;
-        billed    += parseFloat(b.invoiceTotal ?? b.amount ?? 0) || 0;
-        collected += bookingPaid(b);
+        bookingMonthlyParts(b).forEach(p => p.month && months.add(p.month));
       });
-      const manual = (revenues || [])
-        .filter(r => !r.bookingId && !r.fromBooking)
-        .reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
-      billed += manual; collected += manual;
-      return { monthBilled: billed, monthRevenue: collected, monthOutstanding: Math.max(0, billed - collected) };
+      (revenues || []).forEach(r => {
+        if (r && !r.bookingId && !r.fromBooking && r.date) months.add(String(r.date).slice(0, 7));
+      });
+      let billed = 0, collected = 0, outstanding = 0;
+      months.forEach(m => {
+        const mm = monthMoney({ bookings: revBookings, revenues, month: m });
+        billed += mm.billed; collected += mm.collected; outstanding += mm.outstanding;
+      });
+      return { monthBilled: billed, monthRevenue: collected, monthOutstanding: outstanding };
     }
     const mm = monthMoney({ bookings: revBookings, revenues, month: filterMonth });
     return { monthBilled: mm.billed, monthRevenue: mm.collected, monthOutstanding: mm.outstanding };

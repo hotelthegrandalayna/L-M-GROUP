@@ -83,6 +83,33 @@ describe("Invoices tab must reconcile with the revenue engine", () => {
     expect(spread).toBeCloseTo(paidTotal, 2);
   });
 
+  // Reported bug: picking "All Months" showed LESS than any single month, because
+  // it summed only the live 30-day window instead of every month.
+  it("ALL MONTHS equals the sum of the individual months", () => {
+    const months = new Set();
+    bookings.forEach(b => {
+      if (b.status === "cancelled") return;
+      bookingMonthlyParts(b).forEach(p => p.month && months.add(p.month));
+    });
+    let billed = 0, collected = 0;
+    months.forEach(m => {
+      const mm = monthMoney({ bookings, month: m });
+      billed += mm.billed; collected += mm.collected;
+    });
+
+    // Every taka actually paid, across the whole data set
+    const paidTotal = bookings
+      .filter(b => b.status !== "cancelled")
+      .reduce((s, b) => s + b.paymentHistory.reduce((t, p) => t + p.amount, 0), 0);
+
+    expect(collected).toBeCloseTo(paidTotal, 2);
+    expect(billed).toBeGreaterThanOrEqual(collected);
+    // and it must exceed any one month on its own
+    months.forEach(m => {
+      expect(collected).toBeGreaterThanOrEqual(monthMoney({ bookings, month: m }).collected);
+    });
+  });
+
   it("cancelled invoices are excluded from both sides", () => {
     const rev = monthMoney({ bookings, month: "2026-08" });
     expect(rev.collected).toBeLessThan(9999 + 20000); // the 9,999 cancelled row never counts
