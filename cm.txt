@@ -1,0 +1,14 @@
+﻿Enforce money correctness: reconciliation tests plus a deploy gate
+
+- New src/lib/reconciliation.test.js feeds one set of bookings to BOTH the invoice
+  list and the revenue engine and asserts they agree for every month. It caught a
+  real bug on first run: cancelled invoices were counted as revenue in the Invoices
+  tab totals while the revenue engine correctly ignores them.
+- Fixed that bug: a cancelled invoice can be listed but contributes no money.
+- netlify.toml now runs "npm test and npm run build", so a failing money test fails
+  the deploy and broken code cannot reach the live site.
+- CLAUDE.md documents the guarantee and names each test file.
+
+Tests 48/48, production build clean.
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>

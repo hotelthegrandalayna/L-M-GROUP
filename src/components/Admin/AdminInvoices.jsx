@@ -901,6 +901,9 @@ export default function AdminInvoices() {
   // month is being viewed this returns just that month's share of the invoice.
   // With no month selected it returns the whole invoice.
   const shareOf = useCallback((bk) => {
+    // A cancelled invoice may still be listed, but its money is NOT revenue —
+    // the revenue engine ignores cancelled bookings, so the totals must too.
+    if (bk.status === "cancelled") return { billed: 0, collected: 0, partial: false, cancelled: true };
     if (!filterMonth) {
       const total = bk.invoiceTotal ?? bk.amount ?? 0;
       return { billed: total, collected: calcPaid(bk), partial: false };

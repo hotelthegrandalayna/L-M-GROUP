@@ -1,5 +1,7 @@
 [build]
-  command = "npm run build"
+  # Tests run BEFORE the build. If a money/invoice test fails the deploy fails and
+  # the broken code never reaches the live site. Do not remove the test step.
+  command = "npm test && npm run build"
   publish = "dist"
 
 # Never cache the version file — the auto-updater must always see the latest deploy.

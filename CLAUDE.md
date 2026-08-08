@@ -83,19 +83,37 @@ Invariant: `sum(room gross) − total discount === accommodation sub-total === t
 
 ---
 
-## 4. Tests — run these before deploying
+## 4. Tests — enforced, not optional
 
 ```
 npm test
 ```
 
-`src/lib/hotelMoney.test.js` and `src/components/Invoice.test.js` encode the rules
-above as executable checks (night-boundary split, no money dropped, multi-room
-invoice balancing, all-rooms labelling).
+**The Netlify build runs `npm test && npm run build`. A failing test fails the deploy,
+so broken money code cannot reach the live site. Do not remove the test step from
+`netlify.toml`.**
+
+| File | Guards |
+|---|---|
+| `src/lib/hotelMoney.test.js` | night-boundary split, no money dropped, extensions |
+| `src/lib/invoiceFilter.test.js` | date-range / month / multi-room / text search |
+| `src/components/Invoice.test.js` | multi-room invoice arithmetic balances |
+| `src/lib/reconciliation.test.js` | **the Invoices tab must equal the revenue engine** |
+
+`reconciliation.test.js` is the most important one: it feeds the same bookings to the
+invoice list and to `monthMoney` and asserts they agree, for every month. Two real
+bugs were caught this way — the 43,600 vs 39,600 month-boundary gap, and cancelled
+invoices being counted as revenue in the Invoices tab.
 
 **If a test fails, the reported revenue or an invoice is wrong. Fix the code — never
 edit the test to make it pass.** Add a new test whenever a money bug is found, so it
 can only ever ship once.
+
+### The rule that prevents this whole class of bug
+Any screen showing money must derive it from `hotelMoney.js`, using the same
+attribution (money follows the night stayed). If a screen needs its own view of the
+data, it must still reconcile — and that reconciliation belongs in
+`reconciliation.test.js`.
 
 ---
 
