@@ -64,18 +64,23 @@ const ROOM_MAP_CSS = `
 .rm-card:hover { transform:translateY(-3px); box-shadow:0 10px 24px rgba(0,0,0,.14); }
 .rm-card:active { transform:translateY(0); box-shadow:0 3px 10px rgba(0,0,0,.10); }
 .rm-ahead { animation:rmAheadZoom 1.6s ease-in-out infinite; display:inline-block; }
-.rm-act { transition:transform .09s ease, box-shadow .09s ease; }
-.rm-act:hover { filter:brightness(1.06); }
-.rm-act:active { transform:translateY(3px); box-shadow:0 1px 0 var(--rm-act-sh), 0 2px 4px rgba(0,0,0,.16) !important; }
+.rm-act { transition:background .12s ease, border-color .12s ease; }
+.rm-act:hover { background:var(--bg3) !important; border-color:var(--border-strong,#d6d6dc) !important; }
+.rm-act:active { transform:translateY(1px); }
 `;
 
-// 3D tactile action button for the room popup — raised with a coloured under-edge
-function actBtn(bg, edge) {
+// Quiet outlined action button, matching the front-desk card system. `tint` is an
+// optional accent (used for destructive actions like Check out) — everything else
+// stays neutral so no single button shouts.
+function actBtn(tint) {
+  const accent = tint
+    ? { color:"#8f2323", borderColor:"#e0b3b0", background:"#fdf4f3" }
+    : { color:"var(--text)", borderColor:"var(--border)", background:"var(--bg2)" };
   return {
-    display:"inline-flex", alignItems:"center", justifyContent:"center", gap:5,
-    padding:"10px 14px", borderRadius:10, border:"none", cursor:"pointer",
-    fontSize:12.5, fontWeight:800, color:"#fff", background:bg, fontFamily:"inherit",
-    boxShadow:`0 4px 0 ${edge}, 0 6px 9px rgba(0,0,0,.18)`, ["--rm-act-sh"]:edge,
+    display:"inline-flex", alignItems:"center", justifyContent:"center", gap:6,
+    padding:"10px 14px", borderRadius:9, cursor:"pointer",
+    fontSize:12.5, fontWeight:600, fontFamily:"inherit",
+    border:"1px solid "+accent.borderColor, color:accent.color, background:accent.background,
   };
 }
 
@@ -353,29 +358,29 @@ function RoomModal({ room, onClose, onCheckout, onExtend, onCollect, onService, 
           <button className="modal-close" onClick={onClose}><i className="ti ti-x" /></button>
         </div>
 
-        {/* Availability — next 30 days for this room */}
+        {/* Availability — next 7 days for this room */}
         <div style={{ marginBottom:14 }}>
-          <div style={{ fontSize:10, fontWeight:800, color:"var(--text3)", textTransform:"uppercase", letterSpacing:.4, marginBottom:6 }}>Availability — next 30 days</div>
-          <div style={{ display:"flex", gap:3, overflowX:"auto", paddingBottom:4 }}>
-            {availStrip.map(dd => {
-              const cell = dd.state === "occupied" ? { bg:"#E24B4A", fg:"#fff" }
-                         : dd.state === "reserved" ? { bg:"#7F77DD", fg:"#fff" }
-                         : { bg:"#fff", fg:"var(--text3)" };
+          <div style={{ fontSize:9.5, fontWeight:600, color:"var(--text3)", textTransform:"uppercase", letterSpacing:.9, marginBottom:6 }}>Availability — next 7 days</div>
+          <div style={{ display:"flex", gap:5 }}>
+            {availStrip.slice(0, 7).map(dd => {
+              const cell = dd.state === "occupied" ? { bg:"#fdeeee", fg:"#8f2323", bd:"#e0b3b0" }
+                         : dd.state === "reserved" ? { bg:"#f0eefb", fg:"#332b7a", bd:"#c6c0ea" }
+                         : { bg:"#fff", fg:"var(--text2)", bd:"var(--border)" };
               return (
                 <div key={dd.ds} title={dd.state === "free" ? "Free" : (dd.state + " · " + dd.guest)}
-                  style={{ minWidth:30, flexShrink:0, textAlign:"center", padding:"4px 0", borderRadius:7, fontSize:11,
+                  style={{ flex:1, textAlign:"center", padding:"5px 0", borderRadius:8, fontSize:11,
                     background:cell.bg, color:cell.fg,
-                    border: dd.ds === today ? "2px solid var(--navy)" : (dd.state === "free" ? "0.5px solid var(--border)" : "0.5px solid transparent") }}>
-                  <div style={{ fontSize:8, opacity:.75 }}>{dd.wd}</div>
-                  <div style={{ fontWeight:700 }}>{dd.dnum}</div>
+                    border: dd.ds === today ? "1.5px solid var(--navy)" : "1px solid "+cell.bd }}>
+                  <div style={{ fontSize:8.5, opacity:.7 }}>{dd.wd}</div>
+                  <div style={{ fontWeight:600, fontSize:13 }}>{dd.dnum}</div>
                 </div>
               );
             })}
           </div>
-          <div style={{ display:"flex", gap:12, fontSize:10, color:"var(--text3)", marginTop:5 }}>
-            <span><span style={{ display:"inline-block", width:10, height:10, borderRadius:3, background:"#E24B4A", verticalAlign:"-1px" }} /> occupied</span>
-            <span><span style={{ display:"inline-block", width:10, height:10, borderRadius:3, background:"#7F77DD", verticalAlign:"-1px" }} /> reserved</span>
-            <span><span style={{ display:"inline-block", width:10, height:10, borderRadius:3, background:"#fff", border:"0.5px solid var(--border)", verticalAlign:"-1px" }} /> free</span>
+          <div style={{ display:"flex", gap:12, fontSize:10, color:"var(--text3)", marginTop:6 }}>
+            <span><span style={{ display:"inline-block", width:8, height:8, borderRadius:2, background:"#d98a86", verticalAlign:"0px" }} /> occupied</span>
+            <span><span style={{ display:"inline-block", width:8, height:8, borderRadius:2, background:"#a9a2e0", verticalAlign:"0px" }} /> reserved</span>
+            <span><span style={{ display:"inline-block", width:8, height:8, borderRadius:2, background:"#fff", border:"1px solid #ccc", verticalAlign:"0px" }} /> free</span>
           </div>
         </div>
 
@@ -432,12 +437,12 @@ function RoomModal({ room, onClose, onCheckout, onExtend, onCollect, onService, 
         {bIn && (<>
           {future.length > 0 && <><div style={{ fontSize:10, fontWeight:800, color:"var(--text3)", textTransform:"uppercase", marginBottom:6 }}>Upcoming Reservations</div>{future.map(b => <FRow key={b.id} b={b} />)}</>}
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:9, marginTop:14 }}>
-            {getHotelDue(bIn) > 0 && <button className="rm-act" style={actBtn("#c0392b","#7a1e14")} onClick={() => onCollect && onCollect(bIn)}><i className="ti ti-cash" /> Collect {money(getHotelDue(bIn))}</button>}
-            <button className="rm-act" style={actBtn("#4a2ea8","#2c1a6b")} onClick={() => onExtend && onExtend(bIn)}><i className="ti ti-calendar-plus" /> Extend stay</button>
-            <button className="rm-act" style={actBtn("#b07800","#6b4900")} onClick={() => onService && onService(bIn)}><i className="ti ti-sparkles" /> Add service</button>
-            <button className="rm-act" style={actBtn("#1a5a8a","#0e3554")} onClick={() => onInvoice && onInvoice(bIn)}><i className="ti ti-file-invoice" /> Invoice</button>
-            <button className="rm-act" style={{ ...actBtn("#7a1a1a","#470d0d"), gridColumn:"1/-1" }} onClick={() => chkOut(bIn.id)}><i className="ti ti-logout" /> Check out</button>
-            <button className="rm-act" style={{ ...actBtn("#1a7040","#0d3d22"), gridColumn:"1/-1" }} onClick={() => onNewBooking && onNewBooking({ room: room.number, ci: bIn.checkout, co: addDaysIso(bIn.checkout, 1), acChoice: isDual ? acChoice : undefined })}><i className="ti ti-calendar-plus" /> Reserve future dates for room {room.number}</button>
+            {getHotelDue(bIn) > 0 && <button className="rm-act" style={actBtn()} onClick={() => onCollect && onCollect(bIn)}><i className="ti ti-cash" /> Collect {money(getHotelDue(bIn))}</button>}
+            <button className="rm-act" style={actBtn()} onClick={() => onExtend && onExtend(bIn)}><i className="ti ti-calendar-plus" /> Extend stay</button>
+            <button className="rm-act" style={actBtn()} onClick={() => onService && onService(bIn)}><i className="ti ti-sparkles" /> Add service</button>
+            <button className="rm-act" style={actBtn()} onClick={() => onInvoice && onInvoice(bIn)}><i className="ti ti-file-invoice" /> Invoice</button>
+            <button className="rm-act" style={{ ...actBtn(true), gridColumn:"1/-1" }} onClick={() => chkOut(bIn.id)}><i className="ti ti-logout" /> Check out</button>
+            <button className="rm-act" style={{ ...actBtn(), gridColumn:"1/-1" }} onClick={() => onNewBooking && onNewBooking({ room: room.number, ci: bIn.checkout, co: addDaysIso(bIn.checkout, 1), acChoice: isDual ? acChoice : undefined })}><i className="ti ti-calendar-plus" /> Reserve future dates for room {room.number}</button>
           </div>
         </>)}
 
@@ -455,13 +460,13 @@ function RoomModal({ room, onClose, onCheckout, onExtend, onCollect, onService, 
               <i className="ti ti-login" /> Complete Check-In (add remaining details)
             </button>
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:9, marginTop:9 }}>
-              {getHotelDue(bRes) > 0 && <button className="rm-act" style={actBtn("#c0392b","#7a1e14")} onClick={() => onCollect && onCollect(bRes)}><i className="ti ti-cash" /> Collect {money(getHotelDue(bRes))}</button>}
-              <button className="rm-act" style={{ ...actBtn("#1a5a8a","#0e3554"), gridColumn:getHotelDue(bRes) > 0 ? "auto" : "1/-1" }} onClick={() => onInvoice && onInvoice(bRes)}><i className="ti ti-file-invoice" /> Invoice</button>
+              {getHotelDue(bRes) > 0 && <button className="rm-act" style={actBtn()} onClick={() => onCollect && onCollect(bRes)}><i className="ti ti-cash" /> Collect {money(getHotelDue(bRes))}</button>}
+              <button className="rm-act" style={{ ...actBtn(), gridColumn:getHotelDue(bRes) > 0 ? "auto" : "1/-1" }} onClick={() => onInvoice && onInvoice(bRes)}><i className="ti ti-file-invoice" /> Invoice</button>
             </div>
           </div>
           {future.length > 0 && <><div style={{ fontSize:10, fontWeight:800, color:"var(--text3)", textTransform:"uppercase", marginBottom:6 }}>Other Upcoming</div>{future.map(b => <FRow key={b.id} b={b} />)}</>}
           <div style={{ borderTop:"1px dashed var(--border)", margin:"12px 0 10px" }} />
-          <button className="rm-act" style={{ ...actBtn("#1a7040","#0d3d22"), width:"100%", padding:"12px" }}
+          <button className="rm-act" style={{ ...actBtn(), width:"100%", padding:"12px" }}
             onClick={() => onNewBooking && onNewBooking({ room: room.number, ci: bRes.checkout, co: addDaysIso(bRes.checkout, 1), acChoice: isDual ? acChoice : undefined })}>
             <i className="ti ti-calendar-plus" /> Reserve future dates for room {room.number}
           </button>
@@ -474,7 +479,7 @@ function RoomModal({ room, onClose, onCheckout, onExtend, onCollect, onService, 
         {!bIn && !bRes && (<>
           {future.length > 0 && <><div style={{ fontSize:10, fontWeight:800, color:"var(--text3)", textTransform:"uppercase", marginBottom:6 }}>Upcoming Reservations</div>{future.map(b => <FRow key={b.id} b={b} />)}<div style={{ borderTop:"1px dashed var(--border)", margin:"12px 0 10px" }} /></>}
           <div style={{ fontSize:12, color:"var(--text3)", marginBottom:10 }}>This room is free. Book or reserve it — the full booking form opens with room {room.number} already selected.</div>
-          <button className="rm-act" style={{ ...actBtn("#1a7040","#0d3d22"), width:"100%", padding:"13px" }}
+          <button className="rm-act" style={{ ...actBtn(), width:"100%", padding:"13px" }}
             onClick={() => onNewBooking && onNewBooking({ room: room.number, ci: today, co: addDaysIso(today, 1), acChoice: isDual ? acChoice : undefined })}>
             <i className="ti ti-calendar-plus" /> New booking / reserve room {room.number}
           </button>

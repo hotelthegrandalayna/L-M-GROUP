@@ -535,6 +535,7 @@ export function NewBookingModal({ onClose, prefill, editBooking }) {
   const [spouseName,  setSpouseName]  = useState(eb ? (eb.spouseName || "") : "");
   const [spousePhone, setSpousePhone] = useState(eb ? (eb.spousePhone || "") : "");
   const [groupMembers, setGroupMembers] = useState(eb && (eb.groupMembers || []).length ? eb.groupMembers.map(m => ({ name:m.name||"", phone:m.phone||"" })) : [{ name: "", phone: "" }]);
+  const [showAddRooms, setShowAddRooms] = useState(false); // extra-room picker is collapsed until needed
   const [smsData,     setSmsData]     = useState(null); // { booking, refName, refPhone }
   const [previewBkObj, setPreviewBkObj] = useState(null);
 
@@ -617,12 +618,14 @@ export function NewBookingModal({ onClose, prefill, editBooking }) {
   const roomConflict = !!(selRoom && ci && co && nights &&
     bookingConflicts(selRoom.number, ci, co, eb ? eb.id : null, bookings));
 
-  // 30-day availability strip for the selected room — so booked/reserved days are visible in the form
+  // 7-day availability strip for the selected room, starting at the chosen check-in
+  // (never earlier than today) — so booked/reserved nights are visible while picking dates
   const roomAvailStrip = useMemo(() => {
     if (!selRoom) return [];
-    const base = new Date(today + "T00:00:00");
+    const startIso = (ci && ci > today) ? ci : today;
+    const base = new Date(startIso + "T00:00:00");
     const out = [];
-    for (let i = 0; i < 30; i++) {
+    for (let i = 0; i < 7; i++) {
       const d = new Date(base); d.setDate(base.getDate() + i);
       const ds = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
       const nextDs = addDaysIso(ds, 1);
@@ -956,33 +959,33 @@ export function NewBookingModal({ onClose, prefill, editBooking }) {
         <div style={{ display:"flex", flexDirection:"column", gap:0 }}>
 
           {/* STEP 1 — DATES (single room only) */}
-          {bookingMode === "single" && <div className="form-section" style={{ background:"linear-gradient(135deg,#2D1B69,#4a2ea8)", borderRadius:12, padding:"16px 18px", marginBottom:12 }}>
-            <div style={{ color:"#c9a84c", fontSize:10, fontWeight:800, letterSpacing:2, textTransform:"uppercase", marginBottom:10 }}>Step 1 — When?</div>
-            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12, alignItems:"end" }}>
+          {bookingMode === "single" && <div className="form-section" style={{ background:"var(--bg2)", border:"1px solid var(--border)", borderRadius:12, padding:"14px 16px", marginBottom:12 }}>
+            <div style={{ color:"var(--text3)", fontSize:9.5, fontWeight:600, letterSpacing:.9, textTransform:"uppercase", marginBottom:10 }}>Step 1 — When?</div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr auto", gap:12, alignItems:"end" }}>
               <div className="form-group" style={{ marginBottom:0 }}>
-                <label style={{ color:"rgba(255,255,255,.7)", fontSize:11 }}>Check-in *</label>
+                <label style={{ color:"var(--text3)", fontSize:10.5 }}>Check-in *</label>
                 <DateInput value={ci} min={ciMin}
                   onChange={e=>pickCheckin(e.target.value)}
-                  style={{ fontWeight:800, fontSize:15 }} />
-                {ci && <div style={{ color:"rgba(255,255,255,.6)", fontSize:11, marginTop:3 }}>{new Date(ci+"T00:00:00").toLocaleDateString("en-GB",{weekday:"long"})}</div>}
+                  style={{ fontWeight:600, fontSize:14 }} />
+                {ci && <div style={{ color:"var(--text3)", fontSize:10.5, marginTop:3 }}>{new Date(ci+"T00:00:00").toLocaleDateString("en-GB",{weekday:"long"})}</div>}
               </div>
               <div className="form-group" style={{ marginBottom:0 }}>
-                <label style={{ color:"rgba(255,255,255,.7)", fontSize:11 }}>Check-out *</label>
+                <label style={{ color:"var(--text3)", fontSize:10.5 }}>Check-out *</label>
                 <DateInput value={co} min={ci ? addDaysIso(ci,1) : addDaysIso(today,1)}
                   onChange={e=>pickCheckout(e.target.value)}
-                  style={{ fontWeight:800, fontSize:15 }} />
-                {co && <div style={{ color:"rgba(255,255,255,.6)", fontSize:11, marginTop:3 }}>{new Date(co+"T00:00:00").toLocaleDateString("en-GB",{weekday:"long"})}</div>}
+                  style={{ fontWeight:600, fontSize:14 }} />
+                {co && <div style={{ color:"var(--text3)", fontSize:10.5, marginTop:3 }}>{new Date(co+"T00:00:00").toLocaleDateString("en-GB",{weekday:"long"})}</div>}
               </div>
-              <div style={{ background:"rgba(255,255,255,.1)", borderRadius:8, padding:"10px 14px", textAlign:"center" }}>
-                <div style={{ color:"rgba(255,255,255,.6)", fontSize:10, textTransform:"uppercase", letterSpacing:1 }}>Nights</div>
-                <div style={{ color:"#c9a84c", fontSize:24, fontWeight:900, lineHeight:1.1 }}>{nights || "—"}</div>
+              <div style={{ textAlign:"center", padding:"2px 14px 4px" }}>
+                <div style={{ color:"var(--text3)", fontSize:9.5, textTransform:"uppercase", letterSpacing:.9 }}>Nights</div>
+                <div style={{ color:"var(--text)", fontSize:22, fontWeight:600, lineHeight:1.2 }}>{nights || "—"}</div>
               </div>
             </div>
           </div>}
 
           {/* STEP 2 — ROOM */}
-          <div className="form-section" style={{ border:"2px solid var(--navy)", borderRadius:12, padding:"16px 18px", marginBottom:12 }}>
-            <div style={{ color:"var(--navy)", fontSize:10, fontWeight:800, letterSpacing:2, textTransform:"uppercase", marginBottom:10 }}>Step 2 — Which Room?</div>
+          <div className="form-section" style={{ background:"var(--bg2)", border:"1px solid var(--border)", borderRadius:12, padding:"14px 16px", marginBottom:12 }}>
+            <div style={{ color:"var(--text3)", fontSize:9.5, fontWeight:600, letterSpacing:.9, textTransform:"uppercase", marginBottom:10 }}>Step 2 — Which Room?</div>
             {bookingMode === "multi" ? (<>
               {/* Multi-room: room cards shown directly — no date pre-check needed */}
             </>) : (!ci || !co || !nights) ? (
@@ -1015,25 +1018,25 @@ export function NewBookingModal({ onClose, prefill, editBooking }) {
               {/* Availability strip — shows which nights this room is booked / reserved / free */}
               {selRoom && (
                 <div style={{ marginBottom:12 }}>
-                  <div style={{ display:"flex", gap:14, fontSize:10.5, color:"var(--text3)", marginBottom:5, flexWrap:"wrap" }}>
-                    <span><span style={{ display:"inline-block", width:9, height:9, borderRadius:2, background:"#E24B4A", marginRight:4, verticalAlign:"middle" }} />Occupied</span>
-                    <span><span style={{ display:"inline-block", width:9, height:9, borderRadius:2, background:"#7F77DD", marginRight:4, verticalAlign:"middle" }} />Reserved</span>
-                    <span><span style={{ display:"inline-block", width:9, height:9, borderRadius:2, background:"#fff", border:"1px solid #ccc", marginRight:4, verticalAlign:"middle" }} />Free</span>
-                    <span><span style={{ display:"inline-block", width:9, height:9, borderRadius:2, background:"#fff", border:"2px solid #d81e1e", marginRight:4, verticalAlign:"middle" }} />Your stay</span>
+                  <div style={{ display:"flex", gap:13, fontSize:10, color:"var(--text3)", marginBottom:5, flexWrap:"wrap" }}>
+                    <span><span style={{ display:"inline-block", width:8, height:8, borderRadius:2, background:"#d98a86", marginRight:4, verticalAlign:"middle" }} />Occupied</span>
+                    <span><span style={{ display:"inline-block", width:8, height:8, borderRadius:2, background:"#a9a2e0", marginRight:4, verticalAlign:"middle" }} />Reserved</span>
+                    <span><span style={{ display:"inline-block", width:8, height:8, borderRadius:2, background:"#fff", border:"1px solid #ccc", marginRight:4, verticalAlign:"middle" }} />Free</span>
+                    <span><span style={{ display:"inline-block", width:8, height:8, borderRadius:2, background:"#fff", border:"1.5px solid #d81e1e", marginRight:4, verticalAlign:"middle" }} />Your stay</span>
                   </div>
-                  <div style={{ display:"flex", gap:3, overflowX:"auto", paddingBottom:4 }}>
+                  <div style={{ display:"flex", gap:5 }}>
                     {roomAvailStrip.map(c => {
-                      const bg = c.state==="occupied" ? "#E24B4A" : c.state==="reserved" ? "#7F77DD" : "#fff";
-                      const fg = c.state==="free" ? "#555" : "#fff";
+                      const cell = c.state==="occupied" ? { bg:"#fdeeee", fg:"#8f2323", bd:"#e0b3b0" }
+                                 : c.state==="reserved" ? { bg:"#f0eefb", fg:"#332b7a", bd:"#c6c0ea" }
+                                 : { bg:"#fff", fg:"var(--text2)", bd:"var(--border)" };
                       return (
                         <div key={c.ds} title={c.ds+" — "+c.state} style={{
-                          minWidth:30, textAlign:"center", borderRadius:6, padding:"4px 0",
-                          background:bg, color:fg,
-                          border: c.inStay ? "2px solid #d81e1e" : (c.state==="free" ? "1px solid #ddd" : "1px solid transparent"),
-                          boxShadow: c.isToday ? "inset 0 0 0 1.5px var(--navy)" : "none",
+                          flex:1, textAlign:"center", borderRadius:8, padding:"5px 0",
+                          background:cell.bg, color:cell.fg,
+                          border: c.inStay ? "1.5px solid #d81e1e" : "1px solid "+cell.bd,
                         }}>
-                          <div style={{ fontSize:8.5, opacity:.8, lineHeight:1 }}>{c.wd}</div>
-                          <div style={{ fontSize:12, fontWeight:800, lineHeight:1.2 }}>{c.dnum}</div>
+                          <div style={{ fontSize:8.5, opacity:.7, lineHeight:1 }}>{c.wd}</div>
+                          <div style={{ fontSize:13, fontWeight:600, lineHeight:1.3 }}>{c.dnum}</div>
                         </div>
                       );
                     })}
@@ -1047,21 +1050,17 @@ export function NewBookingModal({ onClose, prefill, editBooking }) {
                 </div>
               )}
               {isDual && (
-                <div className="form-group" style={{ marginBottom:10 }}>
-                  <label><i className="ti ti-wind" style={{ color:"var(--navy)", marginRight:4 }} />AC or Non-AC? *</label>
-                  <div style={{ display:"flex", gap:10, marginTop:4 }}>
+                <div style={{ display:"flex", alignItems:"center", gap:9, marginBottom:11, flexWrap:"wrap" }}>
+                  <span style={{ fontSize:10, fontWeight:600, letterSpacing:.7, textTransform:"uppercase", color:"var(--text3)" }}>Air conditioning</span>
+                  <div style={{ display:"inline-flex", border:"1px solid var(--border)", borderRadius:8, overflow:"hidden" }}>
                     {["AC","Non-AC"].map(opt=>(
                       <button key={opt} type="button" onClick={()=>setAcChoice(opt)} style={{
-                        flex:1, padding:"10px 0", borderRadius:9, border:"2px solid", cursor:"pointer",
-                        fontWeight:800, fontSize:13, fontFamily:"inherit", transition:"all .15s",
-                        background: acChoice===opt ? "var(--navy)" : "var(--bg3)",
+                        padding:"6px 13px", border:"none", cursor:"pointer",
+                        fontWeight:600, fontSize:12, fontFamily:"inherit", transition:"all .12s",
+                        background: acChoice===opt ? "var(--navy)" : "transparent",
                         color:      acChoice===opt ? "#fff" : "var(--text2)",
-                        borderColor: acChoice===opt ? "var(--navy)" : "var(--border)",
                       }}>
-                        {opt==="AC" ? "❄️ AC" : "🌬️ Non-AC"}
-                        <div style={{ fontSize:10, fontWeight:600, opacity:.8, marginTop:2 }}>
-                          ৳{opt==="AC" ? selRoom.acRate.toLocaleString() : selRoom.nonAcRate.toLocaleString()}/night
-                        </div>
+                        {opt} ৳{(opt==="AC" ? selRoom.acRate : selRoom.nonAcRate).toLocaleString()}
                       </button>
                     ))}
                   </div>
@@ -1077,24 +1076,34 @@ export function NewBookingModal({ onClose, prefill, editBooking }) {
               {/* Add more rooms to THIS reservation (same guest, same dates, one invoice) */}
               {selRoom && (() => {
                 const addable = availRooms.filter(r => String(r.number) !== String(room) && !extraRooms.some(x => String(x.number) === String(r.number)));
+                const open = showAddRooms || extraRooms.length > 0;
                 return (
-                  <div style={{ marginBottom:10, background:"#faf7ff", border:"1.5px dashed #c4a8f0", borderRadius:10, padding:"10px 14px" }}>
-                    <div style={{ fontSize:11, fontWeight:800, color:"#5a2ea8", marginBottom:2, textTransform:"uppercase", letterSpacing:.5 }}>
-                      <i className="ti ti-plus" style={{ marginRight:4 }} />Add more rooms for this guest
+                  <div style={{ marginBottom:10, border:"1px dashed var(--border)", borderRadius:10, padding:open ? "10px 13px" : "9px 13px" }}>
+                    <div onClick={() => setShowAddRooms(o => !o)}
+                      style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer" }}>
+                      <i className={"ti "+(open ? "ti-chevron-down" : "ti-chevron-right")} style={{ fontSize:14, color:"var(--text3)" }} />
+                      <span style={{ fontSize:11.5, color:"var(--text2)" }}>Add more rooms for this guest</span>
+                      <span style={{ marginLeft:"auto", fontSize:10, color:"var(--text3)" }}>
+                        {extraRooms.length ? extraRooms.length + " added" : "optional"}
+                      </span>
                     </div>
-                    <div style={{ fontSize:10.5, color:"var(--text3)", marginBottom:8 }}>Optional · same dates · one combined invoice</div>
-                    {addable.length ? (
-                      <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
-                        {addable.map(r => (
-                          <button key={r.number} type="button"
-                            onClick={() => setExtraRooms(prev => [...prev, { number:String(r.number), acChoice:"AC", discAmt:"" }])}
-                            style={{ background:"#fff", border:"1.5px solid #c4a8f0", color:"#5a2ea8", borderRadius:8, padding:"5px 11px", fontSize:12.5, fontWeight:800, cursor:"pointer", fontFamily:"inherit" }}>
-                            + {r.number}{r.name ? " · "+r.name : ""}
-                          </button>
-                        ))}
+                    {open && (
+                      <div style={{ marginTop:9 }}>
+                        <div style={{ fontSize:10, color:"var(--text3)", marginBottom:7 }}>Same dates · one combined invoice</div>
+                        {addable.length ? (
+                          <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
+                            {addable.map(r => (
+                              <button key={r.number} type="button"
+                                onClick={() => setExtraRooms(prev => [...prev, { number:String(r.number), acChoice:"AC", discAmt:"" }])}
+                                style={{ background:"var(--bg2)", border:"1px solid var(--border)", color:"var(--text)", borderRadius:8, padding:"5px 11px", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>
+                                + {r.number}{r.name ? " · "+r.name : ""}
+                              </button>
+                            ))}
+                          </div>
+                        ) : (
+                          <div style={{ fontSize:11.5, color:"var(--text3)" }}>No other rooms available for these dates.</div>
+                        )}
                       </div>
-                    ) : (
-                      <div style={{ fontSize:11.5, color:"var(--text3)" }}>No other rooms available for these dates.</div>
                     )}
                   </div>
                 );
