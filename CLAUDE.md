@@ -83,7 +83,23 @@ Invariant: `sum(room gross) − total discount === accommodation sub-total === t
 
 ---
 
-## 4. Working agreement
+## 4. Tests — run these before deploying
+
+```
+npm test
+```
+
+`src/lib/hotelMoney.test.js` and `src/components/Invoice.test.js` encode the rules
+above as executable checks (night-boundary split, no money dropped, multi-room
+invoice balancing, all-rooms labelling).
+
+**If a test fails, the reported revenue or an invoice is wrong. Fix the code — never
+edit the test to make it pass.** Add a new test whenever a money bug is found, so it
+can only ever ship once.
+
+---
+
+## 5. Working agreement
 
 - **Deploy only when the owner says "deploy".** Never push otherwise.
 - Never touch the separate website repo (`Alyna_web`) from this app repo.
