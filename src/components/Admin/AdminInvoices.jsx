@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect } from "react";
 import { useApp, gaRecordDeleted } from "../../context/AppContext";
 import { checkAdminPassword } from "../../utils/auth";
 import { deleteHotelBooking, deleteHotelBookings, loadHotelGuestImages, persistHotelBookingBundle, loadHotelBookingsForRange } from "../../lib/hotelSupabase";
-import { useMonthBookings, monthMoney } from "../../lib/hotelMoney";
+import { useMonthBookings } from "../../lib/hotelMoney";
 import { allRoomNumbers, roomLabel, buildInvoiceHTML, buildTCHtml, hotelPrint } from "../Invoice";
 import { filterInvoices } from "../../lib/invoiceFilter";
 import { logEvent } from "../../utils/auditLog";
@@ -809,9 +809,11 @@ export default function AdminInvoices() {
   const { bookings, updateBookings, notify, revenues, rooms } = useApp();
 
   const [search,         setSearch]         = useState("");
-  const [filterMonth,    setFilterMonth]    = useState("");
+  // Default view is THIS month only — "All months" is available on demand.
+  const thisMonth = new Date().toISOString().slice(0, 7);
+  const [filterMonth,    setFilterMonth]    = useState(thisMonth);
   const [filterStatus,   setFilterStatus]   = useState("All");
-  const [filterRoom,     setFilterRoom]     = useState("");
+  const [filterRooms,    setFilterRooms]    = useState([]); // multiple room numbers
   const [dateFrom,       setDateFrom]       = useState("");
   const [dateTo,         setDateTo]         = useState("");
   const [viewTarget,     setViewTarget]     = useState(null); // customer invoice view
@@ -864,8 +866,9 @@ export default function AdminInvoices() {
 
   const allMonths = useMemo(() => {
     const set = new Set(srcBookings.map(getBookingMonth).filter(Boolean));
+    set.add(thisMonth); // always offer the current month, even before it has invoices
     return [...set].sort().reverse();
-  }, [srcBookings]);
+  }, [srcBookings, thisMonth]);
 
   // Detect the same stay recorded more than once (same guest + room + check-in).
   // These are real duplicate rows from an earlier id mismatch. Read-only — it only
@@ -890,22 +893,20 @@ export default function AdminInvoices() {
   // Uses the pure, unit-tested filter in lib/invoiceFilter.js (see its test file —
   // the 5–8 Aug date-range bug is locked down there).
   const filtered = useMemo(
-    () => filterInvoices(srcBookings, { search, room: filterRoom, month: filterMonth, dateFrom, dateTo, status: filterStatus }),
-    [srcBookings, search, filterStatus, filterMonth, filterRoom, dateFrom, dateTo],
+    () => filterInvoices(srcBookings, { search, rooms: filterRooms, month: filterMonth, dateFrom, dateTo, status: filterStatus }),
+    [srcBookings, search, filterStatus, filterMonth, filterRooms, dateFrom, dateTo],
   );
 
+  // The figures on top always describe exactly what you are looking at:
+  //  · tick some rows  → only those invoices
+  //  · otherwise       → every invoice the current search is showing
+  //    (which by default is this month)
   const totals = useMemo(() => {
-    // For a whole selected month (no manual row-selection), show the canonical cash
-    // figures from the shared source of truth so this matches Desk / Finance / Expenses.
-    if (selectedIds.size === 0 && filterMonth) {
-      const mm = monthMoney({ bookings: srcBookings, revenues, month: filterMonth });
-      return { total: mm.billed, paid: mm.collected, balance: mm.outstanding };
-    }
     const rows = selectedIds.size > 0 ? filtered.filter(b => selectedIds.has(b.id)) : filtered;
     const paid  = rows.reduce((s, bk) => s + calcPaid(bk), 0);
     const total = rows.reduce((s, bk) => s + (bk.invoiceTotal ?? bk.amount ?? 0), 0);
-    return { total, paid, balance: Math.max(0, total - paid) };
-  }, [filtered, selectedIds, filterMonth, srcBookings, revenues]);
+    return { total, paid, balance: Math.max(0, total - paid), count: rows.length };
+  }, [filtered, selectedIds]);
 
   const selCount   = filtered.filter(b => selectedIds.has(b.id)).length;
   const allChecked = filtered.length > 0 && filtered.every(b => selectedIds.has(b.id));
@@ -1009,10 +1010,17 @@ export default function AdminInvoices() {
         </button>
       </div>
 
-      {/* Summary cards */}
+      {/* Summary cards — always describe exactly what is on screen */}
+      <div style={{ fontSize: 11, color: "var(--text3)", marginBottom: 7 }}>
+        {selCount > 0
+          ? <>Showing totals for <strong style={{ color: "var(--navy)" }}>{selCount} selected invoice{selCount !== 1 ? "s" : ""}</strong></>
+          : filterMonth
+            ? <>Showing totals for <strong style={{ color: "var(--navy)" }}>{monthLabel(filterMonth)}</strong></>
+            : <>Showing totals for <strong style={{ color: "var(--navy)" }}>all months</strong></>}
+      </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(130px,1fr))", gap: 10, marginBottom: 12 }}>
         {[
-          { label: "Invoices", value: (loadingRange || loadingMonth) ? "…" : filtered.length, color: "var(--text)" },
+          { label: "Invoices", value: (loadingRange || loadingMonth) ? "…" : totals.count, color: "var(--text)" },
           { label: "Total billed", value: fmtMoney(totals.total), color: "var(--text)" },
           { label: "Collected", value: fmtMoney(totals.paid), color: "#2f7d4f" },
           { label: "Due", value: fmtMoney(totals.balance), color: totals.balance > 0 ? "#b5322a" : "#2f7d4f" },
@@ -1029,19 +1037,17 @@ export default function AdminInvoices() {
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 9 }}>
           <span style={{ fontSize: 9.5, letterSpacing: .9, textTransform: "uppercase", color: "var(--text3)", fontWeight: 600 }}>Search</span>
           {(loadingRange || loadingMonth) && <span style={{ fontSize: 10.5, color: "var(--text3)" }}>· searching older records…</span>}
-          {(search || filterMonth || filterRoom || dateFrom || dateTo || filterStatus !== "All") && (
+          {(search || filterMonth !== thisMonth || filterRooms.length || dateFrom || dateTo || filterStatus !== "All") && (
             <button type="button"
-              onClick={() => { setSearch(""); setFilterMonth(""); setFilterRoom(""); setDateFrom(""); setDateTo(""); setFilterStatus("All"); }}
+              onClick={() => { setSearch(""); setFilterMonth(thisMonth); setFilterRooms([]); setDateFrom(""); setDateTo(""); setFilterStatus("All"); setSelectedIds(new Set()); }}
               style={{ marginLeft: "auto", padding: "4px 11px", border: "1px solid var(--border)", background: "var(--bg3)", borderRadius: 7, fontSize: 11, fontFamily: "inherit", cursor: "pointer", color: "var(--text2)" }}>
-              Clear
+              Reset to this month
             </button>
           )}
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px,1fr))", gap: 9 }}>
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Guest name, phone, invoice no, ID…"
             style={{ padding: "8px 11px", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12.5, fontFamily: "inherit", gridColumn: "span 2", minWidth: 0 }} />
-          <input value={filterRoom} onChange={e => setFilterRoom(e.target.value)} placeholder="Room no."
-            style={{ padding: "8px 11px", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12.5, fontFamily: "inherit", minWidth: 0 }} />
           <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
             style={{ padding: "8px 11px", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12.5, fontFamily: "inherit", minWidth: 0 }}>
             {STATUS_OPTS.map(s => <option key={s} value={s}>{s === "All" ? "All statuses" : s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
@@ -1061,6 +1067,32 @@ export default function AdminInvoices() {
             <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
               style={{ flex: 1, minWidth: 0, padding: "7px 9px", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12, fontFamily: "inherit" }} />
           </label>
+        </div>
+
+        {/* Rooms — tick as many as you like */}
+        <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap", marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--border)" }}>
+          <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: .7, textTransform: "uppercase", color: "var(--text3)" }}>Rooms</span>
+          {(rooms || []).map(r => {
+            const num = String(r.number);
+            const on = filterRooms.includes(num);
+            return (
+              <button key={num} type="button"
+                onClick={() => setFilterRooms(prev => on ? prev.filter(x => x !== num) : [...prev, num])}
+                style={{
+                  padding: "4px 11px", borderRadius: 20, cursor: "pointer", fontFamily: "inherit",
+                  fontSize: 11.5, fontWeight: 600, fontVariantNumeric: "tabular-nums",
+                  border: "1px solid " + (on ? "var(--navy)" : "var(--border)"),
+                  background: on ? "var(--navy)" : "var(--bg2)",
+                  color: on ? "#fff" : "var(--text2)",
+                }}>{num}</button>
+            );
+          })}
+          {filterRooms.length > 0 && (
+            <button type="button" onClick={() => setFilterRooms([])}
+              style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11, color: "var(--text3)", fontFamily: "inherit" }}>
+              ✕ clear rooms
+            </button>
+          )}
         </div>
       </div>
 

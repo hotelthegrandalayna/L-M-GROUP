@@ -55,6 +55,31 @@ describe("room search covers multi-room bookings", () => {
   });
 });
 
+describe("multiple room selection", () => {
+  it("matches a booking covering ANY of the selected rooms", () => {
+    const out = filterInvoices(rows, { rooms: ["107"] });
+    expect(out.map(b => b.id)).toEqual([105]);
+  });
+
+  it("returns every booking touching any selected room", () => {
+    const out = filterInvoices(rows, { rooms: ["107", "101"] });
+    expect(out.map(b => b.id).sort((a, b) => a - b)).toEqual([31, 79, 84, 105]);
+  });
+
+  it("finds a multi-room booking by one of its extra rooms", () => {
+    expect(filterInvoices(rows, { rooms: ["106"] }).map(b => b.id)).toEqual([102]);
+  });
+
+  it("an empty room selection means no room filter", () => {
+    expect(filterInvoices(rows, { rooms: [] }).length).toBe(rows.length);
+  });
+
+  it("combines with a month filter", () => {
+    const out = filterInvoices(rows, { rooms: ["101"], month: "2026-08" });
+    expect(out.map(b => b.id).sort((a, b) => a - b)).toEqual([79, 84]);
+  });
+});
+
 describe("text search", () => {
   it("matches guest name, phone and room", () => {
     expect(filterInvoices(rows, { search: "moniruzzaman" }).map(b => b.id)).toEqual([105]);

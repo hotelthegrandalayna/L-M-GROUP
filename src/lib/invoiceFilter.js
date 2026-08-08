@@ -34,14 +34,17 @@ export function stayOverlapsRange(b, from, to) {
 }
 
 export function filterInvoices(bookings, opts = {}) {
-  const { search = "", room = "", month = "", dateFrom = "", dateTo = "", status = "All" } = opts;
+  const { search = "", room = "", rooms = [], month = "", dateFrom = "", dateTo = "", status = "All" } = opts;
   const q = String(search).trim().toLowerCase();
   const roomQ = String(room).trim().toLowerCase();
+  // Multi-room selection: a booking matches if it covers ANY of the chosen rooms
+  const roomSet = (rooms || []).map(r => String(r).trim()).filter(Boolean);
 
   return (bookings || []).filter(b => {
     if (!b) return false;
     if (status && status !== "All" && b.status !== status) return false;
     if (month && invoiceMonth(b) !== month) return false;
+    if (roomSet.length && !invoiceRooms(b).some(n => roomSet.includes(n))) return false;
     if (roomQ && !invoiceRooms(b).some(n => n.toLowerCase().includes(roomQ))) return false;
     if ((dateFrom || dateTo) && !stayOverlapsRange(b, dateFrom, dateTo)) return false;
     if (q && !(
