@@ -1,0 +1,12 @@
+﻿Show AC / Non-AC in the room popup and in ntfy notifications
+
+- Room popup now shows AC / Non-AC for the booking, on both the checked-in and the
+  reserved panel. Resolved per room via a new acForRoom helper, so a multi-room
+  booking shows the choice for the room you are actually looking at.
+- Booking and check-in notifications now list every room with its choice, e.g.
+  "Room 103 [AC], 104 [Non-AC]".
+- Extend-stay notification includes the room choice too.
+
+Tests 48/48, production build clean.
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>

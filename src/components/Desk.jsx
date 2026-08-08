@@ -122,6 +122,20 @@ function roomShares(b) {
   ];
 }
 
+// AC / Non-AC for ONE room of a booking. A multi-room booking can have a different
+// choice per room, so always resolve against the room being looked at.
+function acForRoom(b, roomNumber) {
+  if (!b) return "";
+  const num = String(roomNumber);
+  if (b.isMultiRoomBooking && (b.multiRooms || []).length) {
+    const mr = b.multiRooms.find(m => String(m.number) === num);
+    if (mr) return mr.acChoice || "";
+  }
+  const er = (b.extraRooms || []).find(r => String(r.number) === num);
+  if (er) return er.acChoice || "";
+  return b.acChoice || "";
+}
+
 function getHotelDue(b) {
   if (!b) return 0;
   // invoiceTotal is always the net payable (discount already baked in at booking creation).
@@ -395,7 +409,8 @@ function RoomModal({ room, onClose, onCheckout, onExtend, onCollect, onService, 
           <div style={{ background:"var(--green-bg)", border:"1.5px solid var(--green-bd)", borderRadius:9, padding:13, marginBottom:14 }}>
             <div style={{ fontSize:11, fontWeight:800, color:"var(--green)", textTransform:"uppercase", marginBottom:10 }}>Currently Checked In</div>
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:9, fontSize:12 }}>
-              {[["Guest",bIn.guest],["Phone",bIn.phone],["Check-in",formatDate(bIn.checkin)],["Check-out",formatDate(bIn.checkout)],["Nights",bIn.nights]].map(([l,v]) => (
+              {[["Guest",bIn.guest],["Phone",bIn.phone],["Check-in",formatDate(bIn.checkin)],["Check-out",formatDate(bIn.checkout)],["Nights",bIn.nights],
+                ...(acForRoom(bIn, room.number) ? [["AC / Non-AC", acForRoom(bIn, room.number)]] : [])].map(([l,v]) => (
                 <div key={l}><div style={{ fontSize:10, color:"var(--text3)", marginBottom:2 }}>{l}</div><strong>{v}</strong></div>
               ))}
             </div>
@@ -450,7 +465,9 @@ function RoomModal({ room, onClose, onCheckout, onExtend, onCollect, onService, 
           <div style={{ background:"#fffbee", border:"2px solid var(--gold)", borderRadius:9, padding:14, marginBottom:14 }}>
             <div style={{ fontSize:11, fontWeight:800, color:"#8a6200", textTransform:"uppercase", marginBottom:10, display:"flex", alignItems:"center", gap:6 }}><i className="ti ti-calendar-check" /> Reserved — Awaiting Check-In</div>
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:9, fontSize:12, marginBottom:10 }}>
-              {[["Guest",bRes.guest],["Mobile",bRes.phone],["Check-in",bRes.checkin],["Check-out",bRes.checkout],["Nights",bRes.nights],["Total",money(bRes.invoiceTotal??bRes.amount)],["Advance Paid",money(bRes.advance||0)],["Balance Due",money(getHotelDue(bRes))]].map(([l,v]) => (
+              {[["Guest",bRes.guest],["Mobile",bRes.phone],["Check-in",bRes.checkin],["Check-out",bRes.checkout],["Nights",bRes.nights],
+                ...(acForRoom(bRes, room.number) ? [["AC / Non-AC", acForRoom(bRes, room.number)]] : []),
+                ["Total",money(bRes.invoiceTotal??bRes.amount)],["Advance Paid",money(bRes.advance||0)],["Balance Due",money(getHotelDue(bRes))]].map(([l,v]) => (
                 <div key={l}><div style={{ fontSize:10, color:"var(--text3)", marginBottom:2 }}>{l}</div><strong>{v}</strong></div>
               ))}
             </div>
@@ -1302,7 +1319,7 @@ export default function Desk() {
     void persistHotelBookingBundle(updated).catch(() => {});
     sendNtfyAlert(
       `STAY EXTENDED — ${b.guest}`,
-      `${b.guest}\nRoom ${b.room}\n\nNew Check-out: ${newCheckout}\nExtra Nights: ${extraNights}\nExtension Total: ৳${extTotal.toLocaleString()}${advance > 0 ? `\nCollected: ৳${advance.toLocaleString()} (${method})` : ""}`,
+      `${b.guest}\nRoom ${b.room}${acForRoom(updated, b.room) ? ` [${acForRoom(updated, b.room)}]` : ""}\n\nNew Check-out: ${newCheckout}\nExtra Nights: ${extraNights}\nExtension Total: ৳${extTotal.toLocaleString()}${advance > 0 ? `\nCollected: ৳${advance.toLocaleString()} (${method})` : ""}`,
       undefined,
       { tags: "orange_circle", priority: "default" }
     ).catch(() => {});

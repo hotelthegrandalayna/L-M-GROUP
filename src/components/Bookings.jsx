@@ -885,9 +885,19 @@ export function NewBookingModal({ onClose, prefill, editBooking }) {
         notify("⚠ CLOUD SAVE FAILED — " + (err?.message || "network error") + ". Booking kept on this device and will retry automatically.", "error");
       });
     sendWhatsAppAlert(buildHotelWaMessage(finalBk)).catch(() => {});
+    // Room line shows every room with its AC / Non-AC choice, e.g.
+    //   Room 103 [AC], 104 [Non-AC]
+    const roomLine = (() => {
+      if (finalBk.isMultiRoomBooking && (finalBk.multiRooms || []).length) {
+        return finalBk.multiRooms.map(r => `${r.number}${r.acChoice ? ` [${r.acChoice}]` : ""}`).join(", ");
+      }
+      const parts = [`${finalBk.room}${finalBk.acChoice ? ` [${finalBk.acChoice}]` : ""}`];
+      (finalBk.extraRooms || []).forEach(r => parts.push(`${r.number}${r.acChoice ? ` [${r.acChoice}]` : ""}`));
+      return parts.join(", ");
+    })();
     sendNtfyAlert(
       (status === "checked-in" ? "CHECK-IN — " : "NEW RESERVATION — ") + finalBk.guest,
-      `${finalBk.guest}\nRoom ${finalBk.room}\n\nCheck-in: ${finalBk.checkin}\nCheck-out: ${finalBk.checkout}\nNights: ${finalBk.nights}\nTotal: ৳${(finalBk.amount||0).toLocaleString()}\nAdvance: ৳${(finalBk.advance||0).toLocaleString()}`,
+      `${finalBk.guest}\nRoom ${roomLine}\n\nCheck-in: ${finalBk.checkin}\nCheck-out: ${finalBk.checkout}\nNights: ${finalBk.nights}\nTotal: ৳${(finalBk.amount||0).toLocaleString()}\nAdvance: ৳${(finalBk.advance||0).toLocaleString()}`,
       undefined,
       { tags: status === "checked-in" ? "green_circle" : "blue_circle", priority: "high" }
     ).catch(() => {});
