@@ -299,22 +299,25 @@ export default function Expenses() {
     : "All Time";
 
   return (
-    <div style={{ padding: isMobile?"10px 8px":"22px 28px", maxWidth:1100, margin:"0 auto", width:"100%", overflowY:"auto", height:"100%", boxSizing:"border-box" }}>
+    <div style={{ padding: isMobile?"10px 8px":"22px 24px", width:"100%", overflowY:"auto", height:"100%", boxSizing:"border-box" }}>
 
       {/* ── Page title + month selector (synced with the filter bar below) ── */}
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-end", flexWrap:"wrap", gap:10, marginBottom:18 }}>
-        <div>
-          <div style={{ fontSize:26, fontWeight:700, fontFamily:"'Playfair Display',serif", color:C.navy }}>🏨 HOTEL — Expenses & Cash</div>
-          <div style={{ fontSize:12, color:C.dim, marginTop:4 }}>Hotel money overview — {monthLabel}
+      <div style={{ display:"flex", alignItems:"center", gap:11, flexWrap:"wrap", marginBottom:14 }}>
+        <span style={{ width:30, height:30, borderRadius:9, background:"var(--bg3)", display:"inline-flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+          <i className="ti ti-wallet" style={{ color:"var(--gold2)", fontSize:16 }} />
+        </span>
+        <div style={{ flex:1, minWidth:0 }}>
+          <div style={{ fontSize:15, fontWeight:600, color:"var(--text)" }}>Expenses &amp; Cash</div>
+          <div style={{ fontSize:11, color:C.dim }}>Hotel money overview — {monthLabel}
             {loadingRevMonth && loadingRevMonth === filterMonth && (
-              <span style={{ marginLeft:8, color:C.navy, fontWeight:700 }}><i className="ti ti-loader ti-spin" /> loading full month from cloud…</span>
+              <span style={{ marginLeft:8, color:C.navy, fontWeight:600 }}><i className="ti ti-loader ti-spin" /> loading full month…</span>
             )}
           </div>
         </div>
-        <div>
-          <label style={{ fontSize:10, fontWeight:700, color:C.dim, textTransform:"uppercase", letterSpacing:.8, display:"block", marginBottom:4 }}>📅 Report Month</label>
+        <div style={{ display:"flex", alignItems:"center", gap:7, background:"var(--bg2)", border:"1px solid var(--border)", borderRadius:8, padding:"5px 9px" }}>
+          <i className="ti ti-calendar" style={{ fontSize:14, color:"var(--text3)" }} />
           <select value={filterMonth} onChange={e=>setFilterMonth(e.target.value)}
-            style={{ padding:"9px 14px", border:`2px solid ${C.navy}`, borderRadius:9, fontSize:13, fontWeight:700, fontFamily:"inherit", background:"#fff", color:C.navy, cursor:"pointer", outline:"none" }}>
+            style={{ padding:0, border:"none", background:"transparent", fontSize:12.5, fontWeight:600, fontFamily:"inherit", color:"var(--text)", cursor:"pointer", outline:"none" }}>
             <option value="">All Months</option>
             {allMonths.map(m=>{
               const [y,mo]=m.split("-");
@@ -324,48 +327,36 @@ export default function Expenses() {
         </div>
       </div>
 
-      {/* ── Row 1: Billing ── */}
-      <div style={{ display:"grid", gridTemplateColumns: isMobile?"1fr 1fr 1fr":"repeat(3,1fr)", gap:12, marginBottom:12 }}>
+      {/* ── Money in ── */}
+      <div style={{ fontSize:9.5, letterSpacing:.9, textTransform:"uppercase", color:C.dim, fontWeight:600, margin:"0 0 7px 2px" }}>Money in</div>
+      <div style={{ display:"grid", gridTemplateColumns: isMobile?"1fr 1fr 1fr":"repeat(3,1fr)", gap:10, marginBottom:14 }}>
         {[
-          ["💰","Total Billed", monthBilled, "#7d6608", "#fdf8ee", "#f0e0b0"],
-          ["✅","Collected",    monthRevenue, "#1a7040", "#f0fdf4", "#86efac"],
-          ["⏳","Outstanding",  monthOutstanding, "#c0392b", "#fff5f5", "#fca5a5"],
-        ].map(([icon,label,val,color,bg,border])=>(
-          <div key={label} style={{ background:bg, border:`1.5px solid ${border}`, borderRadius:12, padding:"14px 16px", textAlign:"center" }}>
-            <div style={{ fontSize:18 }}>{icon}</div>
-            <div style={{ fontSize:20, fontWeight:800, fontFamily:"'Playfair Display',serif", color }}>{money(val)}</div>
-            <div style={{ fontSize:11, color:C.dim, marginTop:2 }}>{label}</div>
+          ["Total billed", monthBilled, "var(--text)"],
+          ["Collected",    monthRevenue, "#2f7d4f"],
+          ["Outstanding",  monthOutstanding, monthOutstanding>0 ? "#b5322a" : "var(--text3)"],
+        ].map(([label,val,color])=>(
+          <div key={label} style={{ background:"var(--bg2)", border:"1px solid var(--border)", borderRadius:12, padding:"11px 13px" }}>
+            <div style={{ fontSize:9, letterSpacing:.7, textTransform:"uppercase", color:C.dim, fontWeight:600 }}>{label}</div>
+            <div style={{ fontSize:19, fontWeight:600, color, marginTop:3, fontVariantNumeric:"tabular-nums" }}>{money(val)}</div>
           </div>
         ))}
       </div>
 
-      {/* ── Row 2: Profit and cash ── */}
-      <div style={{ display:"grid", gridTemplateColumns: isMobile?"1fr 1fr":"repeat(4,1fr)", gap:12, marginBottom:20 }}>
-
-        <div style={{ background:"#fff5f5", border:"1.5px solid #fca5a5", borderRadius:12, padding:"14px 16px" }}>
-          <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:.8, color:C.red, marginBottom:6 }}>🏨 Business Expenses</div>
-          <div style={{ fontSize:20, fontWeight:800, fontFamily:"'Playfair Display',serif", color:C.red }}>{money(businessTotal)}</div>
-          <div style={{ fontSize:11, color:C.red, marginTop:4, opacity:.7 }}>Salaries, utilities, ops</div>
-        </div>
-
-        <div style={{ background:"#fff7ed", border:"1.5px solid #fdba74", borderRadius:12, padding:"14px 16px" }}>
-          <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:.8, color:C.orange, marginBottom:6 }}>💸 Non-Business</div>
-          <div style={{ fontSize:20, fontWeight:800, fontFamily:"'Playfair Display',serif", color:C.orange }}>{money(nonBusinessTotal)}</div>
-          <div style={{ fontSize:11, color:C.orange, marginTop:4, opacity:.7 }}>Transfers, withdrawals</div>
-        </div>
-
-        <div style={{ background: netProfit >= 0 ? "#f0fdf4":"#fff5f5", border:`1.5px solid ${netProfit>=0?"#86efac":"#fca5a5"}`, borderRadius:12, padding:"14px 16px" }}>
-          <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:.8, color:netProfit>=0?C.green:C.red, marginBottom:6 }}>📊 Net Profit</div>
-          <div style={{ fontSize:20, fontWeight:800, fontFamily:"'Playfair Display',serif", color:netProfit>=0?C.green:C.red }}>{money(netProfit)}</div>
-          <div style={{ fontSize:11, color:C.dim, marginTop:4, opacity:.7 }}>Collected − Business Exp.</div>
-        </div>
-
-        <div style={{ background: cashInHand >= 0 ? "#fffbeb":"#fff5f5", border:`1.5px solid ${cashInHand>=0?"#fcd34d":"#fca5a5"}`, borderRadius:12, padding:"14px 16px" }}>
-          <div style={{ fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:.8, color:cashInHand>=0?C.gold:C.red, marginBottom:6 }}>💰 Cash in Hand</div>
-          <div style={{ fontSize:20, fontWeight:800, fontFamily:"'Playfair Display',serif", color:cashInHand>=0?C.gold:C.red }}>{money(cashInHand)}</div>
-          <div style={{ fontSize:11, color:C.dim, marginTop:4, opacity:.7 }}>After all expenses & transfers</div>
-        </div>
-
+      {/* ── Money out & result ── */}
+      <div style={{ fontSize:9.5, letterSpacing:.9, textTransform:"uppercase", color:C.dim, fontWeight:600, margin:"0 0 7px 2px" }}>Money out &amp; result</div>
+      <div style={{ display:"grid", gridTemplateColumns: isMobile?"1fr 1fr":"repeat(4,1fr)", gap:10, marginBottom:16 }}>
+        {[
+          ["Business expenses", businessTotal,    "#b5322a",                              "Salaries, utilities, ops",   false],
+          ["Non-business",      nonBusinessTotal, "var(--text)",                           "Transfers, withdrawals",     false],
+          ["Net profit",        netProfit,        netProfit>=0?"#2f7d4f":"#b5322a",        "Collected − business exp.",  false],
+          ["Cash in hand",      cashInHand,       cashInHand>=0?"#a6832c":"#b5322a",       "After all expenses",         true],
+        ].map(([label,val,color,sub,accent])=>(
+          <div key={label} style={{ background:"var(--bg2)", border:"1px solid "+(accent?"#e3d6a8":"var(--border)"), borderRadius:12, padding:"11px 13px" }}>
+            <div style={{ fontSize:9, letterSpacing:.7, textTransform:"uppercase", color:accent?"#a6832c":C.dim, fontWeight:600 }}>{label}</div>
+            <div style={{ fontSize:18, fontWeight:600, color, marginTop:3, fontVariantNumeric:"tabular-nums" }}>{money(val)}</div>
+            <div style={{ fontSize:10, color:C.dim, marginTop:2 }}>{sub}</div>
+          </div>
+        ))}
       </div>
 
       {/* ── Cost analysis — where did the money go? ── */}
@@ -380,41 +371,38 @@ export default function Expenses() {
       />
 
       {/* ── Record Expense Form — whole panel tints with the selected type ── */}
-      <div style={{ background: isNonBusiness ? "#ffe3c4" : "#dbe7f5", border:`3px solid ${isNonBusiness?C.orange:C.navy}`, borderRadius:12, padding:"20px 22px", marginBottom:18, transition:"all .2s" }}>
+      <div style={{ background:"var(--bg2)", border:"1px solid var(--border)", borderRadius:12, padding:"14px 15px", marginBottom:14 }}>
 
-        {editId && (
-          <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:14 }}>
-            <div style={{ fontSize:9, letterSpacing:2, textTransform:"uppercase", fontWeight:700, color:"#fff", background:isNonBusiness?C.orange:C.navy, padding:"5px 12px", borderRadius:7 }}>
-              ✏️ Editing Expense
-            </div>
-          </div>
-        )}
+        <div style={{ display:"flex", alignItems:"center", gap:9, marginBottom:11, flexWrap:"wrap" }}>
+          <span style={{ width:24, height:24, borderRadius:7, background:"var(--bg3)", display:"inline-flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+            <i className={"ti "+(editId ? "ti-edit" : "ti-plus")} style={{ fontSize:13, color:"var(--text2)" }} />
+          </span>
+          <span style={{ fontSize:10.5, fontWeight:600, letterSpacing:.8, textTransform:"uppercase", color:"var(--text2)" }}>
+            {editId ? "Editing record" : "Add a record"}
+          </span>
+        </div>
 
         {/* Business / Non-Business toggle */}
-        <div style={{ display:"flex", gap:8, marginBottom:16 }}>
+        <div style={{ display:"inline-flex", border:"1px solid var(--border)", borderRadius:8, overflow:"hidden", marginBottom:11 }}>
           <button type="button" onClick={()=>{ setF("type","business"); setF("cat",""); }}
-            style={{ flex:1, padding:"12px 10px", borderRadius:10, border:`2px solid ${form.type==="business"?C.navy:"#d5dce6"}`,
-              background:form.type==="business"?C.navy:"#fff",
-              color:form.type==="business"?"#fff":C.dim,
-              cursor:"pointer", fontFamily:"inherit", fontWeight:800, fontSize:13, transition:"all .15s" }}>
-            🏨 Business Expense
-            <div style={{ fontSize:10, fontWeight:500, marginTop:3, opacity:.85 }}>Affects profit &amp; cash</div>
+            style={{ padding:"6px 14px", border:"none", cursor:"pointer", fontFamily:"inherit", fontWeight:600, fontSize:12, transition:"all .12s",
+              background:form.type==="business"?"var(--navy)":"transparent",
+              color:form.type==="business"?"#fff":"var(--text2)" }}>
+            Business expense
           </button>
           <button type="button" onClick={()=>{ setF("type","nonbusiness"); setF("cat",""); }}
-            style={{ flex:1, padding:"12px 10px", borderRadius:10, border:`2px solid ${form.type==="nonbusiness"?C.orange:"#d5dce6"}`,
-              background:form.type==="nonbusiness"?"#e67e22":"#fff",
-              color:form.type==="nonbusiness"?"#fff":C.dim,
-              cursor:"pointer", fontFamily:"inherit", fontWeight:800, fontSize:13, transition:"all .15s" }}>
-            💸 Non-Business Transfer
-            <div style={{ fontSize:10, fontWeight:500, marginTop:3, opacity:.85 }}>Affects cash only</div>
+            style={{ padding:"6px 14px", border:"none", cursor:"pointer", fontFamily:"inherit", fontWeight:600, fontSize:12, transition:"all .12s",
+              background:form.type==="nonbusiness"?"var(--navy)":"transparent",
+              color:form.type==="nonbusiness"?"#fff":"var(--text2)" }}>
+            Non-business transfer
           </button>
         </div>
 
-        {/* Info banner */}
-        <div style={{ background: isNonBusiness?"#fff7ed":"#eef4fb", border:`1.5px solid ${isNonBusiness?"#fed7aa":"#b9cbe2"}`, borderRadius:8, padding:"8px 13px", fontSize:11, color: isNonBusiness?C.orange:C.navy, marginBottom:14, fontWeight:600 }}>
+        {/* Info line */}
+        <div style={{ fontSize:11, color:"var(--text3)", marginBottom:12, lineHeight:1.5 }}>
           {isNonBusiness
-            ? "💸 Non-business transfers (bank, donation, lending, owner use) reduce cash in hand but do NOT affect profit."
-            : "🏨 Business expenses (salaries, electricity, supplies) reduce both profit and cash in hand."}
+            ? "Non-business transfers (bank, donation, lending, owner use) reduce cash in hand but do NOT affect profit."
+            : "Business expenses (salaries, electricity, supplies) reduce both profit and cash in hand."}
         </div>
 
         {/* Main fields */}
@@ -498,11 +486,19 @@ export default function Expenses() {
 
       {/* ── Collapsible records section ── */}
       <button onClick={()=>setShowRecords(v=>!v)} style={{
-        width:"100%", display:"flex", justifyContent:"space-between", alignItems:"center",
-        padding:"14px 18px", marginBottom:12, borderRadius:12, cursor:"pointer",
-        border:`1.5px solid ${C.border}`, background:"#fff", fontFamily:"inherit" }}>
-        <span style={{ fontSize:14, fontWeight:800, color:C.navy }}>📋 All Expense Records ({filtered.length}) · {money(filteredTotal)}</span>
-        <span style={{ fontSize:13, fontWeight:700, color:C.dim }}>{showRecords ? "▲ Hide" : "▼ Show"}</span>
+        width:"100%", display:"flex", justifyContent:"space-between", alignItems:"center", gap:9,
+        padding:"12px 15px", marginBottom:12, borderRadius:12, cursor:"pointer",
+        border:"1px solid var(--border)", background:"var(--bg2)", fontFamily:"inherit" }}>
+        <span style={{ display:"flex", alignItems:"center", gap:9, minWidth:0 }}>
+          <span style={{ width:24, height:24, borderRadius:7, background:"var(--bg3)", display:"inline-flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+            <i className="ti ti-list-details" style={{ fontSize:13, color:"var(--text2)" }} />
+          </span>
+          <span style={{ fontSize:10.5, fontWeight:600, letterSpacing:.8, textTransform:"uppercase", color:"var(--text2)" }}>All expense records</span>
+          <span style={{ fontSize:11.5, color:"var(--text3)", fontVariantNumeric:"tabular-nums" }}>{filtered.length} · {money(filteredTotal)}</span>
+        </span>
+        <span style={{ fontSize:11.5, fontWeight:600, color:"var(--text3)", display:"flex", alignItems:"center", gap:4 }}>
+          <i className={"ti "+(showRecords ? "ti-chevron-up" : "ti-chevron-down")} style={{ fontSize:14 }} />{showRecords ? "Hide" : "Show"}
+        </span>
       </button>
 
       {showRecords && (<>

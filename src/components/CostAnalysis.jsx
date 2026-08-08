@@ -60,85 +60,68 @@ export default function CostAnalysis({ items, allItems, monthKey, monthLabel, ca
   if (rows.length === 0) return null;
 
   return (
-    <div style={{ background:"#fff", border:"1.5px solid #e2e2e2", borderRadius:12, padding:"18px 20px", marginBottom:18 }}>
+    <div style={{ background:"var(--bg2)", border:"1px solid var(--border)", borderRadius:12, padding:"14px 15px", marginBottom:14 }}>
 
       {/* Header */}
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:8, marginBottom:14 }}>
-        <div style={{ fontSize:15, fontWeight:800, color:accent }}>📊 Where did the money go? — {monthLabel}</div>
-        <span style={{ background:accent+"18", color:accent, fontSize:11, padding:"4px 10px", borderRadius:12, fontWeight:700 }}>{money(total)} total cost</span>
+      <div style={{ display:"flex", alignItems:"center", gap:9, flexWrap:"wrap", marginBottom:12 }}>
+        <span style={{ width:24, height:24, borderRadius:7, background:"var(--bg3)", display:"inline-flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+          <i className="ti ti-chart-donut" style={{ fontSize:13, color:"var(--text2)" }} />
+        </span>
+        <span style={{ fontSize:10.5, fontWeight:600, letterSpacing:.8, textTransform:"uppercase", color:"var(--text2)" }}>Where the money went — {monthLabel}</span>
+        <span style={{ marginLeft:"auto", fontSize:11, color:"var(--text3)", fontVariantNumeric:"tabular-nums" }}>{money(total)} total</span>
       </div>
 
       {/* High-cost alert */}
       {alert && (
-        <div style={{ display:"flex", gap:10, background:"#FCEBEB", border:"1.5px solid #F09595", borderRadius:12, padding:"12px 14px", marginBottom:16, alignItems:"center" }}>
-          <span style={{ fontSize:22 }}>⚠️</span>
-          <div style={{ fontSize:12, color:"#791F1F", lineHeight:1.5 }}>
-            <span style={{ fontWeight:800, fontSize:13 }}>{alert.cat} is unusually high this month</span><br/>
-            Normally around {alert.avg}% of your costs — this month it's <strong>{alert.share}% ({money(alert.amt)})</strong>. Worth a look.
+        <div style={{ display:"flex", gap:9, background:"#fdf4f3", border:"1px solid #e0b3b0", borderRadius:10, padding:"10px 13px", marginBottom:13, alignItems:"center" }}>
+          <i className="ti ti-alert-triangle" style={{ fontSize:17, color:"#8f2323", flexShrink:0 }} />
+          <div style={{ fontSize:11.5, color:"#8f2323", lineHeight:1.5 }}>
+            <span style={{ fontWeight:600 }}>{alert.cat} is unusually high this month</span><br/>
+            Normally around {alert.avg}% of your costs — this month it's <strong>{alert.share}% ({money(alert.amt)})</strong>.
           </div>
         </div>
       )}
 
-      {/* Medal cards */}
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:10, marginBottom:18 }}>
-        {top && (
-          <div style={{ background:"#FCEBEB", borderRadius:12, padding:12, textAlign:"center" }}>
-            <div style={{ fontSize:20 }}>🥇</div>
-            <div style={{ fontSize:10, color:"#993C1D", letterSpacing:.5, margin:"2px 0", fontWeight:700 }}>BIGGEST COST</div>
-            <div style={{ fontSize:13, fontWeight:800, color:"#791F1F" }}>{emoji(top.cat)} {top.cat}</div>
-            <div style={{ fontSize:16, fontWeight:800, color:"#A32D2D" }}>{money(top.amt)}</div>
+      {/* Highlights */}
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))", gap:10, marginBottom:14 }}>
+        {[
+          top          && ["Biggest cost",  top.cat,          money(top.amt),            "#b5322a"],
+          mostFrequent && ["Most often",    mostFrequent.cat, mostFrequent.cnt+" times", "var(--text2)"],
+          smallest     && ["Smallest cost", smallest.cat,     money(smallest.amt),       "#2f7d4f"],
+        ].filter(Boolean).map(([label,cat,val,color])=>(
+          <div key={label} style={{ border:"1px solid var(--border)", borderRadius:9, padding:"9px 11px" }}>
+            <div style={{ fontSize:9, letterSpacing:.6, textTransform:"uppercase", color:"var(--text3)", fontWeight:600 }}>{label}</div>
+            <div style={{ fontSize:13, fontWeight:600, marginTop:3, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{cat}</div>
+            <div style={{ fontSize:14, fontWeight:600, color, fontVariantNumeric:"tabular-nums" }}>{val}</div>
           </div>
-        )}
-        {mostFrequent && (
-          <div style={{ background:"#E6F1FB", borderRadius:12, padding:12, textAlign:"center" }}>
-            <div style={{ fontSize:20 }}>🔁</div>
-            <div style={{ fontSize:10, color:"#185FA5", letterSpacing:.5, margin:"2px 0", fontWeight:700 }}>MOST OFTEN</div>
-            <div style={{ fontSize:13, fontWeight:800, color:"#0C447C" }}>{emoji(mostFrequent.cat)} {mostFrequent.cat}</div>
-            <div style={{ fontSize:16, fontWeight:800, color:"#185FA5" }}>{mostFrequent.cnt} times</div>
-          </div>
-        )}
-        {smallest && (
-          <div style={{ background:"#E1F5EE", borderRadius:12, padding:12, textAlign:"center" }}>
-            <div style={{ fontSize:20 }}>🌱</div>
-            <div style={{ fontSize:10, color:"#0F6E56", letterSpacing:.5, margin:"2px 0", fontWeight:700 }}>SMALLEST COST</div>
-            <div style={{ fontSize:13, fontWeight:800, color:"#085041" }}>{emoji(smallest.cat)} {smallest.cat}</div>
-            <div style={{ fontSize:16, fontWeight:800, color:"#0F6E56" }}>{money(smallest.amt)}</div>
-          </div>
-        )}
+        ))}
       </div>
 
-      {/* Category bars */}
-      <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+      {/* Category bars — aligned columns: name · bar · % · amount */}
+      <div>
         {rows.map((r, i) => {
           const pct = total > 0 ? Math.round(r.amt / total * 100) : 0;
           const color = BAR_COLORS[i % BAR_COLORS.length];
-          const bg    = BAR_BGS[i % BAR_BGS.length];
           const isAlerted = alert && alert.cat === r.cat;
           return (
             <div key={r.cat} onClick={() => onPickCategory && onPickCategory(r.cat)}
-              style={{ display:"flex", alignItems:"center", gap:10, cursor: onPickCategory ? "pointer" : "default" }}
+              style={{ display:"flex", alignItems:"center", gap:10, padding:"7px 0", borderTop:"1px solid var(--border)", cursor: onPickCategory ? "pointer" : "default" }}
               title={`Show only ${r.cat} in the table`}>
-              <span style={{ width:30, height:30, borderRadius:8, background:bg, display:"flex", alignItems:"center", justifyContent:"center", fontSize:15, flexShrink:0 }}>{emoji(r.cat)}</span>
-              <div style={{ flex:1, minWidth:0 }}>
-                <div style={{ display:"flex", justifyContent:"space-between", fontSize:12, marginBottom:3 }}>
-                  <span style={{ fontWeight:700 }}>
-                    {r.cat}
-                    {isAlerted && <span style={{ background:"#FCEBEB", color:"#A32D2D", fontSize:9, padding:"1px 7px", borderRadius:8, marginLeft:6, fontWeight:800 }}>HIGH</span>}
-                  </span>
-                  <span style={{ color: i===0 ? "#A32D2D" : "#666", fontWeight:700 }}>{money(r.amt)}</span>
-                </div>
-                <div style={{ height:12, background:"#f0f0f0", borderRadius:6, overflow:"hidden" }}>
-                  <div style={{ height:"100%", width:Math.max(pct,1)+"%", background:color, borderRadius:6, display:"flex", alignItems:"center", justifyContent:"flex-end", paddingRight:6, boxSizing:"border-box", transition:"width .4s" }}>
-                    {pct >= 8 && <span style={{ fontSize:9, color:"#fff", fontWeight:800 }}>{pct}%</span>}
-                  </div>
-                </div>
+              <span style={{ flex:"0 0 130px", minWidth:0, fontSize:12.5, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
+                {r.cat}
+                {isAlerted && <span style={{ background:"#fdf4f3", color:"#8f2323", fontSize:9, padding:"1px 6px", borderRadius:8, marginLeft:5, fontWeight:600 }}>HIGH</span>}
+              </span>
+              <div style={{ flex:1, minWidth:40, height:7, background:"var(--bg3)", borderRadius:20, overflow:"hidden" }}>
+                <div style={{ height:"100%", width:Math.max(pct,1)+"%", background:color, borderRadius:20, transition:"width .4s" }} />
               </div>
+              <span style={{ flex:"0 0 38px", textAlign:"right", fontSize:10.5, color:"var(--text3)" }}>{pct}%</span>
+              <span style={{ flex:"0 0 70px", textAlign:"right", fontSize:12.5, fontWeight:600, fontVariantNumeric:"tabular-nums" }}>{money(r.amt)}</span>
             </div>
           );
         })}
       </div>
 
-      <div style={{ fontSize:11, color:"#999", marginTop:12 }}>Tap any category to see only those expenses in the table below.</div>
+      <div style={{ fontSize:10.5, color:"var(--text3)", marginTop:10 }}>Tap a category to filter the records below.</div>
     </div>
   );
 }
