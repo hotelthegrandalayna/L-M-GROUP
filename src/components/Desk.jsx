@@ -458,9 +458,8 @@ function RoomModal({ room, onClose, onCheckout, onExtend, onCollect, onService, 
             <button className="btn primary" style={{ width:"100%", marginTop:12, background:"#1a7040", border:"none", fontWeight:800 }}
               onClick={() => {
                 // Open the prefilled check-in form right here on the front desk.
-                // (Previously this jumped to the Bookings tab; same form, same result.)
+                // (Previously this jumped to the Bookings tab, which no longer exists.)
                 if (onCompleteRes) onCompleteRes(bRes);
-                else { setPendingCompleteId(bRes.id); setActiveTab("bookings"); onClose(); }
               }}>
               <i className="ti ti-login" /> Complete Check-In (add remaining details)
             </button>
@@ -1416,7 +1415,7 @@ export default function Desk() {
   // Navigate to Invoice tab for extend stay
   function goToInvoiceTab(b) {
     setPendingInvoiceId(b.id);
-    setActiveTab("invoice");
+    setActiveTab("invoices");
     setExpandedRow(null);
   }
 

@@ -4,7 +4,6 @@ import useIsMobile from '../hall/useIsMobile';
 
 const TABS = [
   { id: 'desk',      icon: 'ti-layout-dashboard', label: 'Desk'      },
-  { id: 'bookings',  icon: 'ti-calendar-check',   label: 'Bookings'  },
   { id: 'invoices',  icon: 'ti-file-invoice',     label: 'Invoices', adminOnly: true },
   { id: 'expenses',  icon: 'ti-receipt',          label: 'Expenses & Cash' },
   { id: 'tasks',     icon: 'ti-checklist',        label: 'Tasks'     },
@@ -19,7 +18,7 @@ export default function Navbar({ onSwitchApp }) {
   const isMobile = useIsMobile();
   const visibleTabs = TABS.filter(t => {
     if (t.adminOnly && curRole !== 'admin') return false;
-    return curRole === 'staff' ? ['desk','bookings','expenses','tasks'].includes(t.id) : true;
+    return curRole === 'staff' ? ['desk','expenses','tasks'].includes(t.id) : true;
   });
 
   // ── Mobile: compact brand row + full-width scrollable tab strip below ──

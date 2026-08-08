@@ -4,7 +4,8 @@ import Login        from "./components/Login";
 import Navbar       from "./components/Navbar";
 import Notification from "./components/Notification";
 import Desk         from "./components/Desk";
-import Bookings     from "./components/Bookings";
+// NOTE: components/Bookings.jsx stays — the front desk imports the booking form
+// (NewBookingModal / InvoicePreviewModal) from it. Only the tab is removed.
 import Invoices     from "./components/Invoices";
 import Expenses     from "./components/Expenses";
 import Tasks        from "./components/Tasks";
@@ -28,7 +29,6 @@ function HotelInner({ onSwitchApp }) {
       <main style={{ flex:1, overflowY:"auto" }}>
         <ErrorBoundary key={activeTab}>
           {activeTab === "desk"      && <Desk      />}
-          {activeTab === "bookings"  && <Bookings  />}
           {activeTab === "invoices"  && <Invoices  />}
           {activeTab === "expenses"  && <Expenses  />}
           {activeTab === "tasks"     && <Tasks     />}

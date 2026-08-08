@@ -477,6 +477,27 @@ export async function loadHotelBookingsForMonth(ym) {
   return bookingRows.map((row) => fromDbBooking(row, guestById.get(row.guest_id)));
 }
 
+// Read-only fetch of every booking whose stay overlaps a date range. The live app
+// only keeps the last 30 days in memory, so searching an older date range would
+// otherwise find nothing. Same overlap query as loadHotelBookingsForMonth; the
+// result is used for searching/reporting only and is never merged into the live
+// bookings that drive the room map / checkouts.
+export async function loadHotelBookingsForRange(startIso, endIso) {
+  if (!hasHotelSupabaseConfig() || !startIso || !endIso) return [];
+  // overlap: checkin <= range end AND checkout >= range start
+  const bookingRows = await request("bookings", {
+    query: { and: `(checkin_date.lte.${endIso},checkout_date.gte.${startIso})`, order: "created_at.desc" },
+  });
+  if (!Array.isArray(bookingRows) || bookingRows.length === 0) return [];
+  const guestIds = [...new Set(bookingRows.map((r) => r.guest_id).filter(Boolean))];
+  const GUEST_COLS = "id,full_name,phone,nationality,email,ref_name,ref_phone,id_type,id_number";
+  const guestRows = guestIds.length
+    ? await request("guests", { query: { id: `in.(${guestIds.join(",")})`, select: GUEST_COLS } })
+    : [];
+  const guestById = new Map((Array.isArray(guestRows) ? guestRows : []).map((g) => [g.id, g]));
+  return bookingRows.map((row) => fromDbBooking(row, guestById.get(row.guest_id)));
+}
+
 // Fetch a single guest's ID photos on demand (only when a booking's details are
 // opened), so the regular sync stays fast. Returns { idFront, idBack, idDocs }.
 export async function loadHotelGuestImages(guestId) {

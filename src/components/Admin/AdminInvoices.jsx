@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { useApp, gaRecordDeleted } from "../../context/AppContext";
 import { checkAdminPassword } from "../../utils/auth";
-import { deleteHotelBooking, deleteHotelBookings, loadHotelGuestImages, persistHotelBookingBundle } from "../../lib/hotelSupabase";
+import { deleteHotelBooking, deleteHotelBookings, loadHotelGuestImages, persistHotelBookingBundle, loadHotelBookingsForRange } from "../../lib/hotelSupabase";
 import { useMonthBookings, monthMoney } from "../../lib/hotelMoney";
 import { allRoomNumbers } from "../Invoice";
 import { logEvent } from "../../utils/auditLog";
@@ -613,7 +613,41 @@ export default function AdminInvoices() {
 
   // Complete set of bookings for the selected month (live + on-demand cloud fetch
   // for past months), so totals never shrink as old bookings age out of memory.
-  const { bookings: srcBookings, loading: loadingMonth } = useMonthBookings(filterMonth, bookings);
+  const { bookings: monthBookings, loading: loadingMonth } = useMonthBookings(filterMonth, bookings);
+
+  // The live app only holds the last 30 days. When a date range is searched, pull
+  // the matching bookings from the cloud so older invoices are actually findable.
+  const [rangeRows, setRangeRows] = useState([]);
+  const [loadingRange, setLoadingRange] = useState(false);
+  useEffect(() => {
+    if (!dateFrom && !dateTo) { setRangeRows([]); return; }
+    const from = dateFrom || "2000-01-01";
+    const to   = dateTo   || "2999-12-31";
+    let alive = true;
+    setLoadingRange(true);
+    loadHotelBookingsForRange(from, to)
+      .then(rows => { if (alive) setRangeRows(Array.isArray(rows) ? rows : []); })
+      .catch(() => { if (alive) setRangeRows([]); })
+      .finally(() => { if (alive) setLoadingRange(false); });
+    return () => { alive = false; };
+  }, [dateFrom, dateTo]);
+
+  // Merge the range results in, de-duplicated and honouring deletions
+  const srcBookings = useMemo(() => {
+    if (!rangeRows.length) return monthBookings;
+    const deleted = (() => {
+      try {
+        const legacy = JSON.parse(localStorage.getItem("ga_deleted_booking_ids") || "[]");
+        const v1 = (JSON.parse(localStorage.getItem("ga_deleted_ids_v1") || "{}").bkg) || [];
+        return new Set([...legacy, ...v1].map(String));
+      } catch { return new Set(); }
+    })();
+    const have = new Set(monthBookings.map(b => String(b.supabaseBookingId ?? b.id)));
+    const add = rangeRows.filter(b =>
+      !have.has(String(b.supabaseBookingId ?? b.id)) &&
+      !deleted.has(String(b.id)) && !deleted.has(String(b.supabaseBookingId ?? "")));
+    return add.length ? [...monthBookings, ...add] : monthBookings;
+  }, [monthBookings, rangeRows]);
 
   const allMonths = useMemo(() => {
     const set = new Set(srcBookings.map(getBookingMonth).filter(Boolean));
@@ -802,7 +836,9 @@ export default function AdminInvoices() {
       {/* Summary bar */}
       <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 14, padding: "12px 16px", background: "var(--bg4)", borderRadius: 10, alignItems: "center" }}>
         <span style={{ fontSize: 12, color: "var(--text3)" }}>
-          <strong>{filtered.length}</strong> invoice{filtered.length !== 1 ? "s" : ""}
+          {(loadingRange || loadingMonth)
+            ? <em>Searching older records…</em>
+            : <><strong>{filtered.length}</strong> invoice{filtered.length !== 1 ? "s" : ""}</>}
           {selCount > 0 && <> · <strong style={{ color: "var(--navy)" }}>{selCount} selected</strong></>}
         </span>
         <span style={{ fontSize: 12, color: "var(--text3)" }}>·</span>
