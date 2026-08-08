@@ -5,6 +5,7 @@ import Navbar       from "./components/Navbar";
 import Notification from "./components/Notification";
 import Desk         from "./components/Desk";
 import Bookings     from "./components/Bookings";
+import Invoices     from "./components/Invoices";
 import Expenses     from "./components/Expenses";
 import Tasks        from "./components/Tasks";
 import TaskReminderPopup from "./components/TaskReminderPopup";
@@ -28,6 +29,7 @@ function HotelInner({ onSwitchApp }) {
         <ErrorBoundary key={activeTab}>
           {activeTab === "desk"      && <Desk      />}
           {activeTab === "bookings"  && <Bookings  />}
+          {activeTab === "invoices"  && <Invoices  />}
           {activeTab === "expenses"  && <Expenses  />}
           {activeTab === "tasks"     && <Tasks     />}
           {activeTab === "crm"       && <CRM       />}

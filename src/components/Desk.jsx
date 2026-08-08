@@ -131,7 +131,7 @@ function getHotelDue(b) {
   return Math.max(0, total - paid);
 }
 
-function RoomModal({ room, onClose, onCheckout, onExtend, onCollect, onService, onInvoice, onNewBooking }) {
+function RoomModal({ room, onClose, onCheckout, onExtend, onCollect, onService, onInvoice, onNewBooking, onCompleteRes }) {
   const { curUser, curRole, bookings, updateBookings, revenues, updateRevenues, notify, setActiveTab, setPendingCompleteId } = useApp();
   const today = todayStr();
 
@@ -456,7 +456,12 @@ function RoomModal({ room, onClose, onCheckout, onExtend, onCollect, onService, 
             </div>
             {bRes.notes && <div style={{ fontSize:11, color:"var(--text3)", paddingTop:6, borderTop:"1px solid rgba(201,168,76,.2)" }}>{bRes.notes}</div>}
             <button className="btn primary" style={{ width:"100%", marginTop:12, background:"#1a7040", border:"none", fontWeight:800 }}
-              onClick={() => { setPendingCompleteId(bRes.id); setActiveTab("bookings"); onClose(); }}>
+              onClick={() => {
+                // Open the prefilled check-in form right here on the front desk.
+                // (Previously this jumped to the Bookings tab; same form, same result.)
+                if (onCompleteRes) onCompleteRes(bRes);
+                else { setPendingCompleteId(bRes.id); setActiveTab("bookings"); onClose(); }
+              }}>
               <i className="ti ti-login" /> Complete Check-In (add remaining details)
             </button>
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:9, marginTop:9 }}>
@@ -1926,7 +1931,8 @@ export default function Desk() {
         onCollect={(b) => { setSel(null); setCollectTarget(b); }}
         onService={(b) => { setSel(null); setServiceTarget(b); }}
         onInvoice={(b) => { setSel(null); setInvoiceTarget(b); }}
-        onNewBooking={(prefill) => { setSel(null); setNewBooking(prefill); }} />}
+        onNewBooking={(prefill) => { setSel(null); setNewBooking(prefill); }}
+        onCompleteRes={(bk) => { setSel(null); setCompleteBooking(bk); }} />}
       {newBooking && <NewBookingModal prefill={newBooking} onClose={() => setNewBooking(null)} />}
       {confirmRes && <InvoicePreviewModal booking={confirmRes} rooms={rooms}
         onClose={() => setConfirmRes(null)}

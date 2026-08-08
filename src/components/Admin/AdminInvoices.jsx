@@ -3,6 +3,7 @@ import { useApp, gaRecordDeleted } from "../../context/AppContext";
 import { checkAdminPassword } from "../../utils/auth";
 import { deleteHotelBooking, deleteHotelBookings, loadHotelGuestImages, persistHotelBookingBundle } from "../../lib/hotelSupabase";
 import { useMonthBookings, monthMoney } from "../../lib/hotelMoney";
+import { allRoomNumbers } from "../Invoice";
 import { logEvent } from "../../utils/auditLog";
 
 const STATUS_OPTS = ["All", "checked-in", "reserved", "checked-out", "cancelled"];
@@ -601,6 +602,8 @@ export default function AdminInvoices() {
   const [filterMonth,    setFilterMonth]    = useState("");
   const [filterStatus,   setFilterStatus]   = useState("All");
   const [filterRoom,     setFilterRoom]     = useState("");
+  const [dateFrom,       setDateFrom]       = useState("");
+  const [dateTo,         setDateTo]         = useState("");
   const [selectedIds,    setSelectedIds]    = useState(new Set());
   const [selectedMonths, setSelectedMonths] = useState([]);
   const [detail,         setDetail]         = useState(null);
@@ -642,16 +645,20 @@ export default function AdminInvoices() {
     return srcBookings.filter(bk => {
       if (filterStatus !== "All" && bk.status !== filterStatus) return false;
       if (filterMonth && getBookingMonth(bk) !== filterMonth) return false;
-      if (filterRoom && !String(bk.room || "").toLowerCase().includes(filterRoom.toLowerCase())) return false;
+      // Room search matches ANY room on the booking, not just the primary one
+      if (filterRoom && !allRoomNumbers(bk).some(n => n.toLowerCase().includes(filterRoom.toLowerCase()))) return false;
+      // Calendar range — a booking matches if its stay overlaps the chosen dates
+      if (dateFrom && (bk.checkout || bk.checkin || "") < dateFrom) return false;
+      if (dateTo   && (bk.checkin  || "") > dateTo) return false;
       if (q && !(
         String(bk.guest || "").toLowerCase().includes(q) ||
         String(bk.id    ?? "").toLowerCase().includes(q) ||
         String(bk.phone || "").toLowerCase().includes(q) ||
-        String(bk.room  || "").toLowerCase().includes(q)
+        allRoomNumbers(bk).some(n => n.toLowerCase().includes(q))
       )) return false;
       return true;
     }).sort((a, b) => (b.checkin || b.createdAt || "") > (a.checkin || a.createdAt || "") ? 1 : -1);
-  }, [srcBookings, search, filterStatus, filterMonth, filterRoom]);
+  }, [srcBookings, search, filterStatus, filterMonth, filterRoom, dateFrom, dateTo]);
 
   const totals = useMemo(() => {
     // For a whole selected month (no manual row-selection), show the canonical cash
@@ -773,6 +780,23 @@ export default function AdminInvoices() {
         </select>
         <input value={filterRoom} onChange={e => setFilterRoom(e.target.value)} placeholder="Room no."
           style={{ padding: "9px 12px", border: "1.5px solid var(--border)", borderRadius: 8, fontSize: 13, fontFamily: "inherit" }} />
+        <label style={{ display: "flex", alignItems: "center", gap: 6, padding: "0 2px", fontSize: 11, color: "var(--text3)" }}>
+          From
+          <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
+            style={{ flex: 1, minWidth: 0, padding: "8px 10px", border: "1.5px solid var(--border)", borderRadius: 8, fontSize: 12.5, fontFamily: "inherit" }} />
+        </label>
+        <label style={{ display: "flex", alignItems: "center", gap: 6, padding: "0 2px", fontSize: 11, color: "var(--text3)" }}>
+          To
+          <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
+            style={{ flex: 1, minWidth: 0, padding: "8px 10px", border: "1.5px solid var(--border)", borderRadius: 8, fontSize: 12.5, fontFamily: "inherit" }} />
+        </label>
+        {(search || filterMonth || filterRoom || dateFrom || dateTo || filterStatus !== "All") && (
+          <button type="button"
+            onClick={() => { setSearch(""); setFilterMonth(""); setFilterRoom(""); setDateFrom(""); setDateTo(""); setFilterStatus("All"); }}
+            style={{ padding: "9px 12px", border: "1px solid var(--border)", background: "var(--bg2)", borderRadius: 8, fontSize: 12, fontFamily: "inherit", cursor: "pointer", color: "var(--text2)" }}>
+            Clear filters
+          </button>
+        )}
       </div>
 
       {/* Summary bar */}
