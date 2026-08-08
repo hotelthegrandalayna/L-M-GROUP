@@ -1,7 +1,7 @@
 // Tests for invoice search. The 5–8 Aug date range returning zero results was a
 // real reported bug — these lock the behaviour so it cannot come back.
 import { describe, it, expect } from "vitest";
-import { filterInvoices, invoiceRooms, stayOverlapsRange, invoiceTotals } from "./invoiceFilter";
+import { filterInvoices, invoiceRooms, stayOverlapsRange, invoiceTotals, monthOverlap } from "./invoiceFilter";
 
 // Real August bookings from production
 const rows = [
@@ -52,6 +52,47 @@ describe("room search covers multi-room bookings", () => {
 
   it("lists every room of a booking", () => {
     expect(invoiceRooms(rows[3])).toEqual(["103", "104", "105", "106"]);
+  });
+});
+
+describe("month filter follows the night stayed (the 43,600 vs 39,600 gap)", () => {
+  // Real case: three stays checked in 31 Jul and left 2 Aug. Their 1-Aug night is
+  // August revenue, so they MUST appear when August is selected.
+  const boundary = { id: 69, guest: "Boundary Guest", room: "101", checkin: "2026-07-31", checkout: "2026-08-02",
+    status: "checked-out", invoiceTotal: 3000, paymentHistory: [{ amount: 3000 }] };
+
+  it("a 31 Jul → 2 Aug stay appears in AUGUST", () => {
+    expect(monthOverlap(boundary, "2026-08")).toBe(true);
+    expect(filterInvoices([boundary], { month: "2026-08" }).map(b => b.id)).toEqual([69]);
+  });
+
+  it("the same stay still appears in JULY", () => {
+    expect(monthOverlap(boundary, "2026-07")).toBe(true);
+    expect(filterInvoices([boundary], { month: "2026-07" }).map(b => b.id)).toEqual([69]);
+  });
+
+  it("it does NOT leak into September", () => {
+    expect(monthOverlap(boundary, "2026-09")).toBe(false);
+  });
+
+  it("a stay ending exactly on the 1st does not count for that month", () => {
+    // 30 Jul → 1 Aug: the only nights are 30 and 31 Jul, so no August night
+    const b = { id: 1, guest: "G", room: "1", checkin: "2026-07-30", checkout: "2026-08-01" };
+    expect(monthOverlap(b, "2026-08")).toBe(false);
+    expect(monthOverlap(b, "2026-07")).toBe(true);
+  });
+
+  it("a stay starting on the 1st counts for that month", () => {
+    const b = { id: 2, guest: "G", room: "1", checkin: "2026-08-01", checkout: "2026-08-02" };
+    expect(monthOverlap(b, "2026-08")).toBe(true);
+    expect(monthOverlap(b, "2026-07")).toBe(false);
+  });
+
+  it("a long stay covers every month it touches", () => {
+    const b = { id: 3, guest: "G", room: "1", checkin: "2026-07-28", checkout: "2026-09-03" };
+    expect(monthOverlap(b, "2026-07")).toBe(true);
+    expect(monthOverlap(b, "2026-08")).toBe(true);
+    expect(monthOverlap(b, "2026-09")).toBe(true);
   });
 });
 

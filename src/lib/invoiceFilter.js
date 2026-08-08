@@ -13,6 +13,24 @@ export function invoiceMonth(b) {
   return String(b?.checkin || b?.createdAt || "").slice(0, 7);
 }
 
+// Does this stay have at least one NIGHT inside the given month?
+// Revenue follows the night stayed, so the invoice list must use the same test —
+// otherwise a 31 Jul → 2 Aug stay earns August money but never appears in August.
+export function monthOverlap(b, month) {
+  if (!month) return true;
+  const ci = String(b?.checkin || "");
+  const co = String(b?.checkout || "");
+  if (!ci) return false;
+  const [y, m] = month.split("-").map(Number);
+  const monthStart = month + "-01";
+  const nextStart = new Date(Date.UTC(y, m, 1)).toISOString().slice(0, 10);
+  // nights run [checkin, checkout) — overlap when checkin < next month and checkout > month start
+  if (ci >= nextStart) return false;
+  if (co && co <= monthStart) return false;
+  if (!co) return ci.slice(0, 7) === month; // no checkout recorded: fall back to check-in month
+  return true;
+}
+
 export function invoicePaid(b) {
   const hist = b?.paymentHistory || [];
   if (hist.length) return hist.reduce((s, p) => s + (parseFloat(p.amount) || 0), 0);
@@ -43,7 +61,8 @@ export function filterInvoices(bookings, opts = {}) {
   return (bookings || []).filter(b => {
     if (!b) return false;
     if (status && status !== "All" && b.status !== status) return false;
-    if (month && invoiceMonth(b) !== month) return false;
+    // Month = "has a night in this month", matching how revenue is attributed
+    if (month && !monthOverlap(b, month)) return false;
     if (roomSet.length && !invoiceRooms(b).some(n => roomSet.includes(n))) return false;
     if (roomQ && !invoiceRooms(b).some(n => n.toLowerCase().includes(roomQ))) return false;
     if ((dateFrom || dateTo) && !stayOverlapsRange(b, dateFrom, dateTo)) return false;

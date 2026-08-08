@@ -1,8 +1,8 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { useApp, gaRecordDeleted } from "../../context/AppContext";
 import { checkAdminPassword } from "../../utils/auth";
 import { deleteHotelBooking, deleteHotelBookings, loadHotelGuestImages, persistHotelBookingBundle, loadHotelBookingsForRange } from "../../lib/hotelSupabase";
-import { useMonthBookings } from "../../lib/hotelMoney";
+import { useMonthBookings, bookingMonthlyParts } from "../../lib/hotelMoney";
 import { allRoomNumbers, roomLabel, buildInvoiceHTML, buildTCHtml, hotelPrint } from "../Invoice";
 import { filterInvoices } from "../../lib/invoiceFilter";
 import { logEvent } from "../../utils/auditLog";
@@ -897,16 +897,33 @@ export default function AdminInvoices() {
     [srcBookings, search, filterStatus, filterMonth, filterRooms, dateFrom, dateTo],
   );
 
+  // A stay that crosses a month boundary belongs partly to each month, so when one
+  // month is being viewed this returns just that month's share of the invoice.
+  // With no month selected it returns the whole invoice.
+  const shareOf = useCallback((bk) => {
+    if (!filterMonth) {
+      const total = bk.invoiceTotal ?? bk.amount ?? 0;
+      return { billed: total, collected: calcPaid(bk), partial: false };
+    }
+    let billed = 0, collected = 0;
+    bookingMonthlyParts(bk).forEach(p => {
+      if (p.month === filterMonth) { billed += p.billed; collected += p.collected; }
+    });
+    const full = bk.invoiceTotal ?? bk.amount ?? 0;
+    return { billed, collected, partial: Math.abs(billed - full) > 1 };
+  }, [filterMonth]);
+
   // The figures on top always describe exactly what you are looking at:
   //  · tick some rows  → only those invoices
-  //  · otherwise       → every invoice the current search is showing
-  //    (which by default is this month)
+  //  · otherwise       → every invoice the current search is showing (this month by default)
+  // When a month is selected they use each stay's share of that month, so they
+  // reconcile exactly with the revenue on the Desk and Reports screens.
   const totals = useMemo(() => {
     const rows = selectedIds.size > 0 ? filtered.filter(b => selectedIds.has(b.id)) : filtered;
-    const paid  = rows.reduce((s, bk) => s + calcPaid(bk), 0);
-    const total = rows.reduce((s, bk) => s + (bk.invoiceTotal ?? bk.amount ?? 0), 0);
+    let total = 0, paid = 0;
+    rows.forEach(bk => { const s = shareOf(bk); total += s.billed; paid += s.collected; });
     return { total, paid, balance: Math.max(0, total - paid), count: rows.length };
-  }, [filtered, selectedIds]);
+  }, [filtered, selectedIds, shareOf]);
 
   const selCount   = filtered.filter(b => selectedIds.has(b.id)).length;
   const allChecked = filtered.length > 0 && filtered.every(b => selectedIds.has(b.id));
@@ -1183,6 +1200,7 @@ export default function AdminInvoices() {
           const sBg     = { "checked-out": "#d1fae5", "checked-in": "#dbeafe", "cancelled": "#fee2e2"  }[bk.status] || "#fef3c7";
 
           const rooms = allRoomNumbers(bk);
+          const share = shareOf(bk);
           return (
             <div key={bk.id}
               onClick={() => setDetail(bk)}
@@ -1218,7 +1236,14 @@ export default function AdminInvoices() {
                 <div style={{ color: "var(--text3)", fontSize: 10 }}>{bk.nights || "—"} night{bk.nights === 1 ? "" : "s"}</div>
               </div>
 
-              <div style={{ textAlign: "right", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{fmtMoney(total)}</div>
+              <div style={{ textAlign: "right", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
+                {fmtMoney(share.partial ? share.billed : total)}
+                {share.partial && (
+                  <div style={{ fontSize: 9.5, color: "var(--text3)", fontWeight: 400 }}>
+                    this month · of {fmtMoney(total)}
+                  </div>
+                )}
+              </div>
               <div style={{ textAlign: "right", fontWeight: 600, color: balance > 0 ? "#b5322a" : "#2f7d4f", fontVariantNumeric: "tabular-nums" }}>{fmtMoney(balance)}</div>
 
               {/* Actions — View / ID open freely, Edit + Delete ask for the admin password */}
