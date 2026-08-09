@@ -80,40 +80,72 @@ export default function AdminRooms() {
 
   return (
     <div>
-      <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:14 }}>
-        <button className="btn primary sm" onClick={openNew}><i className="ti ti-plus" /> Add Room</button>
+      <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:12 }}>
+        <button onClick={openNew}
+          style={{ display:"inline-flex", alignItems:"center", gap:5, padding:"6px 13px", borderRadius:8,
+            border:"1px solid var(--border)", background:"var(--bg2)", color:"var(--text)",
+            fontSize:12, fontWeight:600, fontFamily:"inherit", cursor:"pointer" }}>
+          <i className="ti ti-plus" style={{ fontSize:13 }} /> Add room
+        </button>
       </div>
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:12 }}>
-        {rooms.map(r=>(
-          <div key={r.id} className="panel" style={{ padding:14 }}>
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:8 }}>
-              <div>
-                <div style={{ fontSize:18, fontWeight:800, color:"var(--navy)" }}>Rm {r.number}</div>
-                <div style={{ fontSize:12, color:"var(--text3)" }}>{r.name||r.type} · Floor {r.floor||1}</div>
-              </div>
-              <div style={{ textAlign:"right" }}>
-                {r.acRate && r.nonAcRate ? (
-                  <>
-                    <div style={{ fontSize:13, fontWeight:800, color:"var(--gold2)" }}>AC: {money(r.acRate)}/n</div>
-                    <div style={{ fontSize:11, fontWeight:700, color:"var(--text3)" }}>Non-AC: {money(r.nonAcRate)}/n</div>
-                  </>
-                ) : (
-                  <div style={{ fontSize:16, fontWeight:800, color:"var(--gold2)" }}>{money(r.rate)}<span style={{ fontSize:10,fontWeight:400 }}>/n</span></div>
-                )}
-              </div>
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(230px,1fr))", gap:10 }}>
+        {rooms.map(r=>{
+          const dual = !!(r.acRate && r.nonAcRate);
+          return (
+          <div key={r.id} style={{ border:"1px solid var(--border)", borderRadius:11, padding:"11px 12px", background:"var(--bg2)" }}>
+            <div style={{ display:"flex", alignItems:"baseline", gap:7 }}>
+              <span style={{ fontSize:16, fontWeight:600, color:"var(--text)" }}>{r.number}</span>
+              <span style={{ fontSize:11, color:"var(--text3)", flex:1, minWidth:0, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
+                {(r.name||r.type)} · Floor {r.floor||1}
+              </span>
             </div>
-            <div style={{ fontSize:11, marginBottom:8, display:"flex", flexWrap:"wrap", gap:4 }}>
-              {(r.amenities||[]).map(a=>(
-                <span key={a} style={{ padding:"2px 7px",borderRadius:8,background:"var(--navy2)",color:"var(--gold)",fontSize:10,fontWeight:600 }}>{a}</span>
-              ))}
+
+            {/* Rates in a labelled row so the figures line up */}
+            <div style={{ display:"flex", gap:14, marginTop:7, paddingTop:7, borderTop:"1px solid var(--border)" }}>
+              {dual ? (<>
+                <div>
+                  <div style={{ fontSize:8.5, textTransform:"uppercase", letterSpacing:.5, color:"var(--text3)" }}>AC</div>
+                  <div style={{ fontSize:13, fontWeight:600, fontVariantNumeric:"tabular-nums" }}>{money(r.acRate)}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize:8.5, textTransform:"uppercase", letterSpacing:.5, color:"var(--text3)" }}>Non-AC</div>
+                  <div style={{ fontSize:13, fontWeight:600, fontVariantNumeric:"tabular-nums" }}>{money(r.nonAcRate)}</div>
+                </div>
+              </>) : (
+                <div>
+                  <div style={{ fontSize:8.5, textTransform:"uppercase", letterSpacing:.5, color:"var(--text3)" }}>Rate</div>
+                  <div style={{ fontSize:13, fontWeight:600, fontVariantNumeric:"tabular-nums" }}>
+                    {money(r.rate)}<span style={{ fontSize:10, fontWeight:400, color:"var(--text3)" }}>/night</span>
+                  </div>
+                </div>
+              )}
             </div>
-            {r.notes&&<div style={{ fontSize:11,color:"var(--text3)",marginBottom:8 }}>{r.notes}</div>}
-            <div style={{ display:"flex", gap:6 }}>
-              <button className="btn sm" style={{ flex:1 }} onClick={()=>openEdit(r)}><i className="ti ti-pencil" /> Edit</button>
-              <button className="btn sm danger" onClick={()=>del(r)}><i className="ti ti-trash" /></button>
+
+            <div style={{ display:"flex", flexWrap:"wrap", gap:4, marginTop:8 }}>
+              {(r.amenities||[]).length
+                ? (r.amenities||[]).map(a=>(
+                    <span key={a} style={{ padding:"1px 8px", borderRadius:20, border:"1px solid var(--border)",
+                      color:"var(--text2)", fontSize:9.5 }}>{a}</span>
+                  ))
+                : <span style={{ fontSize:10.5, color:"var(--text3)" }}>No amenities listed</span>}
+            </div>
+            {r.notes && <div style={{ fontSize:10.5, color:"var(--text3)", marginTop:6 }}>{r.notes}</div>}
+
+            <div style={{ display:"flex", gap:6, marginTop:10 }}>
+              <button onClick={()=>openEdit(r)}
+                style={{ flex:1, display:"inline-flex", alignItems:"center", justifyContent:"center", gap:5,
+                  padding:"5px 0", borderRadius:8, border:"1px solid var(--border)", background:"var(--bg2)",
+                  color:"var(--text)", fontSize:11, fontWeight:600, fontFamily:"inherit", cursor:"pointer" }}>
+                <i className="ti ti-edit" style={{ fontSize:12 }} /> Edit
+              </button>
+              <button onClick={()=>del(r)} title="Delete room"
+                style={{ padding:"5px 11px", borderRadius:8, border:"1px solid #e0b3b0", background:"#fdf4f3",
+                  color:"#8f2323", fontSize:11, fontFamily:"inherit", cursor:"pointer" }}>
+                <i className="ti ti-trash" style={{ fontSize:12 }} />
+              </button>
             </div>
           </div>
-        ))}
+        );})}
       </div>
 
       {modal!==null && (

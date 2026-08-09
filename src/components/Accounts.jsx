@@ -33,10 +33,13 @@ function Tile({ label, value, sub, color, accent }) {
 
 // Smooth line + soft fill — reads as a trend rather than a wall of bars.
 // Pure SVG, no chart library, so nothing extra to load.
-function AreaChart({ data, height = 170 }) {
+function AreaChart({ data, height = 200 }) {
   if (!data.length) return null;
-  const W = 640, H = 150, L = 30, R = 8, T = 14, B = 32;
+  // preserveAspectRatio="none" — without it the chart shrinks to fit the height
+  // and sits squashed in the middle of a wide screen.
+  const W = 900, H = 178, L = 42, R = 12, T = 22, B = 44;
   const max = Math.max(1, ...data.map(d => d.amount));
+  const avg = data.reduce((s, d) => s + d.amount, 0) / data.length;
   const x = i => data.length === 1 ? (L + W - R) / 2 : L + i * (W - L - R) / (data.length - 1);
   const y = v => T + (1 - v / max) * (H - T - B);
   const pts = data.map((d, i) => [x(i), y(d.amount)]);
@@ -44,38 +47,61 @@ function AreaChart({ data, height = 170 }) {
   const area = `${line} L${pts[pts.length-1][0].toFixed(1)},${y(0)} L${pts[0][0].toFixed(1)},${y(0)} Z`;
   const peak = data.reduce((a, b, i) => b.amount > data[a].amount ? i : a, 0);
   const ticks = [0, 0.5, 1].map(f => ({ v: max * f, py: y(max * f) }));
-  // show at most 5 x labels so they never collide
-  const step = Math.max(1, Math.ceil(data.length / 5));
+  const step = Math.max(1, Math.ceil(data.length / 8));
+  const short = v => v >= 1000 ? (Math.round(v / 100) / 10).toFixed(1).replace(/\.0$/, "") + "k" : Math.round(v);
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} style={{ width:"100%", height }} role="img" aria-label="Revenue over time">
+    <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ width:"100%", height }}
+      role="img" aria-label="Revenue over time">
       <defs>
         <linearGradient id="acctRev" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#5f8f86" stopOpacity="0.30" />
+          <stop offset="0%" stopColor="#5f8f86" stopOpacity="0.28" />
           <stop offset="100%" stopColor="#5f8f86" stopOpacity="0.02" />
         </linearGradient>
       </defs>
       {ticks.map((t, i) => (
         <g key={i}>
-          <line x1={L} y1={t.py} x2={W - R} y2={t.py} stroke={i === 0 ? "#e4e4e8" : "#f2f2f4"} strokeDasharray={i === 0 ? "" : "3 4"} />
-          <text x={L - 5} y={t.py + 3} textAnchor="end" style={{ fontSize:8, fill:"#b0b5bf" }}>
-            {t.v >= 1000 ? Math.round(t.v / 1000) + "k" : Math.round(t.v)}
-          </text>
+          <line x1={L} y1={t.py} x2={W - R} y2={t.py} stroke={i === 0 ? "#e4e4e8" : "#f2f2f4"} strokeDasharray={i === 0 ? "" : "3 5"} />
+          <text x={L - 6} y={t.py + 3} textAnchor="end" style={{ fontSize:8.5, fill:"#b0b5bf" }}>{short(t.v)}</text>
         </g>
       ))}
+      {/* average line */}
+      {avg > 0 && (<>
+        <line x1={L} y1={y(avg)} x2={W - R} y2={y(avg)} stroke="#d9a441" strokeDasharray="5 4" />
+        <text x={W - R} y={y(avg) - 4} textAnchor="end" style={{ fontSize:8, fill:"#a6832c" }}>avg {money(Math.round(avg))}</text>
+      </>)}
+
       <path d={area} fill="url(#acctRev)" />
-      <path d={line} fill="none" stroke="#5f8f86" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
-      {data.map((d, i) => (
-        <circle key={i} cx={x(i)} cy={y(d.amount)} r={i === peak ? 4 : 2.5}
-          fill={i === peak ? "#fff" : "#5f8f86"} stroke="#5f8f86" strokeWidth={i === peak ? 2 : 0}>
-          <title>{`${d.label} — ${money(Math.round(d.amount))}`}</title>
-        </circle>
-      ))}
-      <text x={x(peak)} y={y(data[peak].amount) - 8} textAnchor="middle" style={{ fontSize:8.5, fontWeight:600, fill:"#2f7d4f" }}>
-        {money(Math.round(data[peak].amount))}
-      </text>
+      <path d={line} fill="none" stroke="#5f8f86" strokeWidth="2.2" strokeLinejoin="round" strokeLinecap="round" />
+
+      {/* A point for every day, and the AMOUNT on every day that earned money.
+          Labels alternate above/below the line so they don't collide. */}
+      {data.map((d, i) => {
+        const has = d.amount > 0;
+        return (
+          <g key={i}>
+            <circle cx={x(i)} cy={y(d.amount)} r={i === peak ? 4.5 : has ? 3 : 2}
+              fill={i === peak ? "#fff" : has ? "#5f8f86" : "#c9ced6"}
+              stroke={i === peak ? "#5f8f86" : "none"} strokeWidth={i === peak ? 2.5 : 0}>
+              <title>{`${d.label} — ${money(Math.round(d.amount))}`}</title>
+            </circle>
+            {has && (
+              <text x={x(i)} y={y(d.amount) - (i % 2 === 0 ? 8 : 16)} textAnchor="middle"
+                style={{ fontSize: i === peak ? 9 : 7.5, fontWeight: i === peak ? 600 : 500,
+                  fill: i === peak ? "#2f7d4f" : "#5a6172" }}>
+                {short(d.amount)}
+              </text>
+            )}
+          </g>
+        );
+      })}
+
+      {/* date, with weekday underneath */}
       {data.map((d, i) => (i % step === 0 || i === data.length - 1) && (
-        <text key={i} x={x(i)} y={H - 10} textAnchor="middle" style={{ fontSize:8, fill:"#9aa0ac" }}>{d.label}</text>
+        <g key={"x"+i}>
+          <text x={x(i)} y={H - 20} textAnchor="middle" style={{ fontSize:8.5, fill:"#5a6172" }}>{d.label}</text>
+          {d.sub && <text x={x(i)} y={H - 9} textAnchor="middle" style={{ fontSize:7.5, fill:"#b0b5bf" }}>{d.sub}</text>}
+        </g>
       ))}
     </svg>
   );
@@ -191,15 +217,39 @@ export default function Accounts() {
   const revDelta = prevRev > 0 ? Math.round((mm.collected - prevRev) / prevRev * 100) : null;
 
   const [grain, setGrain] = useState("daily");
+  const dayRows = useMemo(() => revenueByDay(scoped, revenues, month), [scoped, revenues, month]);
+
   const series = useMemo(() => {
     if (grain === "monthly") return byMonth.map(x => ({ label: monthLabel(x.month), amount: x.amount }));
     if (grain === "weekly")  return revenueByWeek(scoped, revenues, month).map(x => ({ label: x.label, amount: x.amount }));
-    return revenueByDay(scoped, revenues, month).map(x => ({ label: x.day.slice(8), amount: x.amount }));
-  }, [grain, scoped, revenues, month, byMonth]);
-  const bestDay = useMemo(() => {
-    const d = revenueByDay(scoped, revenues, month);
-    return d.length ? d.reduce((a, b) => b.amount > a.amount ? b : a) : null;
-  }, [scoped, revenues, month]);
+    const wd = iso => new Date(iso + "T00:00:00").toLocaleDateString("en-GB", { weekday: "short" });
+    // With a month picked, include EVERY day — a day that earned nothing must show
+    // as zero rather than vanish, or the timeline is misleading.
+    if (month) {
+      const [yy, mm2] = month.split("-").map(Number);
+      const days = new Date(yy, mm2, 0).getDate();
+      const byDay = new Map(dayRows.map(r => [r.day, r.amount]));
+      return Array.from({ length: days }, (_, i) => {
+        const iso = `${month}-${String(i + 1).padStart(2, "0")}`;
+        return { label: String(i + 1), sub: wd(iso), amount: byDay.get(iso) || 0 };
+      });
+    }
+    return dayRows.map(x => ({ label: x.day.slice(8), sub: wd(x.day), amount: x.amount }));
+  }, [grain, dayRows, month, byMonth, scoped, revenues]);
+
+  // Period summary shown beside the chart title
+  const seriesStats = useMemo(() => {
+    const withMoney = series.filter(d => d.amount > 0);
+    const total = series.reduce((s, d) => s + d.amount, 0);
+    const best  = withMoney.length ? withMoney.reduce((a, b) => b.amount > a.amount ? b : a) : null;
+    const quiet = withMoney.length ? withMoney.reduce((a, b) => b.amount < a.amount ? b : a) : null;
+    return { total, avg: series.length ? total / series.length : 0,
+      best, quiet, emptyDays: series.length - withMoney.length };
+  }, [series]);
+
+  const bestDay = useMemo(
+    () => dayRows.length ? dayRows.reduce((a, b) => b.amount > a.amount ? b : a) : null,
+    [dayRows]);
 
   if (curRole !== "admin") {
     return (
@@ -276,8 +326,12 @@ export default function Accounts() {
       {tab==="overview" && (<>
         {/* Revenue trend — was its own tab, now lives here */}
         <div style={{ ...card, marginBottom:12 }}>
-          <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:6, flexWrap:"wrap" }}>
+          <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4, flexWrap:"wrap" }}>
             <span style={capLbl}>Revenue</span>
+            <span style={{ fontSize:11, color:"var(--text3)" }}>
+              {monthLabel(month)} · total <strong style={{ color:"var(--text)", ...num }}>{money(Math.round(seriesStats.total))}</strong>
+              {grain === "daily" && <> · avg <strong style={{ color:"var(--text)", ...num }}>{money(Math.round(seriesStats.avg))}</strong>/day</>}
+            </span>
             <span style={{ marginLeft:"auto", display:"inline-flex", border:"1px solid var(--border)", borderRadius:7, overflow:"hidden" }}>
               {["daily","weekly","monthly"].map(g => (
                 <button key={g} onClick={()=>setGrain(g)} style={{ padding:"4px 11px", border:"none", cursor:"pointer", fontFamily:"inherit",
@@ -289,9 +343,13 @@ export default function Accounts() {
           {series.length
             ? <AreaChart data={series} />
             : <div style={{ fontSize:12, color:"var(--text3)", padding:"14px 0" }}>No revenue in this period.</div>}
-          {bestDay && (
-            <div style={{ fontSize:10.5, color:"var(--text3)", marginTop:4 }}>
-              Best day <strong style={{ color:"#2f7d4f" }}>{bestDay.day} — {money(Math.round(bestDay.amount))}</strong> · hover any point for its date and amount
+          {series.length > 0 && (
+            <div style={{ display:"flex", gap:16, flexWrap:"wrap", fontSize:10.5, color:"var(--text3)", marginTop:4 }}>
+              {seriesStats.best  && <span>Best <strong style={{ color:"#2f7d4f" }}>{seriesStats.best.label}{seriesStats.best.sub?" "+seriesStats.best.sub:""} · {money(Math.round(seriesStats.best.amount))}</strong></span>}
+              {seriesStats.quiet && seriesStats.quiet !== seriesStats.best &&
+                <span>Quietest <strong style={{ color:"#b5322a" }}>{seriesStats.quiet.label}{seriesStats.quiet.sub?" "+seriesStats.quiet.sub:""} · {money(Math.round(seriesStats.quiet.amount))}</strong></span>}
+              {grain === "daily" && <span>Days with no income <strong style={{ color:"var(--text)" }}>{seriesStats.emptyDays}</strong></span>}
+              <span style={{ marginLeft:"auto" }}>hover any point for its exact amount</span>
             </div>
           )}
         </div>
