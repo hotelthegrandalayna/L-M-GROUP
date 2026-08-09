@@ -11,7 +11,7 @@ import AdminRooms from "./Admin/AdminRooms";
 import {
   roomStats, acStats, occupancy, discountStats, patternStats,
   revenueByDay, revenueByWeek, revenueByMonth, costByCategoryOverMonths, salaryStats,
-  weekdayStats,
+  weekdayStats, sourceStats, referrerStats,
 } from "../lib/accounts";
 
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -264,6 +264,12 @@ export default function Accounts() {
   }, [byMonth, wdRange]);
   const wd = useMemo(() => weekdayStats(scoped, revenues, wdMonths), [scoped, revenues, wdMonths]);
 
+  // ── Where bookings come from — channel (invoice "source") + who referred them
+  const chan = useMemo(() => sourceStats(scoped, month), [scoped, month]);
+  const ref = useMemo(() => referrerStats(scoped, month), [scoped, month]);
+  const [refAll, setRefAll] = useState(false);
+  const refShown = refAll ? ref.rows : ref.rows.slice(0, 5);
+
   if (curRole !== "admin") {
     return (
       <div style={{ padding:40, textAlign:"center", color:"var(--text3)" }}>
@@ -485,6 +491,95 @@ export default function Accounts() {
 
         </div>
 
+        {/* Where bookings come from — channel on the left, the people who refer on the right */}
+        <div style={{ ...card, marginBottom:12 }}>
+          <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:9, flexWrap:"wrap" }}>
+            <span style={capLbl}>Where bookings come from</span>
+            <span style={{ marginLeft:"auto", fontSize:10, color:"var(--text3)" }}>{monthLabel(month)}</span>
+          </div>
+
+          {chan.top ? (
+            <div style={{ background:"#edf3f1", border:"1px solid #cfe2d5", borderRadius:9, padding:"8px 11px", marginBottom:11 }}>
+              <div style={{ fontSize:12.5, fontWeight:600, color:"#2f5f4d" }}>
+                {chan.top.source} brings most bookings — {chan.top.bookings} of {chan.totalBookings}
+              </div>
+              <div style={{ fontSize:10.5, color:"var(--text2)", marginTop:3, lineHeight:1.55 }}>
+                {chan.second && <>{chan.second.source} is second at {chan.second.bookings}. </>}
+                {chan.richest && chan.richest.source !== chan.top.source
+                  ? <>{chan.richest.source} pays best — {money(chan.richest.avgPerBooking)} a booking vs {money(chan.top.avgPerBooking)} for {chan.top.source.toLowerCase()}.</>
+                  : <>It also pays best at {money(chan.top.avgPerBooking)} a booking.</>}
+              </div>
+            </div>
+          ) : (
+            <div style={{ fontSize:12, color:"var(--text3)", padding:"10px 0 14px" }}>
+              No bookings in this period yet.
+            </div>
+          )}
+
+          <div style={{ display:"grid", gridTemplateColumns:"minmax(0,1fr) minmax(0,1fr)", gap:16 }}>
+            <div>
+              <div style={{ fontSize:9.5, letterSpacing:.5, textTransform:"uppercase", color:"var(--text3)", marginBottom:7 }}>By source</div>
+              {chan.rows.map(r => {
+                const w = chan.top && chan.top.bookings ? Math.round(r.bookings / chan.top.bookings * 100) : 0;
+                const lead = chan.top && r.source === chan.top.source;
+                return (
+                  <div key={r.source} style={{ marginBottom:7 }}>
+                    <div style={{ display:"flex", fontSize:11, marginBottom:3, gap:8 }}>
+                      <span style={{ fontWeight: lead ? 600 : 400, color: r.bookings ? "var(--text)" : "var(--text3)" }}>{r.source}</span>
+                      <span style={{ marginLeft:"auto", color:"var(--text3)", ...num }}>
+                        {r.bookings ? <>{r.bookings} · {money(Math.round(r.revenue))}</> : "—"}
+                      </span>
+                    </div>
+                    <div style={{ height:6, background:"var(--bg3)", borderRadius:3, overflow:"hidden" }}>
+                      <div title={`${r.pct}% of bookings · ${money(r.avgPerBooking)} each`}
+                        style={{ height:"100%", width:w+"%", borderRadius:3,
+                          background: lead ? "#2f7d4f" : r.bookings ? "#8fb3aa" : "transparent" }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div style={{ borderLeft:"1px solid var(--border)", paddingLeft:16 }}>
+              <div style={{ display:"flex", alignItems:"center", marginBottom:7 }}>
+                <span style={{ fontSize:9.5, letterSpacing:.5, textTransform:"uppercase", color:"var(--text3)" }}>Who refers most</span>
+                <span style={{ marginLeft:"auto", fontSize:9.5, color:"var(--text3)" }}>
+                  {ref.people ? `${ref.people} ${ref.people===1?"person":"people"} · ${money(Math.round(ref.revenue))}` : ""}
+                </span>
+              </div>
+
+              {ref.rows.length === 0 ? (
+                <div style={{ fontSize:11, color:"var(--text3)", padding:"6px 0", lineHeight:1.6 }}>
+                  Nobody recorded yet. Fill “Referred by” on the invoice when a guest is sent by someone.
+                </div>
+              ) : (<>
+                {refShown.map((r, i) => (
+                  <div key={r.key} style={{ display:"flex", alignItems:"center", gap:8, padding:"3.5px 0",
+                    borderBottom: i === refShown.length-1 ? "none" : "1px solid var(--border)", fontSize:11 }}>
+                    <span style={{ width:12, color:"var(--text3)", ...num }}>{i+1}</span>
+                    <span style={{ fontWeight: i === 0 ? 600 : 400, minWidth:0, overflow:"hidden",
+                      textOverflow:"ellipsis", whiteSpace:"nowrap" }}
+                      title={r.spellings > 1 ? `${r.spellings} spellings of this name merged` : r.name}>
+                      {r.name}{r.spellings > 1 && <span style={{ color:"var(--text3)" }}> ·{r.spellings}</span>}
+                    </span>
+                    <span style={{ marginLeft:"auto", color:"var(--text3)", ...num }}>{money(Math.round(r.revenue))}</span>
+                    <span style={{ background:"var(--bg3)", color:"var(--text2)", borderRadius:20,
+                      padding:"1px 7px", fontSize:10, fontWeight:600, ...num }}>{r.count}</span>
+                  </div>
+                ))}
+                {ref.rows.length > 5 && (
+                  <button onClick={() => setRefAll(v => !v)}
+                    style={{ width:"100%", marginTop:7, padding:"4px 0", borderRadius:7,
+                      border:"1px solid var(--border)", background:"var(--bg2)", color:"var(--text2)",
+                      fontSize:10.5, fontFamily:"inherit", cursor:"pointer" }}>
+                    {refAll ? "Show top 5 only" : `Show all ${ref.rows.length} referrers`}
+                  </button>
+                )}
+              </>)}
+            </div>
+          </div>
+        </div>
+
         <div style={{ display:"grid", gridTemplateColumns:"repeat(3,minmax(0,1fr))", gap:12 }}>
           <div style={{ ...card, border:"1px solid "+(disc.total>0 ? "#e0b3b0" : "var(--border)") }}>
             <div style={{ ...capLbl, color: disc.total>0 ? "#8f2323" : "var(--text2)", marginBottom:8 }}>Discounts given</div>
@@ -642,3 +737,4 @@ export default function Accounts() {
     </div>
   );
 }
+

@@ -4,7 +4,7 @@ import { describe, it, expect } from "vitest";
 import {
   roomLegs, legNightsInMonth, roomStats, acStats, nightsSold, occupancy,
   discountStats, paymentStats, patternStats, revenueByDay, revenueByMonth, salaryStats,
-  costByCategoryOverMonths, weekdayStats, WEEKDAYS,
+  costByCategoryOverMonths, weekdayStats, WEEKDAYS, sourceStats, referrerStats, referrerKey,
 } from "./accounts";
 
 const rooms = [
@@ -224,6 +224,76 @@ describe("which weekday earns most", () => {
     const s = weekdayStats(withCancelled, [], ["2026-08"]);
     expect(s.best.label).toBe("Fri");
     expect(s.rows.reduce((t, r) => t + r.total, 0)).toBe(9000);
+  });
+});
+
+describe("where bookings come from", () => {
+  const srcBookings = [
+    { id: 1, room: "101", status: "checked-out", checkin: "2026-08-01", checkout: "2026-08-02", nights: 1, invoiceTotal: 2000, source: "Walk-in" },
+    { id: 2, room: "102", status: "checked-out", checkin: "2026-08-02", checkout: "2026-08-03", nights: 1, invoiceTotal: 2000, source: "Walk-in" },
+    { id: 3, room: "103", status: "checked-out", checkin: "2026-08-03", checkout: "2026-08-04", nights: 1, invoiceTotal: 9000, source: "Referral", referredByName: "Md Iqbal" },
+    { id: 4, room: "104", status: "checked-out", checkin: "2026-08-04", checkout: "2026-08-05", nights: 1, invoiceTotal: 5000, source: "Referral", referredByName: "MD IQBAL" },
+    { id: 5, room: "105", status: "checked-out", checkin: "2026-08-05", checkout: "2026-08-06", nights: 1, invoiceTotal: 1000, source: "Referral", referredByName: "Hridoy" },
+    { id: 6, room: "106", status: "cancelled",   checkin: "2026-08-06", checkout: "2026-08-07", nights: 1, invoiceTotal: 99999, source: "OTA", referredByName: "Ghost" },
+    // stay spanning July → August, so only half its money belongs to August
+    { id: 7, room: "101", status: "checked-out", checkin: "2026-07-31", checkout: "2026-08-02", nights: 2, invoiceTotal: 4000, source: "Phone" },
+  ];
+
+  it("ranks sources by how many bookings they bring", () => {
+    const s = sourceStats(srcBookings, "2026-08");
+    expect(s.top.source).toBe("Referral");
+    expect(s.top.bookings).toBe(3);
+    expect(s.second.source).toBe("Walk-in");
+  });
+
+  it("names the source that pays best per booking", () => {
+    const s = sourceStats(srcBookings, "2026-08");
+    expect(s.richest.source).toBe("Referral");   // 15,000 over 3 bookings
+    expect(s.richest.avgPerBooking).toBe(5000);
+  });
+
+  it("counts only the nights that fall in the month", () => {
+    const s = sourceStats(srcBookings, "2026-08");
+    const phone = s.rows.find(r => r.source === "Phone");
+    expect(phone.nights).toBe(1);
+    expect(phone.revenue).toBeCloseTo(2000, 2);  // half of a 4,000 two-night stay
+  });
+
+  it("never counts a cancelled booking", () => {
+    const s = sourceStats(srcBookings, "2026-08");
+    expect(s.rows.find(r => r.source === "OTA").bookings).toBe(0);
+    expect(s.totalBookings).toBe(6);
+  });
+
+  it("keeps every source visible even with no bookings", () => {
+    const s = sourceStats([], "2026-08");
+    expect(s.rows).toHaveLength(6);
+    expect(s.top).toBeNull();
+  });
+
+  it("merges referrer names that differ only by case or spacing", () => {
+    expect(referrerKey("  MD   IQBAL ")).toBe(referrerKey("Md Iqbal"));
+    const r = referrerStats(srcBookings, "2026-08");
+    expect(r.people).toBe(2);
+    const iqbal = r.rows[0];
+    expect(iqbal.count).toBe(2);
+    expect(iqbal.revenue).toBeCloseTo(14000, 2);
+    expect(iqbal.spellings).toBe(2);
+  });
+
+  it("prefers the tidiest spelling over the shouted one", () => {
+    const r = referrerStats(srcBookings, "2026-08");
+    expect(r.rows[0].name).toBe("Md Iqbal");
+  });
+
+  it("keeps genuinely different spellings apart", () => {
+    expect(referrerKey("Md Ikbal")).not.toBe(referrerKey("Md Iqbal"));
+  });
+
+  it("ignores cancelled bookings and bookings with no referrer", () => {
+    const r = referrerStats(srcBookings, "2026-08");
+    expect(r.rows.find(x => x.name === "Ghost")).toBeUndefined();
+    expect(r.bookings).toBe(3);
   });
 });
 

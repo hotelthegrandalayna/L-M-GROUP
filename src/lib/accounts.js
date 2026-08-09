@@ -183,6 +183,90 @@ export function patternStats(bookings = [], month = "") {
   };
 }
 
+// ── Where the booking came from ──────────────────────────────────────────────
+// Two views of the same question: which channel brings the guests (source, as
+// filled in on the invoice) and which person sends them (referred by).
+// Revenue uses the same night-split as everywhere else, so a stay that spans
+// two months only counts the part that belongs to the month you are looking at.
+
+export const BOOKING_SOURCES = ["Walk-in", "Phone", "Website", "WhatsApp", "OTA", "Referral"];
+
+// Revenue and nights of one booking that fall inside `month` ("" = all time).
+function bookingSlice(b, month) {
+  let revenue = 0, nights = 0;
+  roomLegs(b).forEach(leg => {
+    const here = legNightsInMonth(leg, month);
+    if (here <= 0) return;
+    const total = Math.max(1, legNightsInMonth(leg, ""));
+    revenue += (leg.amount || 0) * here / total;
+    nights += here;
+  });
+  return { revenue, nights };
+}
+
+export function sourceStats(bookings = [], month = "") {
+  const map = new Map();
+  BOOKING_SOURCES.forEach(s => map.set(s, { source: s, bookings: 0, nights: 0, revenue: 0 }));
+  bookings.filter(isLive).forEach(b => {
+    const { revenue, nights } = bookingSlice(b, month);
+    if (nights <= 0) return;
+    const key = (b.source || "").trim() || "Not set";
+    const row = map.get(key) || { source: key, bookings: 0, nights: 0, revenue: 0 };
+    row.bookings += 1; row.nights += nights; row.revenue += revenue;
+    map.set(key, row);
+  });
+  const rows = [...map.values()]
+    .map(r => ({ ...r, avgPerBooking: r.bookings ? Math.round(r.revenue / r.bookings) : 0 }))
+    .sort((a, b) => b.bookings - a.bookings || b.revenue - a.revenue);
+  const totalBookings = rows.reduce((s, r) => s + r.bookings, 0);
+  const totalRevenue  = rows.reduce((s, r) => s + r.revenue, 0);
+  const used = rows.filter(r => r.bookings > 0);
+  // Highest value per booking, which is often a different channel from the busiest.
+  const richest = used.slice().sort((a, b) => b.avgPerBooking - a.avgPerBooking)[0] || null;
+  return {
+    rows: rows.map(r => ({ ...r, pct: totalBookings ? Math.round(r.bookings / totalBookings * 100) : 0 })),
+    totalBookings, totalRevenue,
+    top: used[0] || null,
+    second: used[1] || null,
+    richest,
+  };
+}
+
+// "MD IQBAL", "Md Iqbal" and "md  iqbal" are one person. Different spellings
+// (Iqbal vs Ikbal) stay separate — merging those would risk joining two guests.
+export function referrerKey(name) {
+  return String(name || "").trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+export function referrerStats(bookings = [], month = "") {
+  const map = new Map();
+  bookings.filter(isLive).forEach(b => {
+    const raw = b.referredByName || b.referredBy || "";
+    const key = referrerKey(raw);
+    if (!key) return;
+    const { revenue, nights } = bookingSlice(b, month);
+    if (nights <= 0) return;
+    const row = map.get(key) || { key, name: String(raw).trim(), count: 0, revenue: 0, spellings: new Set() };
+    row.count += 1; row.revenue += revenue;
+    row.spellings.add(String(raw).trim());
+    // Keep the tidiest spelling: not all-caps, longest wins the tie.
+    const cur = String(raw).trim();
+    const better = (a, bb) => (a === a.toUpperCase()) !== (bb === bb.toUpperCase())
+      ? (bb === bb.toUpperCase() ? a : bb) : (a.length >= bb.length ? a : bb);
+    row.name = better(row.name, cur);
+    map.set(key, row);
+  });
+  const rows = [...map.values()]
+    .map(r => ({ key: r.key, name: r.name, count: r.count, revenue: r.revenue, spellings: r.spellings.size }))
+    .sort((a, b) => b.count - a.count || b.revenue - a.revenue);
+  return {
+    rows,
+    people: rows.length,
+    bookings: rows.reduce((s, r) => s + r.count, 0),
+    revenue: rows.reduce((s, r) => s + r.revenue, 0),
+  };
+}
+
 // ── Revenue series (daily / weekly / monthly) ────────────────────────────────
 // Uses the shared night-split so every bucket agrees with the rest of the app.
 export function revenueByDay(bookings = [], revenues = [], month = "") {
