@@ -429,9 +429,13 @@ function InvoiceDetail({ bk, onClose, autoEdit }) {
     const origPaid = calcPaid(bk);
     let advance = bk.advance, restPayment = bk.restPayment, paymentHistory = bk.paymentHistory;
     if (newPaid !== origPaid) {
-      // Make the admin-entered paid amount authoritative
+      // Make the admin-entered paid amount authoritative.
+      // IMPORTANT: date the adjustment to the STAY, never to today. Stamping it with
+      // the edit date made a corrected July invoice appear as today's revenue.
+      const stayDate = (ed.checkin || bk.checkin || "").slice(0, 10);
+      const ts = stayDate ? `${stayDate}T12:00:00.000Z` : new Date().toISOString();
       paymentHistory = newPaid > 0
-        ? [{ ts: new Date().toISOString(), amount: newPaid, method: bk.paymentMethod || "Cash", note: "Adjusted by admin", type: "room", by: curUser || "admin" }]
+        ? [{ ts, amount: newPaid, method: bk.paymentMethod || "Cash", note: "Adjusted by admin", type: "room", by: curUser || "admin" }]
         : [];
       advance = newPaid; restPayment = 0;
     }
