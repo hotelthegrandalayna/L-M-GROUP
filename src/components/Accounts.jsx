@@ -7,6 +7,7 @@ import { money } from "../utils/helpers";
 import { hotelBusinessOnly } from "../utils/expenseType";
 import { monthMoney, bookingMonthlyParts } from "../lib/hotelMoney";
 import { hasHotelSupabaseConfig, loadHotelBookingsForRange } from "../lib/hotelSupabase";
+import AdminRooms from "./Admin/AdminRooms";
 import {
   roomStats, acStats, occupancy, discountStats, patternStats,
   revenueByDay, revenueByWeek, revenueByMonth, costByCategoryOverMonths, salaryStats,
@@ -30,23 +31,53 @@ function Tile({ label, value, sub, color, accent }) {
   );
 }
 
-// Simple bar chart — no external library
-function Bars({ data, height = 130, colorFor, labelFor, valueFor }) {
-  const max = Math.max(1, ...data.map(valueFor));
+// Smooth line + soft fill — reads as a trend rather than a wall of bars.
+// Pure SVG, no chart library, so nothing extra to load.
+function AreaChart({ data, height = 170 }) {
+  if (!data.length) return null;
+  const W = 640, H = 150, L = 30, R = 8, T = 14, B = 32;
+  const max = Math.max(1, ...data.map(d => d.amount));
+  const x = i => data.length === 1 ? (L + W - R) / 2 : L + i * (W - L - R) / (data.length - 1);
+  const y = v => T + (1 - v / max) * (H - T - B);
+  const pts = data.map((d, i) => [x(i), y(d.amount)]);
+  const line = pts.map(([px, py], i) => `${i ? "L" : "M"}${px.toFixed(1)},${py.toFixed(1)}`).join(" ");
+  const area = `${line} L${pts[pts.length-1][0].toFixed(1)},${y(0)} L${pts[0][0].toFixed(1)},${y(0)} Z`;
+  const peak = data.reduce((a, b, i) => b.amount > data[a].amount ? i : a, 0);
+  const ticks = [0, 0.5, 1].map(f => ({ v: max * f, py: y(max * f) }));
+  // show at most 5 x labels so they never collide
+  const step = Math.max(1, Math.ceil(data.length / 5));
+
   return (
-    <div style={{ display:"flex", alignItems:"flex-end", gap:6, height, paddingTop:6 }}>
-      {data.map((d, i) => {
-        const v = valueFor(d);
-        const h = Math.max(2, Math.round(v / max * (height - 26)));
-        return (
-          <div key={i} style={{ flex:1, minWidth:0, display:"flex", flexDirection:"column", alignItems:"center", gap:3 }} title={`${labelFor(d)} — ${money(Math.round(v))}`}>
-            <div style={{ fontSize:8.5, color:"var(--text3)", ...num }}>{v ? Math.round(v/1000)+"k" : ""}</div>
-            <div style={{ width:"100%", height:h, background:colorFor(d, i), borderRadius:3, transition:"height .3s" }} />
-            <div style={{ fontSize:8.5, color:"var(--text3)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", maxWidth:"100%" }}>{labelFor(d)}</div>
-          </div>
-        );
-      })}
-    </div>
+    <svg viewBox={`0 0 ${W} ${H}`} style={{ width:"100%", height }} role="img" aria-label="Revenue over time">
+      <defs>
+        <linearGradient id="acctRev" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#5f8f86" stopOpacity="0.30" />
+          <stop offset="100%" stopColor="#5f8f86" stopOpacity="0.02" />
+        </linearGradient>
+      </defs>
+      {ticks.map((t, i) => (
+        <g key={i}>
+          <line x1={L} y1={t.py} x2={W - R} y2={t.py} stroke={i === 0 ? "#e4e4e8" : "#f2f2f4"} strokeDasharray={i === 0 ? "" : "3 4"} />
+          <text x={L - 5} y={t.py + 3} textAnchor="end" style={{ fontSize:8, fill:"#b0b5bf" }}>
+            {t.v >= 1000 ? Math.round(t.v / 1000) + "k" : Math.round(t.v)}
+          </text>
+        </g>
+      ))}
+      <path d={area} fill="url(#acctRev)" />
+      <path d={line} fill="none" stroke="#5f8f86" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+      {data.map((d, i) => (
+        <circle key={i} cx={x(i)} cy={y(d.amount)} r={i === peak ? 4 : 2.5}
+          fill={i === peak ? "#fff" : "#5f8f86"} stroke="#5f8f86" strokeWidth={i === peak ? 2 : 0}>
+          <title>{`${d.label} — ${money(Math.round(d.amount))}`}</title>
+        </circle>
+      ))}
+      <text x={x(peak)} y={y(data[peak].amount) - 8} textAnchor="middle" style={{ fontSize:8.5, fontWeight:600, fill:"#2f7d4f" }}>
+        {money(Math.round(data[peak].amount))}
+      </text>
+      {data.map((d, i) => (i % step === 0 || i === data.length - 1) && (
+        <text key={i} x={x(i)} y={H - 10} textAnchor="middle" style={{ fontSize:8, fill:"#9aa0ac" }}>{d.label}</text>
+      ))}
+    </svg>
   );
 }
 
@@ -180,7 +211,7 @@ export default function Accounts() {
     );
   }
 
-  const TABS = [["overview","Overview"],["revenue","Revenue"],["rooms","Rooms"],["costs","Costs"],["salary","Salary"]];
+  const TABS = [["overview","Overview"],["rooms","Rooms"]];
 
   return (
     <div style={{ padding:"22px 24px", width:"100%", overflowY:"auto", height:"100%", boxSizing:"border-box" }}>
@@ -243,6 +274,28 @@ export default function Accounts() {
 
       {/* ── OVERVIEW ── */}
       {tab==="overview" && (<>
+        {/* Revenue trend — was its own tab, now lives here */}
+        <div style={{ ...card, marginBottom:12 }}>
+          <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:6, flexWrap:"wrap" }}>
+            <span style={capLbl}>Revenue</span>
+            <span style={{ marginLeft:"auto", display:"inline-flex", border:"1px solid var(--border)", borderRadius:7, overflow:"hidden" }}>
+              {["daily","weekly","monthly"].map(g => (
+                <button key={g} onClick={()=>setGrain(g)} style={{ padding:"4px 11px", border:"none", cursor:"pointer", fontFamily:"inherit",
+                  fontSize:11, fontWeight:600, textTransform:"capitalize",
+                  background: grain===g ? "var(--navy)" : "transparent", color: grain===g ? "#fff" : "var(--text2)" }}>{g}</button>
+              ))}
+            </span>
+          </div>
+          {series.length
+            ? <AreaChart data={series} />
+            : <div style={{ fontSize:12, color:"var(--text3)", padding:"14px 0" }}>No revenue in this period.</div>}
+          {bestDay && (
+            <div style={{ fontSize:10.5, color:"var(--text3)", marginTop:4 }}>
+              Best day <strong style={{ color:"#2f7d4f" }}>{bestDay.day} — {money(Math.round(bestDay.amount))}</strong> · hover any point for its date and amount
+            </div>
+          )}
+        </div>
+
         <div style={{ ...card, marginBottom:12 }}>
           <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:6, flexWrap:"wrap" }}>
             <span style={capLbl}>Revenue vs cost by month</span>
@@ -304,32 +357,40 @@ export default function Accounts() {
               </div>
             ))}
           </div>
+
+          {/* Salary summary — the Salary tab is gone, this keeps who-was-paid-what */}
+          <div style={card}>
+            <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:9, flexWrap:"wrap" }}>
+              <span style={capLbl}>Salary</span>
+              <span style={{ marginLeft:"auto", fontSize:11, color:"var(--text3)" }}>
+                {salary.count} staff · <strong style={{ color:"var(--text)" }}>{money(Math.round(salary.total))}</strong>
+              </span>
+            </div>
+            {salary.staff.length ? (<>
+              {salary.staff.slice(0, 6).map(p => (
+                <div key={p.name} style={{ display:"flex", alignItems:"center", gap:8, padding:"5px 0", borderBottom:"1px solid var(--border)" }}>
+                  <span style={{ width:24, height:24, borderRadius:"50%", background:"var(--bg3)", display:"inline-flex", alignItems:"center", justifyContent:"center", fontSize:9, color:"var(--text2)", fontWeight:600, flexShrink:0 }}>
+                    {p.name.split(" ").map(w=>w[0]).slice(0,2).join("").toUpperCase()}
+                  </span>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontSize:11.5, fontWeight:600, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{p.name}</div>
+                    {p.role && <div style={{ fontSize:9.5, color:"var(--text3)" }}>{p.role}</div>}
+                  </div>
+                  <span style={{ fontSize:11.5, fontWeight:600, ...num }}>{money(Math.round(p.amount))}</span>
+                </div>
+              ))}
+              <div style={{ fontSize:10, color:"var(--text3)", marginTop:8 }}>
+                <strong>{costTotal>0 ? Math.round(salary.total/costTotal*100) : 0}%</strong> of costs
+                {occ.sold>0 && <> · {money(Math.round(salary.total/occ.sold))} per night sold</>}
+              </div>
+            </>) : (
+              <div style={{ fontSize:11.5, color:"var(--text3)" }}>
+                No salary recorded for this period. Add it under Expenses &amp; Cash with the category “Salaries”.
+              </div>
+            )}
+          </div>
         </div>
       </>)}
-
-      {/* ── REVENUE ── */}
-      {tab==="revenue" && (
-        <div style={card}>
-          <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:6, flexWrap:"wrap" }}>
-            <span style={capLbl}>Revenue detail</span>
-            <span style={{ marginLeft:"auto", display:"inline-flex", border:"1px solid var(--border)", borderRadius:7, overflow:"hidden" }}>
-              {["daily","weekly","monthly"].map(g => (
-                <button key={g} onClick={()=>setGrain(g)} style={{ padding:"4px 11px", border:"none", cursor:"pointer", fontFamily:"inherit",
-                  fontSize:11, fontWeight:600, textTransform:"capitalize",
-                  background: grain===g ? "var(--navy)" : "transparent", color: grain===g ? "#fff" : "var(--text2)" }}>{g}</button>
-              ))}
-            </span>
-          </div>
-          {series.length ? (
-            <Bars data={series} height={190} colorFor={(_,i)=>SERIES[0]} labelFor={d=>d.label} valueFor={d=>d.amount} />
-          ) : <div style={{ fontSize:12, color:"var(--text3)", padding:"14px 0" }}>No revenue in this period.</div>}
-          {bestDay && (
-            <div style={{ fontSize:10.5, color:"var(--text3)", marginTop:8 }}>
-              Best day: <strong style={{ color:"#2f7d4f" }}>{bestDay.day} — {money(Math.round(bestDay.amount))}</strong>
-            </div>
-          )}
-        </div>
-      )}
 
       {/* ── ROOMS ── */}
       {tab==="rooms" && (<>
@@ -409,75 +470,18 @@ export default function Accounts() {
             );
           })()}
         </div>
-      </>)}
-
-      {/* ── COSTS ── */}
-      {tab==="costs" && (
-        <div style={card}>
-          <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10 }}>
-            <span style={capLbl}>Cost by category — month over month</span>
-            <span style={{ marginLeft:"auto", fontSize:10.5, color:"var(--text3)" }}>{money(Math.round(costTotal))} this period</span>
-          </div>
-          {catOverTime.length ? (<>
-            {catOverTime.map((row, i) => {
-              const max = Math.max(1, ...catOverTime.flatMap(r => lastMonths.map(m => r.byMonth[m] || 0)));
-              return (
-                <div key={row.cat} style={{ display:"flex", alignItems:"center", gap:10, padding:"6px 0", borderTop:"1px solid var(--border)" }}>
-                  <span style={{ flex:"0 0 120px", fontSize:11.5, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{row.cat}</span>
-                  <div style={{ flex:1, display:"flex", gap:3, alignItems:"flex-end", height:30 }}>
-                    {lastMonths.map(m => {
-                      const v = row.byMonth[m] || 0;
-                      return <div key={m} title={`${monthLabel(m)} — ${money(Math.round(v))}`}
-                        style={{ flex:1, height:Math.max(2, Math.round(v/max*30)), background: v ? SERIES[i%SERIES.length] : "var(--bg3)", borderRadius:2 }} />;
-                    })}
-                  </div>
-                  <span style={{ flex:"0 0 74px", textAlign:"right", fontSize:11.5, fontWeight:600, ...num }}>{money(Math.round(row.total))}</span>
-                </div>
-              );
-            })}
-            <div style={{ fontSize:9.5, color:"var(--text3)", marginTop:7, textAlign:"right" }}>
-              {lastMonths.map(m => MONTHS[+m.slice(5,7)-1]).join(" · ")}
-            </div>
-          </>) : <div style={{ fontSize:12, color:"var(--text3)", padding:"14px 0" }}>No business expenses recorded.</div>}
-        </div>
-      )}
-
-      {/* ── SALARY ── */}
-      {tab==="salary" && (
-        <div style={card}>
+        {/* Room settings — moved here from the Admin panel */}
+        <div style={{ ...card, marginTop:12 }}>
           <div style={{ display:"flex", alignItems:"center", gap:9, marginBottom:11, flexWrap:"wrap" }}>
             <span style={{ width:22, height:22, borderRadius:6, background:"var(--bg3)", display:"inline-flex", alignItems:"center", justifyContent:"center" }}>
-              <i className="ti ti-users" style={{ fontSize:12, color:"var(--text2)" }} />
+              <i className="ti ti-settings" style={{ fontSize:12, color:"var(--text2)" }} />
             </span>
-            <span style={capLbl}>Salary — {monthLabel(month)}</span>
-            <span style={{ marginLeft:"auto", fontSize:11, color:"var(--text3)" }}>
-              {salary.count} staff · <strong style={{ color:"var(--text)" }}>{money(Math.round(salary.total))}</strong> paid
-            </span>
+            <span style={capLbl}>Room settings</span>
+            <span style={{ marginLeft:"auto", fontSize:9.5, background:"var(--bg3)", color:"var(--text3)", borderRadius:20, padding:"2px 9px" }}>moved from Admin</span>
           </div>
-          {salary.staff.length ? (<>
-            {salary.staff.map(p => (
-              <div key={p.name} style={{ display:"flex", alignItems:"center", gap:9, padding:"7px 0", borderTop:"1px solid var(--border)" }}>
-                <span style={{ width:26, height:26, borderRadius:"50%", background:"var(--bg3)", display:"inline-flex", alignItems:"center", justifyContent:"center", fontSize:9.5, color:"var(--text2)", fontWeight:600 }}>
-                  {p.name.split(" ").map(w=>w[0]).slice(0,2).join("").toUpperCase()}
-                </span>
-                <div style={{ flex:1, minWidth:0 }}>
-                  <div style={{ fontSize:12, fontWeight:600 }}>{p.name}</div>
-                  <div style={{ fontSize:10, color:"var(--text3)" }}>{[p.role, p.period].filter(Boolean).join(" · ") || "—"}</div>
-                </div>
-                <span style={{ fontSize:12, fontWeight:600, ...num }}>{money(Math.round(p.amount))}</span>
-              </div>
-            ))}
-            <div style={{ fontSize:10, color:"var(--text3)", marginTop:9, paddingTop:8, borderTop:"1px solid var(--border)", lineHeight:1.6 }}>
-              Salary is <strong>{costTotal>0 ? Math.round(salary.total/costTotal*100) : 0}%</strong> of this period's costs
-              {occ.sold>0 && <> · staff cost per night sold: <strong>{money(Math.round(salary.total/occ.sold))}</strong></>}
-            </div>
-          </>) : (
-            <div style={{ fontSize:12, color:"var(--text3)", padding:"14px 0" }}>
-              No salary records for this period. Record them under Expenses &amp; Cash with the category “Salaries”.
-            </div>
-          )}
+          <AdminRooms />
         </div>
-      )}
+      </>)}
     </div>
   );
 }

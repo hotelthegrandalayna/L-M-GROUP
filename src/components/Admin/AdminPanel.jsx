@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useApp } from "../../context/AppContext";
 import AdminFinance from "./AdminFinance";
-import AdminRooms   from "./AdminRooms";
+// AdminRooms is now rendered inside Accounts › Rooms, not here
 import AdminStaff   from "./AdminStaff";
 import AdminData    from "./AdminData";
 import AdminSMS       from "./AdminSMS";
@@ -13,7 +13,7 @@ import { collectLocalPasswords } from "../../utils/userPass";
 
 const TABS = [
   { key:"finance",  label:"Finance",  icon:"ti-currency-taka"  },
-  { key:"rooms",    label:"Rooms",    icon:"ti-building"       },
+  // Rooms moved to Accounts › Rooms (settings sit with room performance)
   // Invoices now live in their own top-level admin tab — removed here to avoid duplication
   { key:"reports",  label:"Reports",  icon:"ti-report-money"   },
   { key:"sms",      label:"Messages", icon:"ti-message-circle" },
@@ -60,7 +60,6 @@ export default function AdminPanel() {
       </div>
 
       {tab==="finance"  && <AdminFinance />}
-      {tab==="rooms"    && <AdminRooms />}
       {tab==="reports"  && <AdminReports />}
       {tab==="sms"      && <AdminSMS />}
       {tab==="audit"    && <AuditLogViewer scope="hotel" title="Hotel — Activity Audit Log" checkPassword={checkAdminPassword} notify={notify} />}
