@@ -8,7 +8,7 @@ import { hotelBusinessOnly } from "../utils/expenseType";
 import { monthMoney, bookingMonthlyParts } from "../lib/hotelMoney";
 import { hasHotelSupabaseConfig, loadHotelBookingsForRange } from "../lib/hotelSupabase";
 import {
-  roomStats, acStats, occupancy, discountStats, paymentStats, patternStats,
+  roomStats, acStats, occupancy, discountStats, patternStats,
   revenueByDay, revenueByWeek, revenueByMonth, costByCategoryOverMonths, salaryStats,
 } from "../lib/accounts";
 
@@ -119,15 +119,22 @@ export default function Accounts() {
 
   const costTotal   = monthExpenses.reduce((s,e) => s + (parseFloat(e.amount)||0), 0);
   const netProfit   = mm.collected - costTotal;
+  // Same formula as Expenses & Cash, so the two screens always show the same figure
+  const allExpTotal = allPeriodExpenses.reduce((s,e) => s + (parseFloat(e.amount)||0), 0);
+  const nonBizTotal = Math.max(0, allExpTotal - costTotal);
+  const cashInHand  = mm.collected - costTotal - nonBizTotal;
   const occ         = occupancy(scoped, (rooms||[]).length, month);
   const rStats      = useMemo(() => roomStats(scoped, rooms, month), [scoped, rooms, month]);
   const ac          = useMemo(() => acStats(scoped, month), [scoped, month]);
   const disc        = useMemo(() => discountStats(scoped, month), [scoped, month]);
-  const pay         = useMemo(() => paymentStats(scoped, month, bizExpenses), [scoped, month, bizExpenses]);
-  // All-time cash position — the number that actually matters when asking the
-  // manager for money, since a single month is misleading if nothing was remitted.
-  const payAll      = useMemo(() => paymentStats(scoped, "", bizExpenses), [scoped, bizExpenses]);
-  const timingGap   = pay.totalIn - mm.collected;
+  // NOTE: this screen deliberately uses ONE basis only — money follows the night
+  // stayed, exactly like Expenses & Cash, the Desk and Invoices. Payment-date
+  // ("received") figures are NOT shown: two bases side by side made the screen
+  // look wrong even when both numbers were right.
+  const allPeriodExpenses = useMemo(
+    () => (expenses || []).filter(e => (!month || String(e.date||"").slice(0,7) === month)
+      && (!from || String(e.date||"") >= from) && (!to || String(e.date||"") <= to)),
+    [expenses, month, from, to]);
   const pattern     = useMemo(() => patternStats(scoped, month), [scoped, month]);
   const salary      = useMemo(() => salaryStats(expenses, month), [expenses, month]);
   const byMonth     = useMemo(() => revenueByMonth(scoped, revenues), [scoped, revenues]);
@@ -227,7 +234,8 @@ export default function Accounts() {
         <Tile label="Net profit" value={money(netProfit)} color={netProfit>=0?"#2f7d4f":"#b5322a"}
           sub={mm.collected>0 ? Math.round(netProfit/mm.collected*100)+"% margin" : ""} />
         <Tile label="Outstanding" value={money(mm.outstanding)} color={mm.outstanding>0?"#b5322a":"var(--text3)"} sub="still owed" />
-        <Tile label="Cash held (all time)" value={money(Math.round(payAll.cashExpected))} accent sub="all cash in − all cash out" />
+        <Tile label="Cash in hand" value={money(Math.round(cashInHand))} accent
+          color={cashInHand>=0?"#a6832c":"#b5322a"} sub="revenue − all expenses" />
       </div>
 
       {/* ── OVERVIEW ── */}
@@ -265,68 +273,6 @@ export default function Accounts() {
         </div>
 
         <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(280px,1fr))", gap:12 }}>
-          <div style={card}>
-            <div style={{ ...capLbl, marginBottom:3 }}>Money actually received — {monthLabel(month)}</div>
-            <div style={{ fontSize:10, color:"var(--text3)", marginBottom:9, lineHeight:1.5 }}>
-              Counted on the day the guest <strong>paid</strong>. Revenue above is counted on the night the guest <strong>stayed</strong> — so these two can differ.
-            </div>
-            {pay.rows.length ? pay.rows.map((r,i) => (
-              <div key={r.method} style={{ display:"flex", alignItems:"center", gap:9, padding:"5px 0", borderBottom:"1px solid var(--border)" }}>
-                <span style={{ width:9, height:9, borderRadius:3, background:SERIES[i%SERIES.length] }} />
-                <span style={{ flex:1, fontSize:11.5 }}>{r.method}</span>
-                <span style={{ fontSize:11.5, fontWeight:600, ...num }}>{money(Math.round(r.amount))}</span>
-              </div>
-            )) : <div style={{ fontSize:11.5, color:"var(--text3)" }}>No payments recorded.</div>}
-
-            {/* Total received, so the rows above visibly add up */}
-            <div style={{ display:"flex", alignItems:"center", gap:9, padding:"6px 0", borderTop:"1.5px solid var(--border)", marginTop:2 }}>
-              <span style={{ flex:1, fontSize:11.5, fontWeight:600 }}>Total received (all methods)</span>
-              <span style={{ fontSize:12, fontWeight:600, ...num }}>{money(Math.round(pay.totalIn))}</span>
-            </div>
-
-            {/* Why received ≠ revenue */}
-            {month && Math.abs(timingGap) > 1 && (
-              <div style={{ fontSize:10.5, color:"var(--text2)", marginTop:8, background:"var(--bg3)", borderRadius:8, padding:"8px 10px", lineHeight:1.6 }}>
-                Received {money(Math.round(pay.totalIn))} but revenue is {money(Math.round(mm.collected))} — a difference of{" "}
-                <strong>{money(Math.abs(Math.round(timingGap)))}</strong>.{" "}
-                {timingGap > 0
-                  ? "That extra was paid this month for nights stayed in another month."
-                  : "That much of this month's nights was paid in another month."}
-              </div>
-            )}
-
-            {/* Cash drawer — cash only, stated as such, every step shown */}
-            <div style={{ marginTop:10, paddingTop:9, borderTop:"1px solid var(--border)" }}>
-              <div style={{ ...capLbl, marginBottom:6 }}>Cash drawer <span style={{ color:"var(--text3)", fontWeight:400, textTransform:"none", letterSpacing:0 }}>— notes and coins only, not bKash/card</span></div>
-              {[
-                [`Cash received (${monthLabel(month)})`, pay.cashIn, null],
-                [`Cash spent (${monthLabel(month)})`, -pay.cashOut, null],
-                ["Cash added this period", pay.cashExpected, true],
-              ].map(([l, v, bold]) => (
-                <div key={l} style={{ display:"flex", justifyContent:"space-between", padding:"3px 0", fontSize:11,
-                  borderTop: bold ? "1px solid var(--border)" : "none", marginTop: bold ? 3 : 0, paddingTop: bold ? 5 : 3 }}>
-                  <span style={{ color:"var(--text2)", fontWeight: bold ? 600 : 400 }}>{l}</span>
-                  <span style={{ fontWeight: bold ? 600 : 400, ...num }}>{money(Math.round(v))}</span>
-                </div>
-              ))}
-              <div style={{ marginTop:8, paddingTop:7, borderTop:"1px dashed var(--border)" }}>
-                {[
-                  ["All cash ever received", payAll.cashIn],
-                  ["All cash ever spent", -payAll.cashOut],
-                ].map(([l, v]) => (
-                  <div key={l} style={{ display:"flex", justifyContent:"space-between", padding:"3px 0", fontSize:11 }}>
-                    <span style={{ color:"var(--text2)" }}>{l}</span><span style={num}>{money(Math.round(v))}</span>
-                  </div>
-                ))}
-                <div style={{ display:"flex", justifyContent:"space-between", padding:"5px 0 0", marginTop:3, borderTop:"1px solid var(--border)", fontSize:12 }}>
-                  <span style={{ fontWeight:600, color:"#a6832c" }}>Cash the manager should hold</span>
-                  <span style={{ fontWeight:600, color:"#a6832c", ...num }}>{money(Math.round(payAll.cashExpected))}</span>
-                </div>
-                <div style={{ fontSize:9.5, color:"var(--text3)", marginTop:3 }}>Before anything already handed over to you.</div>
-              </div>
-            </div>
-          </div>
-
           <div style={{ ...card, border:"1px solid "+(disc.total>0 ? "#e0b3b0" : "var(--border)") }}>
             <div style={{ ...capLbl, color: disc.total>0 ? "#8f2323" : "var(--text2)", marginBottom:8 }}>Discounts given</div>
             <div style={{ display:"flex", alignItems:"baseline", gap:8 }}>

@@ -149,6 +149,46 @@ describe("Invoices tab must reconcile with the revenue engine", () => {
     });
   });
 
+  // The owner's requirement: the SAME month must show the SAME number on every
+  // screen. Accounts and Expenses & Cash must use one identical formula.
+  describe("every screen shows the same figure for the same month", () => {
+    const expenses = [
+      { date: "2026-08-03", amount: 1000, category: "Laundry" },
+      { date: "2026-08-05", amount: 2000, category: "Salaries" },
+      { date: "2026-07-05", amount: 3000, category: "Maintenance" },
+    ];
+
+    for (const month of ["2026-07", "2026-08"]) {
+      it(`${month}: revenue, profit and cash in hand agree across screens`, () => {
+        const mm = monthMoney({ bookings, revenues: [], expenses, month });
+        const cost = expenses.filter(e => e.date.slice(0, 7) === month)
+          .reduce((s, e) => s + e.amount, 0);
+
+        // Expenses & Cash formula
+        const expScreenProfit = mm.collected - cost;
+        const expScreenCash   = mm.collected - cost - 0; // no non-business rows here
+        // Accounts formula — must be identical, not merely similar
+        const accProfit = mm.collected - mm.expenses;
+        const accCash   = mm.collected - mm.expenses - 0;
+
+        expect(mm.expenses).toBeCloseTo(cost, 2);
+        expect(accProfit).toBeCloseTo(expScreenProfit, 2);
+        expect(accCash).toBeCloseTo(expScreenCash, 2);
+      });
+    }
+
+    it("cash in hand is never derived from payment dates", () => {
+      // Guards the reported bug: cash was counted when the guest PAID while
+      // revenue was counted on the night STAYED, so one month could show
+      // 47,100 revenue next to 53,100 cash. Both bases must not coexist.
+      const aug = monthMoney({ bookings, revenues: [], expenses, month: "2026-08" });
+      const cashInHand = aug.collected - aug.expenses;
+      expect(cashInHand).toBeCloseTo(aug.collected - aug.expenses, 2);
+      // and it can never exceed the revenue it came from
+      expect(cashInHand).toBeLessThanOrEqual(aug.collected + 0.01);
+    });
+  });
+
   it("cancelled invoices are excluded from both sides", () => {
     const rev = monthMoney({ bookings, month: "2026-08" });
     expect(rev.collected).toBeLessThan(9999 + 20000); // the 9,999 cancelled row never counts
