@@ -117,6 +117,17 @@ export default function Accounts() {
       })(),
   [scoped, revenues, bizExpenses, month]);
 
+  // NOTE: this screen deliberately uses ONE basis only — money follows the night
+  // stayed, exactly like Expenses & Cash, the Desk and Invoices. Payment-date
+  // ("received") figures are NOT shown: two bases side by side made the screen
+  // look wrong even when both numbers were right.
+  // Declared BEFORE the totals below — a const used above its definition throws
+  // "Cannot access before initialization" at runtime.
+  const allPeriodExpenses = useMemo(
+    () => (expenses || []).filter(e => (!month || String(e.date||"").slice(0,7) === month)
+      && (!from || String(e.date||"") >= from) && (!to || String(e.date||"") <= to)),
+    [expenses, month, from, to]);
+
   const costTotal   = monthExpenses.reduce((s,e) => s + (parseFloat(e.amount)||0), 0);
   const netProfit   = mm.collected - costTotal;
   // Same formula as Expenses & Cash, so the two screens always show the same figure
@@ -127,14 +138,6 @@ export default function Accounts() {
   const rStats      = useMemo(() => roomStats(scoped, rooms, month), [scoped, rooms, month]);
   const ac          = useMemo(() => acStats(scoped, month), [scoped, month]);
   const disc        = useMemo(() => discountStats(scoped, month), [scoped, month]);
-  // NOTE: this screen deliberately uses ONE basis only — money follows the night
-  // stayed, exactly like Expenses & Cash, the Desk and Invoices. Payment-date
-  // ("received") figures are NOT shown: two bases side by side made the screen
-  // look wrong even when both numbers were right.
-  const allPeriodExpenses = useMemo(
-    () => (expenses || []).filter(e => (!month || String(e.date||"").slice(0,7) === month)
-      && (!from || String(e.date||"") >= from) && (!to || String(e.date||"") <= to)),
-    [expenses, month, from, to]);
   const pattern     = useMemo(() => patternStats(scoped, month), [scoped, month]);
   const salary      = useMemo(() => salaryStats(expenses, month), [expenses, month]);
   const byMonth     = useMemo(() => revenueByMonth(scoped, revenues), [scoped, revenues]);
