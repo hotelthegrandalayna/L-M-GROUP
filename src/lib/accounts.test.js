@@ -4,7 +4,7 @@ import { describe, it, expect } from "vitest";
 import {
   roomLegs, legNightsInMonth, roomStats, acStats, nightsSold, occupancy,
   discountStats, paymentStats, patternStats, revenueByDay, revenueByMonth, salaryStats,
-  costByCategoryOverMonths,
+  costByCategoryOverMonths, weekdayStats, WEEKDAYS,
 } from "./accounts";
 
 const rooms = [
@@ -173,6 +173,57 @@ describe("salary", () => {
 
   it("excludes non-salary expenses", () => {
     expect(salaryStats(expenses, "2026-08").total).toBe(16000);
+  });
+});
+
+describe("which weekday earns most", () => {
+  const pay = (ts, amount) => ({ ts, amount, method: "Cash", note: "Advance paid", type: "room" });
+  // August 2026: 7th is a Friday, 8th a Saturday. Two Friday stays, one Monday stay.
+  const wdBookings = [
+    { id: 1, guest: "A", room: "101", status: "checked-out", checkin: "2026-08-07", checkout: "2026-08-08", nights: 1, invoiceTotal: 5000, paymentHistory: [pay("2026-08-07T10:00:00Z", 5000)] },
+    { id: 2, guest: "B", room: "102", status: "checked-out", checkin: "2026-08-14", checkout: "2026-08-15", nights: 1, invoiceTotal: 3000, paymentHistory: [pay("2026-08-14T10:00:00Z", 3000)] },
+    { id: 3, guest: "C", room: "103", status: "checked-out", checkin: "2026-08-03", checkout: "2026-08-04", nights: 1, invoiceTotal: 1000, paymentHistory: [pay("2026-08-03T10:00:00Z", 1000)] },
+  ];
+
+  it("finds Friday as the strongest weekday", () => {
+    const s = weekdayStats(wdBookings, [], ["2026-08"]);
+    expect(s.best.label).toBe("Fri");
+    expect(s.best.total).toBe(8000);          // both Friday stays
+  });
+
+  it("averages per weekday rather than totalling", () => {
+    const s = weekdayStats(wdBookings, [], ["2026-08"]);
+    const fri = s.rows.find(r => r.label === "Fri");
+    expect(fri.days).toBe(4);                  // August 2026 has 4 Fridays
+    expect(fri.avg).toBeCloseTo(8000 / 4, 2);
+  });
+
+  it("reports the best and quietest day for each month", () => {
+    const s = weekdayStats(wdBookings, [], ["2026-08"]);
+    expect(s.perMonth).toHaveLength(1);
+    expect(WEEKDAYS[s.perMonth[0].bestWd]).toBe("Fri");
+    expect(s.perMonth[0].bestAmount).toBe(8000);
+    expect(WEEKDAYS[s.perMonth[0].quietWd]).toBe("Mon");
+  });
+
+  it("counts in how many months that day was top", () => {
+    const s = weekdayStats(wdBookings, [], ["2026-08"]);
+    expect(s.topCount).toBe(1);
+    expect(s.monthCount).toBe(1);
+  });
+
+  it("copes with a period that earned nothing", () => {
+    const s = weekdayStats([], [], ["2026-08"]);
+    expect(s.best).toBeNull();
+    expect(s.topCount).toBe(0);
+  });
+
+  it("never counts cancelled bookings", () => {
+    const withCancelled = [...wdBookings,
+      { id: 9, guest: "X", room: "104", status: "cancelled", checkin: "2026-08-10", checkout: "2026-08-11", nights: 1, invoiceTotal: 99999, paymentHistory: [pay("2026-08-10T10:00:00Z", 99999)] }];
+    const s = weekdayStats(withCancelled, [], ["2026-08"]);
+    expect(s.best.label).toBe("Fri");
+    expect(s.rows.reduce((t, r) => t + r.total, 0)).toBe(9000);
   });
 });
 

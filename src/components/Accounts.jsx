@@ -11,10 +11,13 @@ import AdminRooms from "./Admin/AdminRooms";
 import {
   roomStats, acStats, occupancy, discountStats, patternStats,
   revenueByDay, revenueByWeek, revenueByMonth, costByCategoryOverMonths, salaryStats,
+  weekdayStats,
 } from "../lib/accounts";
 
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const monthLabel = m => m ? `${MONTHS[+m.slice(5,7)-1]} ${m.slice(0,4)}` : "All time";
+const WEEKDAYS_SHORT = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+const WEEKDAY_FULL   = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
 const SERIES = ["#5f8f86","#c96a63","#d9a441","#7d93b5","#9b8bbf","#89a06f","#c98fa8","#b08968"];
 
 const card  = { background:"var(--bg2)", border:"1px solid var(--border)", borderRadius:12, padding:"13px 14px" };
@@ -251,6 +254,16 @@ export default function Accounts() {
     () => dayRows.length ? dayRows.reduce((a, b) => b.amount > a.amount ? b : a) : null,
     [dayRows]);
 
+  // ── Which weekday earns most — own period picker, independent of the page month
+  const [wdRange, setWdRange] = useState("3");
+  const wdMonths = useMemo(() => {
+    const all = byMonth.map(x => x.month).sort();
+    if (wdRange === "all") return all;
+    if (/^\d{4}-\d{2}$/.test(wdRange)) return [wdRange];
+    return all.slice(-parseInt(wdRange, 10));
+  }, [byMonth, wdRange]);
+  const wd = useMemo(() => weekdayStats(scoped, revenues, wdMonths), [scoped, revenues, wdMonths]);
+
   if (curRole !== "admin") {
     return (
       <div style={{ padding:40, textAlign:"center", color:"var(--text3)" }}>
@@ -308,18 +321,18 @@ export default function Accounts() {
       </div>
 
       {/* KPI row — always visible */}
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(118px,1fr))", gap:7, marginBottom:12 }}>
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(104px,1fr))", gap:6, marginBottom:10 }}>
         <Tile label="Revenue" value={money(mm.collected)} color="#2f7d4f"
-          sub={revDelta === null ? "collected" : `${revDelta>=0?"▲":"▼"} ${Math.abs(revDelta)}% vs ${monthLabel(prevMonth)}`} />
-        <Tile label="Nights sold" value={occ.sold} sub={occ.available ? `of ${occ.available} available` : "room-nights"} />
-        <Tile label="Occupancy" value={occ.available ? occ.pct+"%" : "—"} sub="rooms filled" />
+          sub={revDelta === null ? null : `${revDelta>=0?"▲":"▼"} ${Math.abs(revDelta)}% vs ${monthLabel(prevMonth)}`} />
+        <Tile label="Nights sold" value={occ.sold} sub={occ.available ? `of ${occ.available}` : null} />
+        <Tile label="Occupancy" value={occ.available ? occ.pct+"%" : "—"} />
         <Tile label="Avg rate" value={occ.sold ? money(Math.round(mm.collected/occ.sold)) : "—"} sub="per night" />
-        <Tile label="Costs" value={money(costTotal)} color="#b5322a" sub="business expenses" />
+        <Tile label="Costs" value={money(costTotal)} color="#b5322a" />
         <Tile label="Net profit" value={money(netProfit)} color={netProfit>=0?"#2f7d4f":"#b5322a"}
-          sub={mm.collected>0 ? Math.round(netProfit/mm.collected*100)+"% margin" : ""} />
-        <Tile label="Outstanding" value={money(mm.outstanding)} color={mm.outstanding>0?"#b5322a":"var(--text3)"} sub="still owed" />
+          sub={mm.collected>0 ? Math.round(netProfit/mm.collected*100)+"% margin" : null} />
+        <Tile label="Outstanding" value={money(mm.outstanding)} color={mm.outstanding>0?"#b5322a":"var(--text3)"} />
         <Tile label="Cash in hand" value={money(Math.round(cashInHand))} accent
-          color={cashInHand>=0?"#a6832c":"#b5322a"} sub="revenue − all expenses" />
+          color={cashInHand>=0?"#a6832c":"#b5322a"} />
       </div>
 
       {/* ── OVERVIEW ── */}
@@ -341,7 +354,7 @@ export default function Accounts() {
             </span>
           </div>
           {series.length
-            ? <AreaChart data={series} />
+            ? <AreaChart data={series} height={150} />
             : <div style={{ fontSize:12, color:"var(--text3)", padding:"14px 0" }}>No revenue in this period.</div>}
           {series.length > 0 && (
             <div style={{ display:"flex", gap:16, flexWrap:"wrap", fontSize:10.5, color:"var(--text3)", marginTop:4 }}>
@@ -354,7 +367,91 @@ export default function Accounts() {
           )}
         </div>
 
-        <div style={{ ...card, marginBottom:12 }}>
+        {/* Which weekday earns most (wide) + revenue vs cost by month (narrow) */}
+        <div style={{ display:"grid", gridTemplateColumns:"minmax(0,1.6fr) minmax(0,1fr)", gap:12, marginBottom:12 }}>
+
+        <div style={card}>
+          <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8, flexWrap:"wrap" }}>
+            <span style={capLbl}>Which day earns most</span>
+            <select value={wdRange} onChange={e=>setWdRange(e.target.value)}
+              style={{ marginLeft:"auto", padding:"3px 8px", border:"1px solid var(--border)", borderRadius:7,
+                fontSize:11, fontFamily:"inherit", background:"var(--bg2)", color:"var(--text)", cursor:"pointer" }}>
+              <option value="3">Last 3 months</option>
+              <option value="6">Last 6 months</option>
+              <option value="all">All time</option>
+              {byMonth.map(x => x.month).slice().reverse().map(m => (
+                <option key={m} value={m}>{monthLabel(m)}</option>
+              ))}
+            </select>
+          </div>
+
+          {wd.best ? (<>
+            <div style={{ background:"#edf3f1", border:"1px solid #cfe2d5", borderRadius:9, padding:"9px 11px", marginBottom:10 }}>
+              <div style={{ fontSize:12.5, fontWeight:600, color:"#2f5f4d" }}>
+                {WEEKDAY_FULL[wd.best.wd]} is your strongest day
+              </div>
+              <div style={{ fontSize:10.5, color:"var(--text2)", marginTop:3, lineHeight:1.55 }}>
+                {money(Math.round(wd.best.avg))} average
+                {wd.ratio && wd.worst && wd.worst.wd !== wd.best.wd ? <> — {wd.ratio.toFixed(1)}× a {WEEKDAY_FULL[wd.worst.wd]}</> : null}
+                {wd.monthCount > 1 && <> · top day in <strong>{wd.topCount} of {wd.monthCount}</strong> months</>}
+                {wd.second && wd.second.avg > 0 && <> · {WEEKDAY_FULL[wd.second.wd]} second at {money(Math.round(wd.second.avg))}</>}
+              </div>
+            </div>
+
+            {(() => {
+              const max = Math.max(1, ...wd.rows.map(r => r.avg));
+              const W = 560, H = 96, base = 76;
+              const bw = W / 7 - 12;
+              return (
+                <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ width:"100%", height:100 }}>
+                  <line x1="0" y1={base} x2={W} y2={base} stroke="#e4e4e8" />
+                  {wd.overallAvg > 0 && (
+                    <line x1="0" y1={base - (wd.overallAvg / max) * 56} x2={W}
+                      y2={base - (wd.overallAvg / max) * 56} stroke="#d9a441" strokeDasharray="4 4" />
+                  )}
+                  {wd.rows.map((r, i) => {
+                    const h = Math.max(2, Math.round((r.avg / max) * 56));
+                    const isBest = wd.best && r.wd === wd.best.wd;
+                    const x0 = i * (W / 7) + 6;
+                    return (
+                      <g key={r.wd}>
+                        <rect x={x0} y={base - h} width={bw} height={h} rx="2"
+                          fill={isBest ? "#2f7d4f" : r.avg >= wd.overallAvg ? "#5f8f86" : "#b9c9c5"}>
+                          <title>{`${WEEKDAY_FULL[r.wd]} — ${money(Math.round(r.avg))} average over ${r.days} day${r.days===1?"":"s"}`}</title>
+                        </rect>
+                        {isBest && (
+                          <text x={x0 + bw/2} y={base - h - 5} textAnchor="middle"
+                            style={{ fontSize:9, fontWeight:600, fill:"#2f7d4f" }}>{money(Math.round(r.avg))}</text>
+                        )}
+                        <text x={x0 + bw/2} y={H - 4} textAnchor="middle"
+                          style={{ fontSize:8.5, fontWeight: isBest ? 600 : 400, fill: isBest ? "var(--text)" : "var(--text3)" }}>{r.label}</text>
+                      </g>
+                    );
+                  })}
+                </svg>
+              );
+            })()}
+
+            {wd.perMonth.length > 1 && (
+              <div style={{ marginTop:9, paddingTop:8, borderTop:"1px solid var(--border)" }}>
+                {wd.perMonth.filter(p => p.bestWd != null).slice(-4).map(p => (
+                  <div key={p.month} style={{ display:"flex", alignItems:"center", gap:8, padding:"3px 0", fontSize:10.5 }}>
+                    <span style={{ flex:"0 0 78px", color:"var(--text3)" }}>{monthLabel(p.month)}</span>
+                    <span style={{ flex:1, fontWeight:600 }}>{WEEKDAY_FULL[p.bestWd]}</span>
+                    <span style={{ ...num }}>{money(Math.round(p.bestAmount))}</span>
+                    <span style={{ flex:"0 0 92px", textAlign:"right", color:"var(--text3)" }}>
+                      {p.quietWd != null && p.quietWd !== p.bestWd ? `quietest ${WEEKDAYS_SHORT[p.quietWd]}` : ""}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>) : (
+            <div style={{ fontSize:12, color:"var(--text3)", padding:"14px 0" }}>Not enough revenue yet to show a weekday trend.</div>
+          )}
+        </div>
+
+        <div style={card}>
           <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:6, flexWrap:"wrap" }}>
             <span style={capLbl}>Revenue vs cost by month</span>
             <span style={{ marginLeft:"auto", fontSize:10, color:"var(--text3)" }}>
@@ -365,10 +462,10 @@ export default function Accounts() {
           </div>
           {byMonth.length ? (
             <div style={{ display:"flex", alignItems:"flex-end", gap:14, height:170, paddingTop:8, overflowX:"auto" }}>
-              {byMonth.slice(-8).map(m => {
+              {byMonth.slice(-6).map(m => {
                 const cost = expByMonth.get(m.month) || 0;
                 const profit = m.amount - cost;
-                const max = Math.max(1, ...byMonth.slice(-8).map(x => Math.max(x.amount, expByMonth.get(x.month)||0)));
+                const max = Math.max(1, ...byMonth.slice(-6).map(x => Math.max(x.amount, expByMonth.get(x.month)||0)));
                 const bar = v => Math.max(2, Math.round(Math.abs(v) / max * 120));
                 return (
                   <div key={m.month} style={{ flex:"1 0 90px", display:"flex", flexDirection:"column", alignItems:"center", gap:4 }}>
@@ -386,7 +483,9 @@ export default function Accounts() {
           ) : <div style={{ fontSize:12, color:"var(--text3)", padding:"14px 0" }}>No revenue recorded yet.</div>}
         </div>
 
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(280px,1fr))", gap:12 }}>
+        </div>
+
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(3,minmax(0,1fr))", gap:12 }}>
           <div style={{ ...card, border:"1px solid "+(disc.total>0 ? "#e0b3b0" : "var(--border)") }}>
             <div style={{ ...capLbl, color: disc.total>0 ? "#8f2323" : "var(--text2)", marginBottom:8 }}>Discounts given</div>
             <div style={{ display:"flex", alignItems:"baseline", gap:8 }}>

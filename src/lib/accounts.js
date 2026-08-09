@@ -234,6 +234,53 @@ export function revenueByWeek(bookings = [], revenues = [], month = "") {
   return [...out.entries()].map(([label, amount]) => ({ label, amount }));
 }
 
+// ── Which weekday earns most ─────────────────────────────────────────────────
+// Answers "should I prepare for Fridays?". Uses the AVERAGE per weekday, so a
+// month with five Fridays doesn't beat one with four just by counting days.
+export const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+export function weekdayStats(bookings = [], revenues = [], months = []) {
+  const byWd = Array.from({ length: 7 }, () => ({ total: 0, days: 0 }));
+  const perMonth = [];
+
+  months.forEach(m => {
+    if (!/^\d{4}-\d{2}$/.test(m)) return;
+    const map = new Map(revenueByDay(bookings, revenues, m).map(d => [d.day, d.amount]));
+    const [y, mm] = m.split("-").map(Number);
+    const dim = new Date(y, mm, 0).getDate();
+    const wdTotals = Array.from({ length: 7 }, () => 0);
+    for (let i = 1; i <= dim; i++) {
+      const iso = `${m}-${String(i).padStart(2, "0")}`;
+      const wd = new Date(iso + "T00:00:00").getDay();
+      const amt = map.get(iso) || 0;
+      byWd[wd].total += amt; byWd[wd].days += 1;
+      wdTotals[wd] += amt;
+    }
+    const hasMoney = wdTotals.some(v => v > 0);
+    const bestWd = hasMoney ? wdTotals.indexOf(Math.max(...wdTotals)) : null;
+    const earning = wdTotals.map((v, i) => ({ v, i })).filter(x => x.v > 0);
+    const quietWd = earning.length ? earning.reduce((a, b) => b.v < a.v ? b : a).i : null;
+    perMonth.push({
+      month: m,
+      bestWd, bestAmount: bestWd == null ? 0 : wdTotals[bestWd],
+      quietWd, quietAmount: quietWd == null ? 0 : wdTotals[quietWd],
+    });
+  });
+
+  const rows = byWd.map((x, i) => ({ wd: i, label: WEEKDAYS[i], total: x.total, days: x.days, avg: x.days ? x.total / x.days : 0 }));
+  const totalDays = rows.reduce((s, r) => s + r.days, 0);
+  const overallAvg = totalDays ? rows.reduce((s, r) => s + r.total, 0) / totalDays : 0;
+  const anyMoney = rows.some(r => r.total > 0);
+  const best = anyMoney ? rows.reduce((a, b) => b.avg > a.avg ? b : a) : null;
+  const earningRows = rows.filter(r => r.avg > 0);
+  const worst = earningRows.length ? earningRows.reduce((a, b) => b.avg < a.avg ? b : a) : null;
+  const second = best ? rows.filter(r => r.wd !== best.wd).reduce((a, b) => b.avg > a.avg ? b : a, { avg: 0, label: "" }) : null;
+  const topCount = best ? perMonth.filter(p => p.bestWd === best.wd).length : 0;
+  const ratio = best && worst && worst.avg > 0 ? best.avg / worst.avg : null;
+
+  return { rows, best, worst, second, perMonth, topCount, monthCount: perMonth.length, overallAvg, ratio };
+}
+
 export function expensesByMonth(expenses = []) {
   const out = new Map();
   (expenses || []).forEach(e => {
