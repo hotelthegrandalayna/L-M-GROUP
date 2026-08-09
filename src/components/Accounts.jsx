@@ -124,6 +124,11 @@ export default function Accounts() {
   const ac          = useMemo(() => acStats(scoped, month), [scoped, month]);
   const disc        = useMemo(() => discountStats(scoped, month), [scoped, month]);
   const pay         = useMemo(() => paymentStats(scoped, month, bizExpenses), [scoped, month, bizExpenses]);
+  // All-time cash position — the number that actually matters when asking the
+  // manager for money, since a single month is misleading if nothing was remitted.
+  const payAll      = useMemo(() => paymentStats(scoped, "", bizExpenses), [scoped, bizExpenses]);
+  const cashIn      = pay.rows.reduce((s, r) => s + r.amount, 0);
+  const timingGap   = cashIn - mm.collected;
   const pattern     = useMemo(() => patternStats(scoped, month), [scoped, month]);
   const salary      = useMemo(() => salaryStats(expenses, month), [expenses, month]);
   const byMonth     = useMemo(() => revenueByMonth(scoped, revenues), [scoped, revenues]);
@@ -223,7 +228,7 @@ export default function Accounts() {
         <Tile label="Net profit" value={money(netProfit)} color={netProfit>=0?"#2f7d4f":"#b5322a"}
           sub={mm.collected>0 ? Math.round(netProfit/mm.collected*100)+"% margin" : ""} />
         <Tile label="Outstanding" value={money(mm.outstanding)} color={mm.outstanding>0?"#b5322a":"var(--text3)"} sub="still owed" />
-        <Tile label="Cash to hold" value={money(pay.cashExpected)} accent sub="cash in − cash out" />
+        <Tile label="Cash held (all time)" value={money(Math.round(payAll.cashExpected))} accent sub="all cash in − all cash out" />
       </div>
 
       {/* ── OVERVIEW ── */}
@@ -262,7 +267,10 @@ export default function Accounts() {
 
         <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(280px,1fr))", gap:12 }}>
           <div style={card}>
-            <div style={{ ...capLbl, marginBottom:9 }}>How guests paid <span style={{ color:"var(--text3)", fontWeight:400, textTransform:"none", letterSpacing:0 }}>— cash check</span></div>
+            <div style={{ ...capLbl, marginBottom:3 }}>Money actually received — {monthLabel(month)}</div>
+            <div style={{ fontSize:10, color:"var(--text3)", marginBottom:9, lineHeight:1.5 }}>
+              Counted on the day the guest <strong>paid</strong>. Revenue above is counted on the night the guest <strong>stayed</strong> — so these two can differ.
+            </div>
             {pay.rows.length ? pay.rows.map((r,i) => (
               <div key={r.method} style={{ display:"flex", alignItems:"center", gap:9, padding:"5px 0", borderBottom:"1px solid var(--border)" }}>
                 <span style={{ width:9, height:9, borderRadius:3, background:SERIES[i%SERIES.length] }} />
@@ -270,8 +278,27 @@ export default function Accounts() {
                 <span style={{ fontSize:11.5, fontWeight:600, ...num }}>{money(Math.round(r.amount))}</span>
               </div>
             )) : <div style={{ fontSize:11.5, color:"var(--text3)" }}>No payments recorded.</div>}
+
+            {/* Why received ≠ revenue */}
+            {month && Math.abs(timingGap) > 1 && (
+              <div style={{ fontSize:10.5, color:"var(--text2)", marginTop:9, background:"var(--bg3)", borderRadius:8, padding:"8px 10px", lineHeight:1.6 }}>
+                Received {money(Math.round(cashIn))} but revenue is {money(Math.round(mm.collected))} — a difference of{" "}
+                <strong>{money(Math.abs(Math.round(timingGap)))}</strong>.{" "}
+                {timingGap > 0
+                  ? "That extra was paid this month for nights stayed in another month."
+                  : "That much of this month's nights was paid in another month."}{" "}
+                Neither figure is missing money; they are just measured differently.
+              </div>
+            )}
+
             <div style={{ fontSize:10.5, color:"var(--text2)", marginTop:9, paddingTop:8, borderTop:"1px solid var(--border)", lineHeight:1.6 }}>
-              Cash collected <strong>{money(Math.round(pay.cashIn))}</strong> − cash expenses <strong>{money(Math.round(pay.cashOut))}</strong> = <strong style={{ color:"#a6832c" }}>{money(Math.round(pay.cashExpected))}</strong> the manager should hold.
+              <div><strong>{monthLabel(month)}:</strong> cash in {money(Math.round(pay.cashIn))} − cash spent {money(Math.round(pay.cashOut))} = <strong>{money(Math.round(pay.cashExpected))}</strong></div>
+              <div style={{ marginTop:4, paddingTop:6, borderTop:"1px dashed var(--border)" }}>
+                <strong style={{ color:"#a6832c" }}>All time: {money(Math.round(payAll.cashExpected))}</strong> — total cash the manager should hold today
+                <div style={{ fontSize:9.5, color:"var(--text3)", marginTop:2 }}>
+                  ({money(Math.round(payAll.cashIn))} collected − {money(Math.round(payAll.cashOut))} spent, minus anything already handed over)
+                </div>
+              </div>
             </div>
           </div>
 
