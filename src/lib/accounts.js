@@ -150,11 +150,14 @@ export function paymentStats(bookings = [], month = "", expenses = []) {
   });
   const rows = Object.entries(byMethod).map(([method, amount]) => ({ method, amount }))
     .sort((a, b) => b.amount - a.amount);
+  // totalIn = EVERY method. cashIn = the notes-and-coins part only. Keep these
+  // distinct — labelling cash as "collected" made the screen contradict itself.
+  const totalIn = rows.reduce((s, r) => s + r.amount, 0);
   const cashIn = byMethod["Cash"] || 0;
   const cashOut = (expenses || [])
     .filter(e => (!month || String(e.date || "").slice(0, 7) === month) && (!e.method || e.method === "Cash"))
     .reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
-  return { rows, cashIn, cashOut, cashExpected: cashIn - cashOut };
+  return { rows, totalIn, cashIn, cashOut, cashExpected: cashIn - cashOut };
 }
 
 // ── Booking pattern ──────────────────────────────────────────────────────────

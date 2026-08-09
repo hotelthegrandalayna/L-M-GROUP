@@ -127,8 +127,7 @@ export default function Accounts() {
   // All-time cash position — the number that actually matters when asking the
   // manager for money, since a single month is misleading if nothing was remitted.
   const payAll      = useMemo(() => paymentStats(scoped, "", bizExpenses), [scoped, bizExpenses]);
-  const cashIn      = pay.rows.reduce((s, r) => s + r.amount, 0);
-  const timingGap   = cashIn - mm.collected;
+  const timingGap   = pay.totalIn - mm.collected;
   const pattern     = useMemo(() => patternStats(scoped, month), [scoped, month]);
   const salary      = useMemo(() => salaryStats(expenses, month), [expenses, month]);
   const byMonth     = useMemo(() => revenueByMonth(scoped, revenues), [scoped, revenues]);
@@ -279,25 +278,51 @@ export default function Accounts() {
               </div>
             )) : <div style={{ fontSize:11.5, color:"var(--text3)" }}>No payments recorded.</div>}
 
+            {/* Total received, so the rows above visibly add up */}
+            <div style={{ display:"flex", alignItems:"center", gap:9, padding:"6px 0", borderTop:"1.5px solid var(--border)", marginTop:2 }}>
+              <span style={{ flex:1, fontSize:11.5, fontWeight:600 }}>Total received (all methods)</span>
+              <span style={{ fontSize:12, fontWeight:600, ...num }}>{money(Math.round(pay.totalIn))}</span>
+            </div>
+
             {/* Why received ≠ revenue */}
             {month && Math.abs(timingGap) > 1 && (
-              <div style={{ fontSize:10.5, color:"var(--text2)", marginTop:9, background:"var(--bg3)", borderRadius:8, padding:"8px 10px", lineHeight:1.6 }}>
-                Received {money(Math.round(cashIn))} but revenue is {money(Math.round(mm.collected))} — a difference of{" "}
+              <div style={{ fontSize:10.5, color:"var(--text2)", marginTop:8, background:"var(--bg3)", borderRadius:8, padding:"8px 10px", lineHeight:1.6 }}>
+                Received {money(Math.round(pay.totalIn))} but revenue is {money(Math.round(mm.collected))} — a difference of{" "}
                 <strong>{money(Math.abs(Math.round(timingGap)))}</strong>.{" "}
                 {timingGap > 0
                   ? "That extra was paid this month for nights stayed in another month."
-                  : "That much of this month's nights was paid in another month."}{" "}
-                Neither figure is missing money; they are just measured differently.
+                  : "That much of this month's nights was paid in another month."}
               </div>
             )}
 
-            <div style={{ fontSize:10.5, color:"var(--text2)", marginTop:9, paddingTop:8, borderTop:"1px solid var(--border)", lineHeight:1.6 }}>
-              <div><strong>{monthLabel(month)}:</strong> cash in {money(Math.round(pay.cashIn))} − cash spent {money(Math.round(pay.cashOut))} = <strong>{money(Math.round(pay.cashExpected))}</strong></div>
-              <div style={{ marginTop:4, paddingTop:6, borderTop:"1px dashed var(--border)" }}>
-                <strong style={{ color:"#a6832c" }}>All time: {money(Math.round(payAll.cashExpected))}</strong> — total cash the manager should hold today
-                <div style={{ fontSize:9.5, color:"var(--text3)", marginTop:2 }}>
-                  ({money(Math.round(payAll.cashIn))} collected − {money(Math.round(payAll.cashOut))} spent, minus anything already handed over)
+            {/* Cash drawer — cash only, stated as such, every step shown */}
+            <div style={{ marginTop:10, paddingTop:9, borderTop:"1px solid var(--border)" }}>
+              <div style={{ ...capLbl, marginBottom:6 }}>Cash drawer <span style={{ color:"var(--text3)", fontWeight:400, textTransform:"none", letterSpacing:0 }}>— notes and coins only, not bKash/card</span></div>
+              {[
+                [`Cash received (${monthLabel(month)})`, pay.cashIn, null],
+                [`Cash spent (${monthLabel(month)})`, -pay.cashOut, null],
+                ["Cash added this period", pay.cashExpected, true],
+              ].map(([l, v, bold]) => (
+                <div key={l} style={{ display:"flex", justifyContent:"space-between", padding:"3px 0", fontSize:11,
+                  borderTop: bold ? "1px solid var(--border)" : "none", marginTop: bold ? 3 : 0, paddingTop: bold ? 5 : 3 }}>
+                  <span style={{ color:"var(--text2)", fontWeight: bold ? 600 : 400 }}>{l}</span>
+                  <span style={{ fontWeight: bold ? 600 : 400, ...num }}>{money(Math.round(v))}</span>
                 </div>
+              ))}
+              <div style={{ marginTop:8, paddingTop:7, borderTop:"1px dashed var(--border)" }}>
+                {[
+                  ["All cash ever received", payAll.cashIn],
+                  ["All cash ever spent", -payAll.cashOut],
+                ].map(([l, v]) => (
+                  <div key={l} style={{ display:"flex", justifyContent:"space-between", padding:"3px 0", fontSize:11 }}>
+                    <span style={{ color:"var(--text2)" }}>{l}</span><span style={num}>{money(Math.round(v))}</span>
+                  </div>
+                ))}
+                <div style={{ display:"flex", justifyContent:"space-between", padding:"5px 0 0", marginTop:3, borderTop:"1px solid var(--border)", fontSize:12 }}>
+                  <span style={{ fontWeight:600, color:"#a6832c" }}>Cash the manager should hold</span>
+                  <span style={{ fontWeight:600, color:"#a6832c", ...num }}>{money(Math.round(payAll.cashExpected))}</span>
+                </div>
+                <div style={{ fontSize:9.5, color:"var(--text3)", marginTop:3 }}>Before anything already handed over to you.</div>
               </div>
             </div>
           </div>

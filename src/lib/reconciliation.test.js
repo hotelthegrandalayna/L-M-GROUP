@@ -12,8 +12,9 @@
 // test fails immediately. Fix the code — never the test.
 // ─────────────────────────────────────────────────────────────────────────────
 import { describe, it, expect } from "vitest";
-import { monthMoney, bookingMonthlyParts } from "./hotelMoney";
+import { monthMoney, bookingMonthlyParts, bookingPaid } from "./hotelMoney";
 import { filterInvoices } from "./invoiceFilter";
+import { paymentStats } from "./accounts";
 
 const pay = (ts, amount) => ({ ts, amount, note: "Advance paid", type: "room" });
 
@@ -107,6 +108,44 @@ describe("Invoices tab must reconcile with the revenue engine", () => {
     // and it must exceed any one month on its own
     months.forEach(m => {
       expect(collected).toBeGreaterThanOrEqual(monthMoney({ bookings, month: m }).collected);
+    });
+  });
+
+  // Reported bug: the Accounts screen showed cash-only 135,000 labelled as if it
+  // were everything received, so the figures on one card contradicted each other.
+  describe("money received must tie to the revenue engine", () => {
+    it("all-time received (every method) equals all-time revenue collected", () => {
+      const received = paymentStats(bookings, "", []).totalIn;
+      const months = new Set();
+      bookings.filter(b => b.status !== "cancelled")
+        .forEach(b => bookingMonthlyParts(b).forEach(p => p.month && months.add(p.month)));
+      let collected = 0;
+      months.forEach(m => { collected += monthMoney({ bookings, month: m }).collected; });
+      expect(received).toBeCloseTo(collected, 2);
+    });
+
+    it("all-time received equals every taka in the payment history", () => {
+      const received = paymentStats(bookings, "", []).totalIn;
+      const paid = bookings.filter(b => b.status !== "cancelled")
+        .reduce((s, b) => s + bookingPaid(b), 0);
+      expect(received).toBeCloseTo(paid, 2);
+    });
+
+    it("the months of received money add up to the all-time figure", () => {
+      const all = paymentStats(bookings, "", []).totalIn;
+      const months = new Set();
+      bookings.filter(b => b.status !== "cancelled").forEach(b => {
+        (b.paymentHistory || []).forEach(p => months.add(String(p.ts || b.checkin).slice(0, 7)));
+        if (!(b.paymentHistory || []).length) months.add(String(b.checkin).slice(0, 7));
+      });
+      let sum = 0;
+      months.forEach(m => { sum += paymentStats(bookings, m, []).totalIn; });
+      expect(sum).toBeCloseTo(all, 2);
+    });
+
+    it("cash is never more than the total received", () => {
+      const p = paymentStats(bookings, "", []);
+      expect(p.cashIn).toBeLessThanOrEqual(p.totalIn + 0.01);
     });
   });
 
