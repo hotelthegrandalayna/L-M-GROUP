@@ -9,8 +9,6 @@ const TABS = [
   { id: 'expenses',  icon: 'ti-receipt',          label: 'Expenses & Cash' },
   { id: 'tasks',     icon: 'ti-checklist',        label: 'Tasks'     },
   { id: 'crm',       icon: 'ti-users',            label: 'CRM'       },
-  { id: 'insights',  icon: 'ti-chart-bar',        label: 'Insights'  },
-  { id: 'marketing', icon: 'ti-speakerphone',     label: 'Marketing' },
   { id: 'admin',     icon: 'ti-settings',         label: 'Admin'     },
 ];
 

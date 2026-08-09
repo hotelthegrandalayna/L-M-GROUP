@@ -12,8 +12,6 @@ import Expenses     from "./components/Expenses";
 import Tasks        from "./components/Tasks";
 import TaskReminderPopup from "./components/TaskReminderPopup";
 import CRM          from "./components/CRM";
-import Insights     from "./components/Insights";
-import Marketing    from "./components/Marketing";
 import AdminPanel   from "./components/Admin/AdminPanel";
 import ErrorBoundary from "./components/ErrorBoundary";
 
@@ -35,8 +33,6 @@ function HotelInner({ onSwitchApp }) {
           {activeTab === "expenses"  && <Expenses  />}
           {activeTab === "tasks"     && <Tasks     />}
           {activeTab === "crm"       && <CRM       />}
-          {activeTab === "insights"  && <Insights  />}
-          {activeTab === "marketing" && <Marketing />}
           {activeTab === "admin"     && <AdminPanel/>}
         </ErrorBoundary>
       </main>

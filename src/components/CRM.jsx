@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { useApp } from "../context/AppContext";
 import { money, todayStr } from "../utils/helpers";
+import GuestFeedback from "./GuestFeedback";
 
 const PREFS = ["Non-smoking","Quiet room","High floor","Ground floor","Extra pillows",
                "Late check-out","Early check-in","Halal food","Extra towels","Room service"];
@@ -417,6 +418,9 @@ export default function CRM() {
           </div>
         ))}
       </div>
+
+      {/* Guest feedback — moved here from the old Insights tab */}
+      <GuestFeedback />
 
       {/* Filter bar */}
       <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap", alignItems: "center" }}>
