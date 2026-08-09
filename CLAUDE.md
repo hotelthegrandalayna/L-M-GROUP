@@ -23,6 +23,14 @@ Rejected alternatives — **do not reintroduce**:
 - *Cash basis / payment-date* — owner counts a July stay paid in August as July revenue.
 - *Whole stay to check-in month* — hides the Aug-1 night of a 31-Jul arrival.
 
+### One basis on screen — never show payment-date figures
+Do not display "money received", "cash received", or any payment-date total anywhere
+in the UI. Showing it beside night-based revenue made every screen look broken
+(Aug 47,100 revenue vs 53,100 received). Both numbers were correct; the owner does
+not want the second set. **The same month must show the same number on every screen.**
+`paymentStats` remains in `lib/accounts.js` but must not be surfaced.
+Cash in hand = revenue − expenses for the selected period, identical to Expenses & Cash.
+
 ### Never drop money
 Every taka in a booking's `paymentHistory` must appear in **exactly one** month —
 never zero, never twice. Payments beyond the room invoice (services, extras, top-ups)
