@@ -358,6 +358,68 @@ export function referrerStats(bookings = [], month = "") {
 
 // ── Revenue series (daily / weekly / monthly) ────────────────────────────────
 // Uses the shared night-split so every bucket agrees with the rest of the app.
+// ── Money received ───────────────────────────────────────────────────────────
+// EVERY payment the hotel took, on the day it arrived. This is a payment-date
+// view, deliberately DIFFERENT from revenue (which follows the night stayed),
+// and it must always be labelled "money received" on screen so the two are never
+// mistaken for one number contradicting itself. See CLAUDE.md §1.
+//
+// The Desk's Today revenue and the Accounts daily chart both read this one
+// function. They used to derive it separately, which is why one said 11,000 and
+// the other 13,100 for the same day.
+
+/** Plain revenue type for the P&L breakdown. */
+export function receiptKind(note, type, status) {
+  const n = (note || "").toLowerCase();
+  if (/extend/.test(n)) return "Extension";
+  if (type === "service" || /service|restaurant|extra service/.test(n)) return "Service";
+  if (/check-in/.test(n)) return "Balance at check-in";
+  if (/advance/.test(n)) return status === "confirmed" ? "Reservation deposit" : "New booking advance";
+  if (/balance|rest|collect/.test(n)) return "Balance collected";
+  return "Payment";
+}
+
+/** One entry per payment taken, dated the day it was received. */
+export function receiptEntries(bookings = []) {
+  const entries = [];
+  (bookings || []).forEach(b => {
+    // A cancelled booking only ever brought in what it kept.
+    if (b.status === "cancelled") {
+      forfeitedAllocation(b).forEach(a => entries.push({
+        date: a.day || b.checkin, amount: a.amount, bookingId: b.id, room: b.room,
+        method: a.method, kind: "Cancellation charge", note: `cancellation charge (${a.method})`,
+      }));
+      return;
+    }
+    const history = b.paymentHistory || [];
+    if (history.length) {
+      history.forEach(p => entries.push({
+        date: p.ts ? String(p.ts).slice(0, 10) : b.checkin,
+        amount: parseFloat(p.amount) || 0, bookingId: b.id, room: b.room,
+        method: p.method || "Cash", kind: receiptKind(p.note, p.type, b.status),
+        note: `${p.note || p.type || "payment"} (${p.method || "Cash"})`,
+      }));
+    } else {
+      const totalPaid = (parseFloat(b.advance) || 0) + (parseFloat(b.restPayment) || 0) + (parseFloat(b.extrasAdvance) || 0);
+      if (totalPaid > 0) entries.push({
+        date: b.checkin, amount: totalPaid, bookingId: b.id, room: b.room,
+        method: b.paymentMethod || "Cash",
+        kind: b.status === "confirmed" ? "Reservation deposit" : "New booking advance",
+        note: `advance payment (${b.paymentMethod || "Cash"})`,
+      });
+    }
+  });
+  return entries;
+}
+
+/** Booking receipts plus manual revenue rows, the complete money-in picture. */
+export function allReceiptEntries(bookings = [], revenues = []) {
+  return [
+    ...receiptEntries(bookings),
+    ...(revenues || []).filter(r => r && !r.bookingId && !r.fromBooking),
+  ];
+}
+
 // The distinct nights a booking occupies inside one month, oldest first.
 function bookingNightsInMonth(b, month) {
   const days = new Set();
@@ -372,36 +434,20 @@ function bookingNightsInMonth(b, month) {
   return [...days].sort();
 }
 
-// Revenue per calendar day.
+// Money received per calendar day — the day it actually landed.
 //
-// This used to spread each room's INVOICE TOTAL across its nights — what was
-// BILLED. The Desk counts what was COLLECTED, so the same day showed two
-// different figures on two screens (13.1k here against 11.0k on the desk), and
-// the chart's own total sat above the Revenue tile printed right beside it.
+// The owner asked for a day to mean "what came in that day", so this is the same
+// payment-date rule the Desk's Today figure uses, and it reads the SAME function
+// the Desk does. It used to spread each room's invoice total across its nights,
+// which is a third rule again — that is why one screen said 11,000 and the other
+// 13,100 for the same day.
 //
-// It now takes each booking's collected share for the month straight from
-// bookingMonthlyParts — the one engine — and spreads only that across the nights
-// it covers in that month. The days therefore always add up to
-// monthMoney().collected, which reconciliation.test.js asserts.
+// This does NOT sum to monthMoney().collected, and it is not meant to: revenue
+// follows the night stayed, receipts follow the payment. Anything showing this
+// series must say "money received", never "revenue". See CLAUDE.md §1.
 export function revenueByDay(bookings = [], revenues = [], month = "") {
   const out = new Map();
-  (bookings || []).forEach(b => {
-    bookingMonthlyParts(b).forEach(p => {
-      if (!p.month || (month && p.month !== month) || !(p.collected > 0)) return;
-      // A cancelled booking has NO nights — the stay never happened, and its
-      // dates are fictional. A kept deposit belongs on the day it was taken.
-      const days = b.status === "cancelled" ? [] : bookingNightsInMonth(b, p.month);
-      if (days.length) {
-        const each = p.collected / days.length;
-        days.forEach(d => out.set(d, (out.get(d) || 0) + each));
-      } else {
-        const alloc = forfeitedAllocation(b).filter(a => a.month === p.month);
-        const day = (alloc[0] && alloc[0].day) || (p.month + "-01");
-        out.set(day, (out.get(day) || 0) + p.collected);
-      }
-    });
-  });
-  (revenues || []).filter(r => r && !r.bookingId && !r.fromBooking).forEach(r => {
+  allReceiptEntries(bookings, revenues).forEach(r => {
     const day = String(r.date || "").slice(0, 10);
     if (!day || (month && day.slice(0, 7) !== month)) return;
     out.set(day, (out.get(day) || 0) + (parseFloat(r.amount) || 0));

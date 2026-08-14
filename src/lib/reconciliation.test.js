@@ -14,7 +14,7 @@
 import { describe, it, expect } from "vitest";
 import { monthMoney, bookingMonthlyParts, bookingPaid } from "./hotelMoney";
 import { filterInvoices } from "./invoiceFilter";
-import { paymentStats, revenueByDay } from "./accounts";
+import { paymentStats, revenueByDay, allReceiptEntries } from "./accounts";
 
 const pay = (ts, amount) => ({ ts, amount, note: "Advance paid", type: "room" });
 
@@ -193,41 +193,54 @@ describe("Invoices tab must reconcile with the revenue engine", () => {
     });
   });
 
-  // Reported bug: the Accounts daily chart showed 13.1k for a day the Desk called
-  // 11.0k, and its own total sat ~5,200 above the Revenue tile beside it. The
-  // chart was spreading each room's INVOICE TOTAL across its nights — billed, not
-  // collected. Nothing caught it because the only test asserted the billed figure.
-  describe("the daily revenue chart must reconcile with the revenue engine", () => {
-    for (const month of ["2026-07", "2026-08"]) {
-      it(`${month}: the days add up to monthMoney collected`, () => {
-        const days = revenueByDay(bookings, [], month);
-        const total = days.reduce((s, d) => s + d.amount, 0);
-        expect(total).toBeCloseTo(monthMoney({ bookings, month }).collected, 2);
-      });
+  // The daily chart is MONEY RECEIVED — payment dates — because that is what the
+  // owner asked a day to mean. It deliberately does NOT tie to monthMoney, which
+  // follows the night stayed; the screen labels it "Money received" so the two
+  // are never read as one number contradicting itself (CLAUDE.md §1).
+  //
+  // What it MUST tie to is the Desk, which shows the same figure for today. Those
+  // two derived it separately and disagreed — 11,000 against 13,100 for one day.
+  describe("the daily chart and the Desk must agree, to the taka", () => {
+    // Exactly what the Desk sums for its Today figure.
+    const deskDay = (day, revs = []) => allReceiptEntries(bookings, revs)
+      .filter(r => r.date === day).reduce((s, r) => s + r.amount, 0);
 
-      it(`${month}: every day of the chart falls inside the month`, () => {
-        revenueByDay(bookings, [], month).forEach(d => {
-          expect(d.day.slice(0, 7)).toBe(month);
-        });
+    for (const day of ["2026-08-05", "2026-08-07", "2026-08-10", "2026-08-14"]) {
+      it(`${day}: the chart's bar equals the Desk's figure`, () => {
+        const bar = revenueByDay(bookings, [], "2026-08").find(d => d.day === day);
+        expect(bar ? bar.amount : 0).toBeCloseTo(deskDay(day), 2);
       });
     }
 
-    it("manual revenue lands on its own date and is counted once", () => {
-      const extra = [{ id: 1, date: "2026-08-14", amount: 500, note: "Laundry" }];
-      const withManual = revenueByDay(bookings, extra, "2026-08")
-        .reduce((s, d) => s + d.amount, 0);
-      const without = revenueByDay(bookings, [], "2026-08")
-        .reduce((s, d) => s + d.amount, 0);
-      expect(withManual - without).toBeCloseTo(500, 2);
-      expect(withManual).toBeCloseTo(monthMoney({ bookings, revenues: extra, month: "2026-08" }).collected, 2);
+    it("every taka received in a month appears on exactly one day of the chart", () => {
+      const month = "2026-08";
+      const charted = revenueByDay(bookings, [], month).reduce((s, d) => s + d.amount, 0);
+      const received = allReceiptEntries(bookings, [])
+        .filter(r => String(r.date).slice(0, 7) === month)
+        .reduce((s, r) => s + r.amount, 0);
+      expect(charted).toBeCloseTo(received, 2);
     });
 
-    it("a kept deposit shows on the day the money came in", () => {
-      // Booking 113: cancelled, 1,200 kept, paid 10 Aug for an 18 Aug stay that
-      // never happened — so it has no nights to spread across.
+    it("no day escapes the month it was asked for", () => {
+      revenueByDay(bookings, [], "2026-08").forEach(d => expect(d.day.slice(0, 7)).toBe("2026-08"));
+    });
+
+    it("manual revenue lands on its own date and is counted once", () => {
+      const extra = [{ id: 1, date: "2026-08-14", amount: 500, note: "Laundry" }];
+      const withManual = revenueByDay(bookings, extra, "2026-08").reduce((s, d) => s + d.amount, 0);
+      const without = revenueByDay(bookings, [], "2026-08").reduce((s, d) => s + d.amount, 0);
+      expect(withManual - without).toBeCloseTo(500, 2);
+      expect(revenueByDay(bookings, extra, "2026-08").find(d => d.day === "2026-08-14").amount)
+        .toBeCloseTo(deskDay("2026-08-14", extra), 2);
+    });
+
+    it("a cancelled booking contributes only what it kept, on the day taken", () => {
+      // Booking 113: 1,200 kept, taken 10 Aug. Booking 60 was refunded in full
+      // and must contribute nothing at all.
       const day = revenueByDay(bookings, [], "2026-08").find(d => d.day === "2026-08-10");
-      expect(day).toBeTruthy();
-      expect(day.amount).toBeGreaterThanOrEqual(1200);
+      expect(day.amount).toBeCloseTo(1200, 2);
+      const refunded = revenueByDay(bookings, [], "2026-08").find(d => d.day === "2026-08-04");
+      expect(refunded ? refunded.amount : 0).toBeCloseTo(0, 2);
     });
   });
 

@@ -23,12 +23,27 @@ Rejected alternatives — **do not reintroduce**:
 - *Cash basis / payment-date* — owner counts a July stay paid in August as July revenue.
 - *Whole stay to check-in month* — hides the Aug-1 night of a 31-Jul arrival.
 
-### One basis on screen — never show payment-date figures
-Do not display "money received", "cash received", or any payment-date total anywhere
-in the UI. Showing it beside night-based revenue made every screen look broken
-(Aug 47,100 revenue vs 53,100 received). Both numbers were correct; the owner does
-not want the second set. **The same month must show the same number on every screen.**
-`paymentStats` remains in `lib/accounts.js` but must not be surfaced.
+### One basis per figure — and payment-date figures must say so
+Revenue is the night-stayed basis, everywhere, and **the same month must show the
+same revenue on every screen**. Never label a payment-date total "revenue".
+
+Originally payment-date figures were banned outright: showing "received" beside
+night-based revenue made every screen look broken (Aug 47,100 revenue vs 53,100
+received). **The owner relaxed this on 2026-08-14 for two places only**, because
+"what came in today" is how the desk actually thinks about a day:
+
+- the Desk's Today revenue / Today P&L, and
+- the Accounts daily chart, which is titled **Money received** and carries the note
+  "payment dates, not the night stayed".
+
+Both read the same builder — `receiptEntries` / `allReceiptEntries` in
+`lib/accounts.js` — so they can never disagree, which they did before (11,000 on
+the Desk against 13,100 on the chart for one day). Anything else showing money
+stays on the night-stayed basis via `hotelMoney.js`.
+
+The rule that survives: a payment-date figure may exist only where it is plainly
+labelled as money received, never as revenue, and never as a second version of a
+number shown elsewhere. `paymentStats` remains in `lib/accounts.js` unsurfaced.
 Cash in hand = revenue − expenses for the selected period, identical to Expenses & Cash.
 
 ### Never drop money

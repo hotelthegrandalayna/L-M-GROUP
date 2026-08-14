@@ -140,10 +140,24 @@ describe("booking pattern", () => {
 });
 
 describe("revenue series", () => {
-  it("daily revenue sums to the month's room revenue", () => {
+  // The DAILY series is money received — payment dates — by the owner's decision,
+  // so a day means "what came in that day" and matches the Desk. It used to
+  // assert the billed, night-split figure (…+ 1500, half the boundary stay); that
+  // was the old rule and the assertion is deliberately changed, not patched to
+  // pass. The MONTHLY series below still follows the night stayed, unchanged.
+  it("daily money received falls on the day the payment landed", () => {
     const days = revenueByDay(bookings, [], "2026-08");
     const total = days.reduce((s, d) => s + d.amount, 0);
-    expect(total).toBeCloseTo(3400 + 6800 + 1500, 2); // boundary stay contributes half
+    // The 31 Jul → 2 Aug stay was paid in full on 1 Aug, so all 3,000 is August.
+    expect(total).toBeCloseTo(3400 + 6800 + 3000, 2);
+    expect(days.find(d => d.day === "2026-08-01").amount).toBeCloseTo(3000, 2);
+    expect(days.find(d => d.day === "2026-08-07").amount).toBeCloseTo(3400 + 6800, 2);
+  });
+
+  it("a cancelled booking never reaches the daily series", () => {
+    // Booking 4 is cancelled with nothing kept — its 9,999 must not appear.
+    const days = revenueByDay(bookings, [], "2026-08");
+    expect(days.find(d => d.day === "2026-08-04")).toBeUndefined();
   });
 
   it("monthly series splits a boundary stay across both months", () => {

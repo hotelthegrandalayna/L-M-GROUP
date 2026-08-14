@@ -131,8 +131,11 @@ function FullHousePanel({ stats, month }) {
   );
 }
 
-// Daily earnings are discrete — one bar per day, not a smooth curve implying the
-// days flow into each other. The comparison month sits behind as a dashed outline.
+const CUR_COLOR = "#5f8f86";  // the period being viewed
+const CMP_COLOR = "#c49a4a";  // the period being compared against
+
+// Earnings are discrete — one bar per period, not a smooth curve implying they
+// flow into each other. The comparison sits beside each bar in its own colour.
 function BarChart({ data, compare, height = 168 }) {
   if (!data.length) return null;
   const max = Math.max(1, ...data.map(d => d.amount), ...(compare?.bars || [0]));
@@ -157,12 +160,17 @@ function BarChart({ data, compare, height = 168 }) {
                   {short(d.amount)}
                 </span>
               )}
-              {compare && ch > 0 && (
-                <span style={{ position:"absolute", bottom:0, width:"92%", height:ch,
-                  border:"1px dashed var(--border2)", borderBottom:"none", borderRadius:"3px 3px 0 0" }} />
-              )}
-              <span style={{ width:"62%", height:Math.max(d.amount > 0 ? 2 : 0, h), background:"#5f8f86",
-                borderRadius:"3px 3px 0 0", position:"relative" }} />
+              {/* Two solid bars side by side in two colours, so which is which is
+                  obvious without reading a caption. */}
+              <span style={{ display:"flex", alignItems:"flex-end", justifyContent:"center",
+                gap:1, width:"100%", height:"100%" }}>
+                <span style={{ width: compare ? "40%" : "62%", height:Math.max(d.amount > 0 ? 2 : 0, h),
+                  background:CUR_COLOR, borderRadius:"3px 3px 0 0" }} />
+                {compare && (
+                  <span style={{ width:"40%", height:Math.max((compare.bars[i] || 0) > 0 ? 2 : 0, ch),
+                    background:CMP_COLOR, borderRadius:"3px 3px 0 0" }} />
+                )}
+              </span>
             </div>
           );
         })}
@@ -395,12 +403,28 @@ export default function Accounts() {
     return dayRows.map(x => ({ label: x.day.slice(8), sub: wd(x.day), amount: x.amount, iso: x.day }));
   }, [grain, dayRows, month, byMonth, scoped, revenues]);
 
-  // The month being compared against — previous month by default, any month pickable.
-  const [cmpMonth, setCmpMonth] = useState("");
-  const compareMonth = cmpMonth || prevMonth;
+  // The month being compared against. null = not chosen, so fall back to the
+  // previous month; "" = the owner explicitly turned the comparison OFF. Reading
+  // "" as "unset" meant picking "no comparison" snapped straight back on.
+  const [cmpMonth, setCmpMonth] = useState(null);
+  const compareMonth = cmpMonth === null ? prevMonth : cmpMonth;
   const cmpDayRows = useMemo(
     () => (grain === "daily" && month && compareMonth) ? revenueByDay(scoped, revenues, compareMonth) : [],
     [grain, month, compareMonth, scoped, revenues]);
+
+  // The 12 months before the selected one, plus any month with data. The old list
+  // held only months that had earned something, so the previous month could be
+  // missing and the box would show one thing while the chart compared another.
+  const compareChoices = useMemo(() => {
+    if (!month) return [];
+    const out = new Set(allMonths.filter(m => m !== month));
+    const [yy, mm] = month.split("-").map(Number);
+    for (let k = 1; k <= 12; k++) {
+      const d = new Date(yy, mm - 1 - k, 1);
+      out.add(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+    }
+    return [...out].sort().reverse();
+  }, [allMonths, month]);
 
   // Like for like: on the 14th, compare 1–14 against 1–14 of the other month, not
   // against its whole 31 days, or the month in progress always looks like a slump.
@@ -524,7 +548,11 @@ export default function Accounts() {
         {/* Revenue trend — was its own tab, now lives here */}
         <div style={{ ...card, marginBottom:12 }}>
           <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4, flexWrap:"wrap" }}>
-            <span style={capLbl}>Revenue</span>
+            {/* "Money received", never "Revenue". This series follows the PAYMENT
+                DATE, while revenue follows the night stayed, so the two months
+                genuinely differ. Labelling them apart is what stops the screen
+                looking like it contradicts itself — see CLAUDE.md §1. */}
+            <span style={capLbl}>Money received</span>
             <span style={{ fontSize:11, color:"var(--text3)" }}>
               {monthLabel(month)}{grain === "daily" && month && seriesStats.shown ? ` 1–${seriesStats.shown}` : ""}
               {" · total "}<strong style={{ color:"var(--text)", ...num }}>{money(Math.round(seriesStats.total))}</strong>
@@ -536,7 +564,9 @@ export default function Accounts() {
                   style={{ fontFamily:"inherit", fontSize:11, padding:"3px 7px", borderRadius:7,
                     border:"1px solid var(--border)", background:"var(--bg2)", color:"var(--text2)" }}>
                   <option value="">no comparison</option>
-                  {allMonths.filter(m => m !== month).map(m => (
+                  {/* Every month around, not only the ones that earned — comparing
+                      against a quiet month is exactly when you want to. */}
+                  {compareChoices.map(m => (
                     <option key={m} value={m}>vs {monthLabel(m)}</option>
                   ))}
                 </select>
@@ -563,10 +593,8 @@ export default function Accounts() {
             </div>
           )}
           {series.length
-            ? (grain === "daily"
-                ? <BarChart data={series} compare={compare && compare.cmpTotal > 0 ? compare : null} height={168} />
-                : <AreaChart data={series} height={150} />)
-            : <div style={{ fontSize:12, color:"var(--text3)", padding:"14px 0" }}>No revenue in this period.</div>}
+            ? <BarChart data={series} compare={grain === "daily" && compare && compare.cmpTotal > 0 ? compare : null} height={168} />
+            : <div style={{ fontSize:12, color:"var(--text3)", padding:"14px 0" }}>Nothing received in this period.</div>}
           {series.length > 0 && (
             <div style={{ display:"flex", gap:16, flexWrap:"wrap", fontSize:10.5, color:"var(--text3)", marginTop:6, paddingTop:6, borderTop:"1px solid var(--border)" }}>
               {seriesStats.best  && <span>Best <strong style={{ color:"#2f7d4f" }}>{seriesStats.best.label}{seriesStats.best.sub?" "+seriesStats.best.sub:""} · {money(Math.round(seriesStats.best.amount))}</strong></span>}
@@ -577,9 +605,12 @@ export default function Accounts() {
                   {month && <span style={{ color:"var(--border2)" }}> (of {seriesStats.shown} so far)</span>}</span>
               )}
               {grain === "daily" && compare && compare.cmpTotal > 0 && (
-                <span><span style={{ display:"inline-block", width:14, borderTop:"1px dashed var(--border2)", verticalAlign:3 }} /> {monthLabel(compare.month)}</span>
+                <span style={{ display:"inline-flex", gap:10 }}>
+                  <span><span style={{ display:"inline-block", width:9, height:9, borderRadius:2, background:CUR_COLOR, verticalAlign:-1 }} /> {monthLabel(month)}</span>
+                  <span><span style={{ display:"inline-block", width:9, height:9, borderRadius:2, background:CMP_COLOR, verticalAlign:-1 }} /> {monthLabel(compare.month)}</span>
+                </span>
               )}
-              <span style={{ marginLeft:"auto" }}>hover any {grain === "daily" ? "bar" : "point"} for its exact amount</span>
+              <span style={{ marginLeft:"auto" }}>payment dates, not the night stayed · hover a bar for its amount</span>
             </div>
           )}
         </div>

@@ -5,6 +5,7 @@ import { todayStr, money, bookingConflicts, getRoomDisplayStatus, bookingCoversR
 import { buildInvoiceHTML, buildTCHtml, hotelPrint, roomLabel, allRoomNumbers } from "./Invoice";
 import { NewBookingModal, InvoicePreviewModal } from "./Bookings";
 import { monthMoney, forfeitedAllocation, bookingPaid } from "../lib/hotelMoney";
+import { receiptEntries } from "../lib/accounts";
 import { stayExtensions } from "../lib/stayBreakdown";
 import { todaysDepartures, hasDeparted } from "../lib/departures";
 import { deviceTz } from "../lib/hotelTime";
@@ -1268,45 +1269,10 @@ export default function Desk() {
     isPast12pmBST
   );
 
-  // Classify a payment into a plain revenue type for the P&L breakdown
-  function revKind(note, type, status) {
-    const n = (note || "").toLowerCase();
-    if (/extend/.test(n)) return "Extension";
-    if (type === "service" || /service|restaurant|extra service/.test(n)) return "Service";
-    if (/check-in/.test(n)) return "Balance at check-in";
-    if (/advance/.test(n)) return status === "confirmed" ? "Reservation deposit" : "New booking advance";
-    if (/balance|rest|collect/.test(n)) return "Balance collected";
-    return "Payment";
-  }
-
-  // Derive revenue from booking paymentHistory (same as Admin Finance) — avoids test/orphan entries
-  const bookingRevEntries = useMemo(() => {
-    const entries = [];
-    bookings.forEach(b => {
-      // A cancelled booking brings in only its forfeited deposit — see hotelMoney.js.
-      if (b.status === "cancelled") {
-        forfeitedAllocation(b).forEach(a => entries.push({ date: a.day || b.checkin, amount: a.amount,
-          bookingId: b.id, room: b.room, method: a.method, kind: "Cancellation charge",
-          note: `cancellation charge (${a.method})` }));
-        return;
-      }
-      const history = b.paymentHistory || [];
-      if (history.length > 0) {
-        history.forEach(p => {
-          const date = p.ts ? p.ts.split("T")[0] : b.checkin;
-          entries.push({ date, amount: parseFloat(p.amount) || 0, bookingId: b.id, room: b.room,
-            method: p.method || "Cash", kind: revKind(p.note, p.type, b.status),
-            note: `${p.note||p.type||"payment"} (${p.method||"Cash"})` });
-        });
-      } else {
-        const totalPaid = (parseFloat(b.advance)||0) + (parseFloat(b.restPayment)||0) + (parseFloat(b.extrasAdvance)||0);
-        if (totalPaid > 0) entries.push({ date: b.checkin, amount: totalPaid, bookingId: b.id, room: b.room,
-          method: b.paymentMethod || "Cash", kind: b.status === "confirmed" ? "Reservation deposit" : "New booking advance",
-          note: `advance payment (${b.paymentMethod||"Cash"})` });
-      }
-    });
-    return entries;
-  }, [bookings]);
+  // Money received, from the ONE shared builder in lib/accounts.js. The Desk and
+  // the Accounts daily chart used to derive this separately and disagreed about
+  // the same day — 11,000 here against 13,100 there.
+  const bookingRevEntries = useMemo(() => receiptEntries(bookings), [bookings]);
   const manualRevEntries = revenues.filter(r => !r.bookingId && !r.fromBooking);
   const allRevEntries = [...bookingRevEntries, ...manualRevEntries];
 
