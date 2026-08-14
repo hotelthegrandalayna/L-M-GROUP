@@ -363,7 +363,10 @@ export default function Accounts() {
     ? monthMoney({ bookings: scoped, revenues, expenses: bizExpenses, month })
     : (() => {
         const months = new Set();
-        scoped.filter(b => b.status !== "cancelled").forEach(b => bookingMonthlyParts(b).forEach(p => p.month && months.add(p.month)));
+        // No cancelled filter: bookingMonthlyParts already returns nothing for a
+        // cancellation that kept nothing, and the kept deposit for one that did.
+        // Filtering here skipped a month whose only income was a cancellation charge.
+        scoped.forEach(b => bookingMonthlyParts(b).forEach(p => p.month && months.add(p.month)));
         let billed=0, collected=0, outstanding=0;
         months.forEach(m => { const x = monthMoney({ bookings: scoped, revenues, expenses: bizExpenses, month: m });
           billed+=x.billed; collected+=x.collected; outstanding+=x.outstanding; });
@@ -371,10 +374,13 @@ export default function Accounts() {
       })(),
   [scoped, revenues, bizExpenses, month]);
 
-  // NOTE: this screen deliberately uses ONE basis only — money follows the night
-  // stayed, exactly like Expenses & Cash, the Desk and Invoices. Payment-date
-  // ("received") figures are NOT shown: two bases side by side made the screen
-  // look wrong even when both numbers were right.
+  // NOTE: every FIGURE on this screen follows the night stayed, exactly like
+  // Expenses & Cash, the Desk and Invoices — Billed, Revenue, Outstanding, Cash
+  // in hand. The one exception is the "Money received" chart below, which the
+  // owner asked to be payment-date (2026-08-14) and which is titled and captioned
+  // as received, never as revenue. That labelling is the whole safeguard: two
+  // bases side by side made the screen look wrong even when both were right.
+  // See CLAUDE.md §1.
   // Declared BEFORE the totals below — a const used above its definition throws
   // "Cannot access before initialization" at runtime.
   const allPeriodExpenses = useMemo(
@@ -563,6 +569,10 @@ export default function Accounts() {
 
       {/* KPI row — always visible */}
       <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(104px,1fr))", gap:6, marginBottom:10 }}>
+        {/* Billed sits before Revenue in the same order Expenses & Cash uses
+            (Billed → Collected → Outstanding), and comes from the same
+            monthMoney call, so the two screens cannot disagree. */}
+        <Tile label="Billed" value={money(mm.billed)} sub="invoiced" />
         <Tile label="Revenue" value={money(mm.collected)} color="#2f7d4f"
           sub={revDelta === null ? null : `${revDelta>=0?"▲":"▼"} ${Math.abs(revDelta)}% vs ${monthLabel(prevMonth)}`} />
         <Tile label="Nights sold" value={occ.sold} sub={occ.available ? `of ${occ.available}` : null} />
