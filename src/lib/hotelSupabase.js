@@ -144,8 +144,14 @@ function buildBookingRow(booking, guestId) {
     advance_amount: advance,
     rest_payment: restPayment,
     due_amount: due,
+    // The day the guest actually left rides in the notes beside the status, for
+    // the same reason the status does: there is no column for it. A forced
+    // (early) checkout keeps its booked checkout_date, so without this the
+    // cloud has no record of when the room really emptied.
     notes: (booking.status && !["confirmed","checked-in"].includes(booking.status)
-      ? `[_st:${booking.status}]` : "") + (toText(booking.notes) || ""),
+      ? `[_st:${booking.status}]` : "")
+      + (booking.checkedOutOn ? `[_out:${booking.checkedOutOn}]` : "")
+      + (toText(booking.notes) || ""),
     is_reservation: (booking.status || "") === "confirmed",
     created_by: null,
     created_at: booking.createdAt || new Date().toISOString(),
@@ -207,11 +213,15 @@ function fromDbBooking(row, guest) {
     advance: toNum(row.advance_amount, 0),
     restPayment: toNum(row.rest_payment, 0),
     dueAmount: toNum(row.due_amount, 0),
-    notes: (row.notes || "").replace(/^\[_st:[^\]]+\]/, ""),
+    notes: (row.notes || "").replace(/^(?:\[_st:[^\]]+\])?(?:\[_out:[^\]]+\])?/, ""),
     status: (() => {
       const m = (row.notes || "").match(/^\[_st:([^\]]+)\]/);
       if (m) return m[1];
       return row.is_reservation ? "confirmed" : "checked-in";
+    })(),
+    checkedOutOn: (() => {
+      const m = (row.notes || "").match(/^(?:\[_st:[^\]]+\])?\[_out:([^\]]+)\]/);
+      return m ? m[1] : "";
     })(),
     isReservation: Boolean(row.is_reservation),
     createdAt: row.created_at || "",

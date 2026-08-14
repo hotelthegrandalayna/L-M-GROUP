@@ -6,6 +6,7 @@ import { buildInvoiceHTML, buildTCHtml, hotelPrint, roomLabel } from "./Invoice"
 import { NewBookingModal, InvoicePreviewModal } from "./Bookings";
 import { monthMoney } from "../lib/hotelMoney";
 import { stayExtensions } from "../lib/stayBreakdown";
+import { todaysDepartures, hasDeparted } from "../lib/departures";
 import { sendNtfyAlert } from "../utils/ntfy";
 import { hotelBusinessOnly } from "../utils/expenseType";
 import { pendingTasks, freqLabel } from "../utils/tasks";
@@ -1236,7 +1237,9 @@ export default function Desk() {
   const mExp  = mMoney.expenses;
   const inhouse    = bookings.filter(b => b.status === "checked-in");
   const arrivals   = bookings.filter(b => b.checkin === today && (b.status === "confirmed" || b.status === "checked-in"));
-  const departures = bookings.filter(b => b.checkout === today && b.status === "checked-in");
+  // Everyone leaving today, guests who have already gone included — see
+  // lib/departures.js for why the booked checkout date alone gets this wrong.
+  const departures = todaysDepartures(bookings, today);
   // Today's extensions. The local `extensions` log does NOT survive a refresh from
   // the cloud (there is no column for it), which is why this card kept showing 0
   // on a day a stay had clearly been extended. stayExtensions also recovers them
@@ -1473,6 +1476,10 @@ export default function Desk() {
     const updatedBooking = {
       ...b,
       status: "checked-out",
+      // The day the room really emptied. A forced (early) checkout keeps its
+      // booked checkout date, so this is the only record of when the guest
+      // actually left — Today's Departures reads it.
+      checkedOutOn: today,
       restPayment: (parseFloat(b.restPayment) || 0) + (collectBalance ? out : 0),
       dueAmount: collectBalance ? 0 : getHotelDue(b),
     };
@@ -1602,7 +1609,10 @@ export default function Desk() {
       <div style={{ display:"grid", gridTemplateColumns:isMobile ? "repeat(2,minmax(0,1fr))" : "repeat(4,minmax(0,1fr))", gap:8, marginBottom:14, alignItems:"stretch" }}>
         {[
           { title:"Today's Arrivals",   icon:"ti-login",         list:arrivals,   color:"var(--green)", bg:"var(--green-bg)" },
-          { title:"Today's Departures", icon:"ti-logout",        list:departures, color:"var(--red2)",  bg:"var(--red-bg)" },
+          // Departure chips say whether the guest has actually gone, so the desk
+          // can see at a glance which rooms it is still waiting on.
+          { title:"Today's Departures", icon:"ti-logout",        list:departures, color:"var(--red2)",  bg:"var(--red-bg)",
+            chip: b => hasDeparted(b) ? { label:"left", done:true } : { label:"due", done:false } },
           { title:"Today's Extensions", icon:"ti-calendar-plus", list:extensions, color:"#7a4dd6",      bg:"#efe9fb" },
         ].map(sec => (
           <div className="panel" key={sec.title} style={{ margin:0, border:"1px solid var(--border)", borderRadius:12 }}>
@@ -1615,9 +1625,23 @@ export default function Desk() {
             </div>
             {sec.list.length ? (
               <div style={{ display:"flex", flexWrap:"wrap", gap:6, padding:"4px 13px 12px" }}>
-                {sec.list.flatMap(b => roomsOf(b).map(rm => (
-                  <span key={b.id+"-"+rm} style={{ minWidth:36, textAlign:"center", background:"var(--bg2)", color:sec.color, border:"1px solid "+sec.color, borderRadius:8, padding:"5px 10px", fontWeight:600, fontSize:14, lineHeight:1, fontVariantNumeric:"tabular-nums" }}>{rm}</span>
-                )))}
+                {sec.list.flatMap(b => {
+                  const meta = sec.chip ? sec.chip(b) : null;
+                  if (!meta) return roomsOf(b).map(rm => (
+                    <span key={b.id+"-"+rm} style={{ minWidth:36, textAlign:"center", background:"var(--bg2)", color:sec.color, border:"1px solid "+sec.color, borderRadius:8, padding:"5px 10px", fontWeight:600, fontSize:14, lineHeight:1, fontVariantNumeric:"tabular-nums" }}>{rm}</span>
+                  ));
+                  return roomsOf(b).map(rm => (
+                    <span key={b.id+"-"+rm} title={(b.guest || "") + (meta.done ? " — checked out" : " — still to check out")}
+                      style={{ display:"inline-flex", flexDirection:"column", alignItems:"center", gap:1, minWidth:44,
+                        background: meta.done ? sec.bg : "var(--bg2)", color: meta.done ? "var(--red)" : sec.color,
+                        border:"1px solid "+(meta.done ? "var(--red-bd)" : sec.color), borderRadius:8, padding:"5px 10px", lineHeight:1.15 }}>
+                      <span style={{ fontWeight:600, fontSize:14, fontVariantNumeric:"tabular-nums" }}>{rm}</span>
+                      <span style={{ fontSize:9.5, fontWeight:500 }}>
+                        {meta.done && <i className="ti ti-check" style={{ fontSize:10, verticalAlign:"-1px", marginRight:2 }} />}{meta.label}
+                      </span>
+                    </span>
+                  ));
+                })}
               </div>
             ) : (
               <div style={{ color:"var(--text3)", fontSize:11.5, textAlign:"center", padding:"6px 4px 14px" }}>None today</div>

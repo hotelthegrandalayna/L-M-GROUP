@@ -1979,7 +1979,7 @@ export default function Bookings() {
   function quickCheckout(bid) {
     const b = bookings.find(x => x.id === bid); if (!b) return;
     const due = Math.max(0, (b.invoiceTotal ?? b.amount ?? 0) - (parseFloat(b.advance)||0) - (parseFloat(b.restPayment)||0));
-    const updated = { ...b, status:"checked-out", dueAmount: due > 0 ? due : 0 };
+    const updated = { ...b, status:"checked-out", checkedOutOn: today, dueAmount: due > 0 ? due : 0 };
     updateBookings(bookings.map(x => x.id === bid ? updated : x));
     if (due > 0) updateRevenues([...revenues, { id: Date.now(), source:"Room Rent", amount: due, date: today, note:`${b.guest} Rm ${b.room} — collected at checkout` }]);
   }
