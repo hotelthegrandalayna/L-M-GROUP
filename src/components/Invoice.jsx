@@ -7,6 +7,7 @@ import { loadWaConfig, sendWhatsAppAlert, buildHotelPrintAlertMessage } from "..
 import { sendNtfyAlert } from "../utils/ntfy";
 import { persistHotelBookingBundle } from "../lib/hotelSupabase";
 import { stayBreakdown, baseInvoiceAmount } from "../lib/stayBreakdown";
+import { fmtDate, fmtStamp, hotelDay } from "../lib/hotelTime";
 
 const HOTEL_INFO = {
   name: "Hotel The Grand Alayna",
@@ -19,27 +20,8 @@ const HOTEL_INFO = {
 const TC_TERMS = ["চেক-ইনের সময় অতিথিদের অবশ্যই জাতীয় পরিচয়পত্র নিশ্চিত করতে হবে। সেক্ষেত্রে বাংলাদেশি নাগরিকঃ জাতীয় পরিচয়পত্র, পাসপোর্ট অথবা ড্রাইভিং লাইসেন্স এবং বিদেশি অতিথিঃ বৈধ পাসপোর্ট ও ভিসা নিশ্চিত করে চেক-ইন করতে পারবে।","দম্পতি অতিথিদের ক্ষেত্রে শুধুমাত্র প্রমান (বিবাহ সনদ/নিকাহনামা) প্রদর্শন সাপেক্ষেই চেক-ইন করতে পারবে। প্রমান প্রদানে ব্যর্থ এবং জাল সনদ ব্যবহারে অবিলম্বে বুকিং বাতিল করা হবে এবং সেক্ষেত্রে পূর্বে রিজার্ভেশন সাপেক্ষে প্রদানকৃত অর্থ থাকলে তা ফেরতযোগ্য নয়।","চেক-ইন এবং চেক-আউটের নির্ধারিত সময় যথাক্রমে দুপুর ২:০০ এবং দুপুর ১২:০০ (বুকিং এর তারিখ সাপেক্ষে)। অগ্রিম বা বিলম্বিত চেক-ইন/চেক-আউট কক্ষের প্রাপ্যতার উপর নির্ভরশীল এবং সেক্ষেত্রে অতিরিক্ত চার্জ প্রযোজ্য হতে পারে।","কাঙ্খিত কক্ষের সর্বোচ্চ অতিথি ধারণক্ষমতা সাপেক্ষেই বুকিং নিশ্চিত হবে। শুধুমাত্র নিবন্ধনকৃত অতিথিরাই কক্ষে থাকতে পারবেন এবং অতিরিক্ত গেস্ট রাতে অবস্থান করতে পারবে না।","বুকিং এর নির্ধারিত ভাড়া অবশ্যই চেক-ইন পূর্বক পরিশোধ করতে হবে এবং অথোরিটির অনুমোদন সাপেক্ষে সকল বকেয়া অবশ্যই চেক-আউট কালীন সময়ে পরিশোধ নিশ্চিত করতে হবে।","সকলের নিরাপত্তার স্বার্থে হোটেলের প্রধান প্রবেশদ্বার বন্ধের নির্ধারিত সময় রাত ১২:০০টা। উক্ত সময়ের পরে প্রধান প্রবেশদ্বার খোলার প্রয়োজন হলে অবশ্যই তা পূর্বে রিসিপশনে অবগত করতে হবে।","হোটেল কর্তৃক প্রদানকৃত সকল সামগ্রী (যেমনঃ টিভি, এসি, রিমোট, তোয়ালে, বেডশিট, কম্বল, রুমের চাবি ইত্যাদি) হোটেলের নিজস্ব সম্পত্তি। অতিথি কর্তৃক কোনো সামগ্রী হারানো বা ক্ষতিগ্রস্ত হলে উক্ত জিনিসের জন্য প্রতিস্থাপন মূল্য নেওয়া হবে।","শুধুমাত্র হোটেল কর্তৃক নির্ধারিত এলাকায় ধূমপান করা যাবে এবং উক্ত এরিয়া বাদে ধুমপান করলে জরিমানার বিধান রয়েছে। হোটেল কক্ষের ভেতরে সকল প্রকার রান্না সহ গ্যাসের সিলিন্ডার, বৈদ্যুতিক চুলা, হিটার বা এ জাতীয় সরঞ্জাম ব্যবহার সম্পূর্ণ নিষিদ্ধ।","সকল অতিথির বিশ্রামের স্বার্থে রাত ১০:০০টা থেকে সকাল ৭:০০টা সময়ে অতিরিক্ত শব্দ, উচ্চশব্দে বাদ্যসামগ্রী সহ অন্য অতিথির বিশ্রাম বিঘ্ন হয় এমন সকল আচরণ সম্পূর্ণ নিষিদ্ধ।","অতিথির সাথে আগত শিশু এবং ব্যক্তি মালিকানার সকল মালামাল ও সম্পত্তির নিরাপত্তার দায়িত্ব অতিথির উপর বর্তায় এবং উক্ত সামগ্রীর হারানো অথবা ক্ষতি সাধন হলে হোটেল কর্তপক্ষ দায়ী নয়।","পরিচালনা, হাউসকিপিং, রক্ষণাবেক্ষণ, জরুরি পরিস্থিতি এবং নিরাপত্তার স্বার্থে হোটেলের স্টাফ কক্ষে প্রবেশ করতে পারবে এবং নির্ধারিত সময় রুম ক্লিনিং এর স্বার্থে কক্ষ সাময়িক সময়ের জন্য ছেড়ে দিতে হবে।","হোটেল দ্যা গ্র্যান্ড আলায়না বাংলাদেশ সরকার কর্তৃক প্রণোদিত সকল আইনের নিকট বাধিত এবং অতিথি কর্তৃক উক্ত আইন লঙ্ঘন সাধন হলে কর্তৃপক্ষ অবিলম্বে বুকিং বাতিল এবং নিরাপত্তার স্বার্থে প্রশাসনের সহযোগিতা নিতে পারবে।","মদ্যজাতীয় পানীয় রাখা ও পান করার ক্ষেত্রে বাংলাদেশের সরকার কর্তৃক প্রণোদিত সকল আইন প্রযোজ্য হবে এবং মদ্যপান অবস্থায় কেউ বিশৃঙ্খলা সৃষ্টি করলে কর্তপক্ষ সকলের নিরাপত্তার স্বার্থে সকল ব্যবস্থা গ্রহণ করতে পারবে।","প্রতিষ্ঠানের সুনাম ও শৃঙ্খলার স্বার্থে কর্তৃপক্ষ কক্ষ বুকিং সীমিত করার অধিকার রাখে।","প্রাকৃতিক দুর্যোগ, সরকারি নিষেধাজ্ঞা, বিদ্যুৎ বিভ্রাট, ধর্মঘট সহ যেকোন জনজরুরি পরিস্থিতিতে হোটেলের নিয়ন্ত্রণের বাইরের যেকোনো কারণে হোটেল সেবা বিঘ্নিত হলে হোটেল কর্তৃপক্ষ দায়ী থাকবে না।"];
 const TC_BN    = ["১","২","৩","৪","৫","৬","৭","৮","৯","১০","১১","১২","১৩","১৪","১৫"];
 
-function fmtDate(d) {
-  if (!d) return "";
-  const p = d.split("-");
-  if (p.length !== 3) return d;
-  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-  return p[2] + " " + months[parseInt(p[1])-1] + " " + p[0];
-}
-
-// A stored moment as { date, time }. Takes either a full ISO stamp or a plain
-// "YYYY-MM-DD". The time comes back empty unless the stamp genuinely carries one,
-// so a date-only record is never printed with an invented time.
-function fmtStamp(v) {
-  if (!v) return { date:"", time:"" };
-  const s = String(v);
-  const date = fmtDate(s.slice(0, 10));
-  if (!s.includes("T")) return { date, time:"" };
-  const d = new Date(s);
-  if (isNaN(d)) return { date, time:"" };
-  return { date, time: d.toLocaleTimeString("en-GB", { hour:"2-digit", minute:"2-digit" }) };
-}
-
+// Dates and times on an invoice are the HOTEL's, never the viewer's — the owner
+// reads these from Denmark. See lib/hotelTime.js.
 function moneyH(n) { return "\u09F3" + (n||0).toLocaleString("en-IN"); }
 
 // Every room number a booking covers, in order \u2014 handles both the `multiRooms`
@@ -146,7 +128,7 @@ export function buildInvoiceHTML(b, rooms, invExtras, mode) {
   // time, so it is used only when it really is the invoice date — an invoice saved
   // on a later day keeps that day and simply shows no time.
   const invIssued = fmtStamp(
-    b.createdAt && String(b.createdAt).slice(0, 10) === invDate ? b.createdAt : invDate,
+    b.createdAt && hotelDay(b.createdAt) === invDate ? b.createdAt : invDate,
   );
 
   // "3 Nights (1 + 2 extended)" so the count on the header always explains itself.
@@ -400,8 +382,10 @@ export function buildInvoiceHTML(b, rooms, invExtras, mode) {
     const pTD = "padding:7px 10px;border-bottom:1px solid #e0f0e8;font-size:10px;";
     tableBody += secHdr("Payments Received");
     payHist.forEach(h => {
-      const pd = new Date(h.ts || h.date || "");
-      const pDate = isNaN(pd) ? "—" : pd.toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"})+(h.ts?" "+pd.toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"}):"");
+      // Was rendering in the viewer's timezone, so a payment taken at 18:48 in
+      // Sitakunda read 14:48 in Denmark. Hotel clock, for everyone.
+      const ps = fmtStamp(h.ts || h.date || "");
+      const pDate = ps.date ? ps.date + (ps.time ? " " + ps.time : "") : "—";
       const pDesc = (h.type==="service"?"Service":"Room") + " Payment — " + h.method + (h.note?" · "+h.note:"");
       tableBody += '<tr style="background:#f5fff8;">'
         + '<td style="'+pTD+'color:#555;">'+pDate+'</td>'
