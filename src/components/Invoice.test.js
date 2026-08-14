@@ -88,3 +88,55 @@ describe("RULE: single-room invoices still balance", () => {
     expect(amountAfter(html, "Total Amount")).toBe(3400);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Booking 118 as printed on 14 Aug 2026: two rooms booked for ONE night, then
+// extended twice. The invoice showed "3 Nights" against both rooms, Room 104's
+// qty x rate (3 x 2,500) did not match its own amount (2,500), a 4,500 discount
+// appeared that nobody gave, the two extensions were nowhere in the charges, and
+// the total said 5,000 while 8,000 had been collected.
+// ─────────────────────────────────────────────────────────────────────────────
+describe("RULE: an extended stay bills the original nights, then each extension", () => {
+  const b118 = {
+    id: 118, guest: "MD NURUL ALAM TAYEB", phone: "01309401048", room: "101", status: "checked-in",
+    checkin: "2026-08-13", checkout: "2026-08-16", nights: 3,
+    roomRate: 2500, acChoice: "Non-AC", baseAmount: 4000, invoiceTotal: 4000, amount: 4000,
+    discAmt: 5000, discType: "flat", advance: 4000, restPayment: 4000,
+    extraRooms: [{ number: "104", name: "Rose Valley", acChoice: "AC", rate: 2500, grossAmt: 2500, discAmt: 500, amount: 2000 }],
+    paymentHistory: [
+      { ts: "2026-08-13T11:52:59Z", amount: 4000, method: "Cash", note: "Advance paid", type: "room" },
+      { ts: "2026-08-14T13:38:13Z", amount: 2000, method: "Cash", note: "Extend stay +1 night", type: "room" },
+      { ts: "2026-08-14T13:39:25Z", amount: 2000, method: "Cash", note: "Extend stay +1 night", type: "room" },
+    ],
+  };
+  const html = buildInvoiceHTML(b118, [{ number: "101", name: "Orchid Blue" }], [], "room");
+
+  it("bills each room for the ONE night it was booked", () => {
+    expect(html).toContain("Room 101 — Orchid Blue — Accommodation (1 Night)");
+    expect(html).toContain("Room 104 — Rose Valley — Accommodation (1 Night)");
+    expect(html).not.toContain("Accommodation (3 Nights)");
+  });
+
+  it("shows both extensions as their own charge lines", () => {
+    expect(html).toContain("Stay Extension");
+    expect(html).toContain("Extension #1 — Room 101 (1 Night)");
+    expect(html).toContain("Extension #2 — Room 101 (1 Night)");
+    expect(amountAfter(html, "Extension Sub-total")).toBe(4000);
+  });
+
+  it("prints the check-out date and explains the night count", () => {
+    expect(html).toContain("Check-Out");
+    expect(html).toContain("16 Aug 2026");
+    expect(html).toContain("(1 + 2 extended)");
+  });
+
+  it("totals to the money actually collected", () => {
+    const paid = b118.paymentHistory.reduce((s, p) => s + p.amount, 0);
+    expect(amountAfter(html, "Total Amount")).toBe(paid);   // 8,000
+  });
+
+  it("no longer invents a discount the size of the extensions", () => {
+    const d = amountAfter(html, "Discount — Rm 101");
+    expect(d === null || d <= 500).toBe(true);
+  });
+});

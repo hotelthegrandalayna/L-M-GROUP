@@ -6,6 +6,7 @@ import { logEvent } from "../utils/auditLog";
 import { loadWaConfig, sendWhatsAppAlert, buildHotelPrintAlertMessage } from "../utils/whatsapp";
 import { sendNtfyAlert } from "../utils/ntfy";
 import { persistHotelBookingBundle } from "../lib/hotelSupabase";
+import { stayBreakdown, baseInvoiceAmount } from "../lib/stayBreakdown";
 
 const HOTEL_INFO = {
   name: "Hotel The Grand Alayna",
@@ -45,10 +46,19 @@ export function roomLabel(b) {
 export function buildInvoiceHTML(b, rooms, invExtras, mode) {
   if (!b) return "";
 
+  // ── The stay's real shape: original nights, then each extension on its own ──
+  // Rooms are billed for the ORIGINAL nights only. Extensions are separate lines
+  // for the money actually taken, so "3 Nights" can never appear against a room
+  // that was booked for one. See lib/stayBreakdown.js.
+  const stay        = stayBreakdown(b);
+  const roomNights  = stay.baseNights;
+  const extLines    = stay.extensions;
+  const extTotalAmt = stay.extensionTotal;
+
   // ── Calculate extras first (needed for discount inference) ─────────────────
   const extraRoomsOnly  = (b.extraRooms || []).reduce((s,r) => s + (r.amount||0), 0);
-  const primaryRate     = b.roomRate || Math.max(0, Math.round(((b.baseAmount || b.amount || 0) - extraRoomsOnly) / (b.nights || 1)));
-  const primaryAmount   = primaryRate * (b.nights || 1);
+  const primaryRate     = b.roomRate || Math.max(0, Math.round(((b.baseAmount || b.amount || 0) - extraRoomsOnly) / (roomNights || 1)));
+  const primaryAmount   = primaryRate * (roomNights || 1);
   const validExtras     = (invExtras || []).filter(x => x.desc && x.rate > 0);
   const extrasTotal     = validExtras.reduce((s,x) => s + x.qty * x.rate, 0);
   const epCharge        = (b.extraPersonCharge?.total || 0);
@@ -59,37 +69,53 @@ export function buildInvoiceHTML(b, rooms, invExtras, mode) {
   // netPrimaryRoom = invoiceTotal − services − extra rooms = discounted primary room
   // disc = primaryAmount (full rate × nights) − netPrimaryRoom
   // This works correctly even after extend stay and service charges.
-  const storedDisc     = b.discAmt || b.invoiceDiscount || 0;
-  const netPrimaryRoom = (b.invoiceTotal ?? b.amount ?? 0) - combinedExtras - extraRoomsOnly;
+  // The ORIGINAL invoice, with any extension money stripped out — otherwise an
+  // extended stay infers a discount the size of the extensions.
+  const baseInvoice    = baseInvoiceAmount(b, stay);
+  const storedDisc     = Math.max(0, (b.discAmt || b.invoiceDiscount || 0) - extLines.reduce((s, e) => s + (e.discAmt || 0), 0));
+  const netPrimaryRoom = baseInvoice - combinedExtras - extraRoomsOnly;
   const inferredDisc   = storedDisc === 0 && netPrimaryRoom > 0 && primaryAmount > netPrimaryRoom
     ? Math.max(0, Math.round(primaryAmount - netPrimaryRoom))
     : 0;
   const disc        = storedDisc || inferredDisc;
+  // NOTE: `storedDisc` is unreliable on an extended stay — every extension added
+  // its own discount into the same running total, so booking 118 carried a 5,000
+  // "discount" for a 5,000 pair of rooms. Where the base invoice can be rebuilt
+  // we work the primary room's discount out from the figures instead (below).
   // Each extra room's GROSS (before its own discount). The line items show gross and
   // then each room's discount, so the arithmetic adds up: sum(gross) − total discount
   // = the invoice total. Using the already-discounted net here would subtract the
   // extra rooms' discounts twice and make the sub-total disagree with the total.
   const extraRoomGross = er => {
     if (er.grossAmt != null) return er.grossAmt;
-    if (er.rate != null) return er.rate * (b.nights || 1);
+    if (er.rate != null) return er.rate * (roomNights || 1);
     return (er.amount || 0) + (er.discAmt || 0);
   };
   const extraRoomsGrossTotal = (b.extraRooms || []).reduce((s, r) => s + extraRoomGross(r), 0);
   const extraRoomsDisc       = (b.extraRooms || []).reduce((s, r) => s + (r.discAmt || 0), 0);
-  // The primary room's own share of the discount (total discount minus the extras')
-  const primaryDisc = Math.max(0, disc - extraRoomsDisc);
+  // The primary room's own share of the discount. Derived from the rebuilt base
+  // invoice where possible — gross for the original nights minus what the primary
+  // room actually came to — and only falling back to the stored running total.
+  const primaryDisc = netPrimaryRoom > 0
+    ? Math.max(0, Math.round(primaryAmount - netPrimaryRoom))
+    : Math.max(0, disc - extraRoomsDisc);
+  const roomsDisc     = primaryDisc + extraRoomsDisc;
   const allRoomsTotal = primaryAmount + extraRoomsGrossTotal;
-  const roomTotal   = Math.max(0, allRoomsTotal - disc);
-  const grandTotal  = Math.max(roomTotal + combinedExtras, b.invoiceTotal ?? b.amount ?? 0);
+  const roomTotal   = Math.max(0, allRoomsTotal - roomsDisc);
+  // The total is the sum of the lines: original stay + every extension + services.
+  // The stored total is NOT trusted here — when an extension fails to write its
+  // new total to the cloud, the stored figure is stale and printing it produced
+  // an invoice that disagreed with the money collected.
+  const grandTotal  = roomTotal + extTotalAmt + combinedExtras;
   // GUARD — the line items must add up to the total. This Math.max above is a safety
   // net that once HID a real bug (extra rooms printed net while the full discount was
   // subtracted again: sub-total 4,900 vs total 6,800). If they ever disagree again,
   // say so loudly instead of silently printing a wrong sub-total. See CLAUDE.md §2.
-  if (Math.abs((roomTotal + combinedExtras) - grandTotal) > 1) {
+  if (Math.abs((roomTotal + extTotalAmt + combinedExtras) - grandTotal) > 1) {
     console.warn(
       "[INVOICE MATH] line items do not add up to the total — do not trust this invoice.",
-      { bookingId: b.id, roomsGross: allRoomsTotal, discount: disc, roomTotal,
-        extras: combinedExtras, computed: roomTotal + combinedExtras, storedTotal: b.invoiceTotal ?? b.amount },
+      { bookingId: b.id, roomsGross: allRoomsTotal, discount: roomsDisc, roomTotal,
+        extensions: extTotalAmt, extras: combinedExtras, storedTotal: b.invoiceTotal ?? b.amount },
     );
   }
   const advance     = b.advance || 0;
@@ -103,6 +129,12 @@ export function buildInvoiceHTML(b, rooms, invExtras, mode) {
   // Invoice date = the day the invoice/booking was actually made (not today).
   // Prefer an explicit invoiceDate, else the booking's creation date, else today as last resort.
   const invDate = b.invoiceDate || (b.createdAt ? String(b.createdAt).slice(0, 10) : todayStr());
+
+  // "3 Nights (1 + 2 extended)" so the count on the header always explains itself.
+  const stayNightsLabel = stay.wasExtended
+    ? stay.totalNights + " Night" + (stay.totalNights > 1 ? "s" : "")
+      + "  (" + roomNights + " + " + stay.extensionNights + " extended)"
+    : stay.totalNights + " Night" + (stay.totalNights > 1 ? "s" : "");
 
   const ro = (rooms || []).find(x => x.number === b.room);
   const rName = ro && ro.name ? " — " + ro.name : "";
@@ -174,9 +206,9 @@ export function buildInvoiceHTML(b, rooms, invExtras, mode) {
               const nums = [String(b.room), ...(b.extraRooms||[]).map(r => String(r.number))];
               return mr("Rooms (" + nums.length + ")", nums.join(",  "));
             })()
-            // Check-In / Check-Out intentionally omitted here — each charge line
-            // already carries its date, so repeating them was redundant.
-            + mr("Nights",b.nights+" Night"+(b.nights>1?"s":""))
+            + mr("Check-In", fmtDate(b.checkin))
+            + mr("Check-Out", fmtDate(b.checkout) + (stay.wasExtended ? "  (extended)" : ""))
+            + mr("Nights", stayNightsLabel)
             + (function(){ const a=b.adults||b.adult||0;const c=b.children||0; if(!a&&!c)return "";
                 const g=(a?a+" Adult"+(a>1?"s":""):"")+(a&&c?", ":"")+(c?c+" Child"+(c>1?"ren":""):"");
                 return mr("Guests",g); })()
@@ -184,9 +216,9 @@ export function buildInvoiceHTML(b, rooms, invExtras, mode) {
             mr("Room","Room "+b.room+rName)
             + (rType ? mr("Room Type",rType) : "")
             + (b.acChoice ? mr("AC / Non-AC", b.acChoice==="AC" ? "❄️  AC" : "🌬️  Non-AC") : "")
-            // Check-In / Check-Out intentionally omitted here — each charge line
-            // already carries its date, so repeating them was redundant.
-            + mr("Nights",b.nights+" Night"+(b.nights>1?"s":""))
+            + mr("Check-In", fmtDate(b.checkin))
+            + mr("Check-Out", fmtDate(b.checkout) + (stay.wasExtended ? "  (extended)" : ""))
+            + mr("Nights", stayNightsLabel)
             + (function(){ const a=b.adults||b.adult||0;const c=b.children||0; if(!a&&!c)return "";
                 const g=(a?a+" Adult"+(a>1?"s":""):"")+(a&&c?", ":"")+(c?c+" Child"+(c>1?"ren":""):"");
                 return mr("Guests",g); })()
@@ -207,7 +239,7 @@ export function buildInvoiceHTML(b, rooms, invExtras, mode) {
   // With extra rooms each room shows its OWN discount line, so this row carries only
   // the primary room's share — otherwise the extras' discounts would be counted twice.
   const hasExtraRooms = (b.extraRooms || []).length > 0;
-  const dRowAmount = hasExtraRooms ? primaryDisc : disc;
+  const dRowAmount = primaryDisc;
   const discLabel = hasExtraRooms
     ? "Discount — Rm " + b.room
     : (b.discReason ? "Discount — " + b.discReason : "Discount");
@@ -217,8 +249,8 @@ export function buildInvoiceHTML(b, rooms, invExtras, mode) {
 
   const roomRow = '<tr>'
     + '<td style="padding:9px 10px;border-bottom:1px solid #eee;color:#555;font-size:11px;">'+fmtDate(b.checkin)+'</td>'
-    + '<td style="padding:9px 10px;border-bottom:1px solid #eee;color:#111;font-size:11px;font-weight:500;">Room '+b.room+rName+' — Accommodation ('+b.nights+' Night'+(b.nights>1?'s':'')+')'+(b.acChoice?' ['+b.acChoice+']':'')+'</td>'
-    + '<td style="padding:9px 10px;border-bottom:1px solid #eee;text-align:center;color:#333;font-size:11px;">'+b.nights+'</td>'
+    + '<td style="padding:9px 10px;border-bottom:1px solid #eee;color:#111;font-size:11px;font-weight:500;">Room '+b.room+rName+' — Accommodation ('+roomNights+' Night'+(roomNights>1?'s':'')+')'+(b.acChoice?' ['+b.acChoice+']':'')+'<div style="font-size:9.5px;color:#888;margin-top:2px;">'+fmtDate(stay.baseCheckin)+' → '+fmtDate(stay.baseCheckout)+'</div></td>'
+    + '<td style="padding:9px 10px;border-bottom:1px solid #eee;text-align:center;color:#333;font-size:11px;">'+roomNights+'</td>'
     + '<td style="padding:9px 10px;border-bottom:1px solid #ddd;text-align:right;color:#333;font-size:11px;">'+moneyH(primaryRate)+'</td>'
     + '<td style="padding:9px 10px;border-bottom:1px solid #ddd;text-align:right;color:#000;font-weight:700;font-size:12px;">'+moneyH(primaryAmount)+'</td>'
     + '</tr>';
@@ -255,8 +287,8 @@ export function buildInvoiceHTML(b, rooms, invExtras, mode) {
     const erDisc  = er.discAmt || 0;
     const row = '<tr>'
       + '<td style="padding:9px 10px;border-bottom:1px solid #eee;color:#555;font-size:11px;">'+fmtDate(b.checkin)+'</td>'
-      + '<td style="padding:9px 10px;border-bottom:1px solid #eee;color:#111;font-size:11px;font-weight:500;">Room '+er.number+erName+' — Accommodation ('+b.nights+' Night'+(b.nights>1?'s':'')+')'+(er.acChoice?' ['+er.acChoice+']':'')+'</td>'
-      + '<td style="padding:9px 10px;border-bottom:1px solid #eee;text-align:center;color:#333;font-size:11px;">'+b.nights+'</td>'
+      + '<td style="padding:9px 10px;border-bottom:1px solid #eee;color:#111;font-size:11px;font-weight:500;">Room '+er.number+erName+' — Accommodation ('+roomNights+' Night'+(roomNights>1?'s':'')+')'+(er.acChoice?' ['+er.acChoice+']':'')+'<div style="font-size:9.5px;color:#888;margin-top:2px;">'+fmtDate(stay.baseCheckin)+' → '+fmtDate(stay.baseCheckout)+'</div></td>'
+      + '<td style="padding:9px 10px;border-bottom:1px solid #eee;text-align:center;color:#333;font-size:11px;">'+roomNights+'</td>'
       + '<td style="padding:9px 10px;border-bottom:1px solid #ddd;text-align:right;color:#333;font-size:11px;">'+moneyH(er.rate)+'</td>'
       + '<td style="padding:9px 10px;border-bottom:1px solid #ddd;text-align:right;color:#000;font-weight:700;font-size:12px;">'+moneyH(erGross)+'</td>'
       + '</tr>';
@@ -266,6 +298,23 @@ export function buildInvoiceHTML(b, rooms, invExtras, mode) {
     return row + discRow;
   }).join("");
   const extraRoomsTotal = extraRoomsList.reduce((s,r) => s+(r.amount||0), 0);
+
+  // ── Extension rows — one line per extension, on its own dates ──────────────
+  // These used to be invisible: the extra nights were silently folded into every
+  // room's night count and the money only appeared under Payments Received.
+  const extensionRows = extLines.map((e, i) => {
+    const nightsTxt = e.nights + " Night" + (e.nights > 1 ? "s" : "");
+    const dates = (e.from && e.to) ? fmtDate(e.from) + " → " + fmtDate(e.to) : "";
+    const rate = e.nights > 0 ? Math.round(e.amount / e.nights) : e.amount;
+    return '<tr>'
+      + '<td style="padding:9px 10px;border-bottom:1px solid #eee;color:#555;font-size:11px;">'+fmtDate(e.at || e.from || b.checkin)+'</td>'
+      + '<td style="padding:9px 10px;border-bottom:1px solid #eee;color:#111;font-size:11px;font-weight:500;">Extension '+(extLines.length > 1 ? "#"+(i+1)+" " : "")+'— Room '+b.room+' ('+nightsTxt+')'
+        + (dates ? '<div style="font-size:9.5px;color:#888;margin-top:2px;">'+dates+'</div>' : '') + '</td>'
+      + '<td style="padding:9px 10px;border-bottom:1px solid #eee;text-align:center;color:#333;font-size:11px;">'+e.nights+'</td>'
+      + '<td style="padding:9px 10px;border-bottom:1px solid #ddd;text-align:right;color:#333;font-size:11px;">'+moneyH(rate)+'</td>'
+      + '<td style="padding:9px 10px;border-bottom:1px solid #ddd;text-align:right;color:#000;font-weight:700;font-size:12px;">'+moneyH(e.amount)+'</td>'
+      + '</tr>';
+  }).join("");
 
   const hasExtras = validExtras.length > 0 || epCharge > 0;
   const hasMultiRooms = extraRoomsList.length > 0;
@@ -295,13 +344,20 @@ export function buildInvoiceHTML(b, rooms, invExtras, mode) {
     return row + discRow;
   }).join("") : "";
 
+  const extSection = extensionRows
+    ? secHdr("Stay Extension" + (extLines.length > 1 ? "s" : "")) + extensionRows
+      + subTot("Extension Sub-total", extTotalAmt)
+    : "";
+
   let tableBody;
   if (isMultiRoomInv) {
-    tableBody = secHdr("Accommodation Charges") + multiRoomLineRows + subTot("Total Accommodation", grandTotal);
-  } else if (hasExtras || hasMultiRooms) {
+    tableBody = secHdr("Accommodation Charges") + multiRoomLineRows
+      + subTot("Total Accommodation", grandTotal - extTotalAmt) + extSection;
+  } else if (hasExtras || hasMultiRooms || extensionRows) {
     // Each room's discount sits directly under that room's line (dRow belongs to the
     // primary room), so every charge reads room → its discount, in order.
     tableBody = secHdr("Accommodation Charges") + roomRow + dRow + extraRoomRows + subTot("Accommodation Sub-total", roomTotal)
+      + extSection
       + (hasExtras ? secHdr("Additional Charges") + epRow + eRows + subTot("Additional Charges Sub-total", combinedExtras) : "");
   } else {
     tableBody = roomRow + dRow + extraRoomRows;
