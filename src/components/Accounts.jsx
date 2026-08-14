@@ -748,7 +748,16 @@ export default function Accounts() {
                       <div title={`Profit ${money(Math.round(profit))}`} style={{ width:16, height:bar(profit), background:profit>=0?SERIES[2]:"#c96a63", borderRadius:3 }} />
                     </div>
                     <div style={{ fontSize:10, color:"var(--text2)", fontWeight:600 }}>{monthLabel(m.month)}</div>
-                    <div style={{ fontSize:9.5, color:"var(--text3)", ...num }}>{money(Math.round(m.amount))}</div>
+                    {/* All three figures, colour-matched to their bars. They sit
+                        under the month rather than above each bar: a bar is 16px
+                        wide and an amount is nearer 44px, so above-bar labels
+                        would run into their neighbours. Stacking grows downward,
+                        so six months reads as well as three. */}
+                    <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:1, ...num }}>
+                      <span style={{ fontSize:9.5, color:"#3d6b62" }}>{money(Math.round(m.amount))}</span>
+                      <span style={{ fontSize:9.5, color:"#8f3b35" }}>{money(Math.round(cost))}</span>
+                      <span style={{ fontSize:9.5, color: profit >= 0 ? "#8a6200" : "#8f3b35" }}>{money(Math.round(profit))}</span>
+                    </div>
                   </div>
                 );
               })}
