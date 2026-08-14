@@ -5,6 +5,7 @@ import { todayStr, money, bookingConflicts, getRoomDisplayStatus, bookingCoversR
 import { buildInvoiceHTML, buildTCHtml, hotelPrint, roomLabel } from "./Invoice";
 import { NewBookingModal, InvoicePreviewModal } from "./Bookings";
 import { monthMoney } from "../lib/hotelMoney";
+import { stayExtensions } from "../lib/stayBreakdown";
 import { sendNtfyAlert } from "../utils/ntfy";
 import { hotelBusinessOnly } from "../utils/expenseType";
 import { pendingTasks, freqLabel } from "../utils/tasks";
@@ -399,8 +400,11 @@ function RoomModal({ room, onClose, onCheckout, onExtend, onCollect, onService, 
         </div>
 
         {bIn && (() => {
-          const extSum = (bIn.extensions || []).reduce((s, e) => s + (e.amount || 0), 0);
-          const extNights = (bIn.extensions || []).reduce((s, e) => s + (e.nights || 0), 0);
+          // Same recovery as the desk card — the local log is often empty after a
+          // cloud refresh, which made the popup claim a stay was never extended.
+          const extList = stayExtensions(bIn);
+          const extSum = extList.reduce((s, e) => s + (e.amount || 0), 0);
+          const extNights = extList.reduce((s, e) => s + (e.nights || 0), 0);
           const totalNow = bIn.invoiceTotal ?? bIn.amount ?? 0;
           const origTotal = Math.max(0, totalNow - extSum);
           const paidNow = (parseFloat(bIn.advance)||0) + (parseFloat(bIn.restPayment)||0) + (parseFloat(bIn.extrasAdvance)||0);
@@ -1233,7 +1237,11 @@ export default function Desk() {
   const inhouse    = bookings.filter(b => b.status === "checked-in");
   const arrivals   = bookings.filter(b => b.checkin === today && (b.status === "confirmed" || b.status === "checked-in"));
   const departures = bookings.filter(b => b.checkout === today && b.status === "checked-in");
-  const extensions = bookings.filter(b => (b.extensions || []).some(e => e.at === today));
+  // Today's extensions. The local `extensions` log does NOT survive a refresh from
+  // the cloud (there is no column for it), which is why this card kept showing 0
+  // on a day a stay had clearly been extended. stayExtensions also recovers them
+  // from the payment notes, which are synced.
+  const extensions = bookings.filter(b => stayExtensions(b).some(e => e.at === today));
   const tomorrowStr = addDaysIso(today, 1);
   const upcoming   = bookings
     .filter(b => b.status === "confirmed" && b.checkin > today)

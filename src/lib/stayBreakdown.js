@@ -47,7 +47,12 @@ export function stayExtensions(b) {
 
   // Recovered from payment notes — the only copy that survives the cloud, since
   // there is no extensions column.
-  const fromPays = (b.paymentHistory || [])
+  //
+  // IMPORTANT: extensions taken at the SAME TIME are ONE extension across several
+  // rooms, not several nights. Booking 118 was two rooms extended by one night
+  // each, recorded as two payments a minute apart; reading them as two sequential
+  // nights invented a night the guest never stayed.
+  const raw = (b.paymentHistory || [])
     .filter(p => /extend/i.test(p.note || ""))
     .map(p => {
       const m = String(p.note || "").match(/\+\s*(\d+)\s*night/i);
@@ -55,12 +60,20 @@ export function stayExtensions(b) {
         nights: m ? Math.max(1, parseInt(m[1], 10)) : 1,
         amount: n(p.amount),
         at: String(p.ts || "").slice(0, 10),
-        from: "",
-        to: "",
+        ts: String(p.ts || ""),
       };
     })
     .filter(e => e.amount > 0)
-    .sort((a, b2) => String(a.at).localeCompare(String(b2.at)));
+    .sort((a, b2) => a.ts.localeCompare(b2.ts));
+
+  // One group per day: same day = same extension event, however many rooms.
+  const groups = [];
+  raw.forEach(e => {
+    const g = groups.find(x => x.at === e.at);
+    if (g) { g.amount += e.amount; g.nights = Math.max(g.nights, e.nights); g.parts.push(e); }
+    else groups.push({ nights: e.nights, amount: e.amount, at: e.at, ts: e.ts, from: "", to: "", parts: [e] });
+  });
+  const fromPays = groups;
 
   // Walk the dates backwards from checkout so each extension can print its nights.
   let cursor = b.checkout || "";

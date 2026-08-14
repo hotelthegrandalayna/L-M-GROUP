@@ -302,18 +302,29 @@ export function buildInvoiceHTML(b, rooms, invExtras, mode) {
   // ── Extension rows — one line per extension, on its own dates ──────────────
   // These used to be invisible: the extra nights were silently folded into every
   // room's night count and the money only appeared under Payments Received.
+  // Rooms in the order they appear on the booking, so a multi-room extension can
+  // name the room each payment belongs to instead of putting them all on Room 101.
+  const allRoomNums = [String(b.room), ...(b.extraRooms || []).map(r => String(r.number))];
   const extensionRows = extLines.map((e, i) => {
     const nightsTxt = e.nights + " Night" + (e.nights > 1 ? "s" : "");
     const dates = (e.from && e.to) ? fmtDate(e.from) + " → " + fmtDate(e.to) : "";
-    const rate = e.nights > 0 ? Math.round(e.amount / e.nights) : e.amount;
-    return '<tr>'
-      + '<td style="padding:9px 10px;border-bottom:1px solid #eee;color:#555;font-size:11px;">'+fmtDate(e.at || e.from || b.checkin)+'</td>'
-      + '<td style="padding:9px 10px;border-bottom:1px solid #eee;color:#111;font-size:11px;font-weight:500;">Extension '+(extLines.length > 1 ? "#"+(i+1)+" " : "")+'— Room '+b.room+' ('+nightsTxt+')'
-        + (dates ? '<div style="font-size:9.5px;color:#888;margin-top:2px;">'+dates+'</div>' : '') + '</td>'
-      + '<td style="padding:9px 10px;border-bottom:1px solid #eee;text-align:center;color:#333;font-size:11px;">'+e.nights+'</td>'
-      + '<td style="padding:9px 10px;border-bottom:1px solid #ddd;text-align:right;color:#333;font-size:11px;">'+moneyH(rate)+'</td>'
-      + '<td style="padding:9px 10px;border-bottom:1px solid #ddd;text-align:right;color:#000;font-weight:700;font-size:12px;">'+moneyH(e.amount)+'</td>'
-      + '</tr>';
+    // One extension can cover several rooms — it is then one line per room.
+    const parts = (e.parts && e.parts.length > 1)
+      ? e.parts.map((p, k) => ({ room: allRoomNums[k] || allRoomNums[0], amount: p.amount, nights: e.nights }))
+      : [{ room: allRoomNums.length > 1 ? allRoomNums.join(", ") : allRoomNums[0], amount: e.amount, nights: e.nights }];
+    return parts.map(part => {
+      const rate = part.nights > 0 ? Math.round(part.amount / part.nights) : part.amount;
+      const label = "Extension " + (extLines.length > 1 ? "#" + (i + 1) + " " : "")
+        + "— Room " + part.room + " (" + nightsTxt + ")";
+      return '<tr>'
+        + '<td style="padding:9px 10px;border-bottom:1px solid #eee;color:#555;font-size:11px;">'+fmtDate(e.at || e.from || b.checkin)+'</td>'
+        + '<td style="padding:9px 10px;border-bottom:1px solid #eee;color:#111;font-size:11px;font-weight:500;">'+label
+          + (dates ? '<div style="font-size:9.5px;color:#888;margin-top:2px;">'+dates+'</div>' : '') + '</td>'
+        + '<td style="padding:9px 10px;border-bottom:1px solid #eee;text-align:center;color:#333;font-size:11px;">'+part.nights+'</td>'
+        + '<td style="padding:9px 10px;border-bottom:1px solid #ddd;text-align:right;color:#333;font-size:11px;">'+moneyH(rate)+'</td>'
+        + '<td style="padding:9px 10px;border-bottom:1px solid #ddd;text-align:right;color:#000;font-weight:700;font-size:12px;">'+moneyH(part.amount)+'</td>'
+        + '</tr>';
+    }).join("");
   }).join("");
 
   const hasExtras = validExtras.length > 0 || epCharge > 0;

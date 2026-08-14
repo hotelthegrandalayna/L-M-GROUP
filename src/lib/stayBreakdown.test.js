@@ -7,10 +7,13 @@ const pay = (ts, amount, note) => ({ ts, amount, method: "Cash", note, type: "ro
 
 // Exactly as it comes back from the cloud: no extensions column, so the only
 // record of the two extensions is in the payment notes.
+// The true stay: rooms 101 and 104 for one guest, 13 -> 14 Aug, then BOTH rooms
+// extended one night to 15 Aug. The two 2,000 payments a minute apart are one
+// night per room — not two nights of one room.
 const b118 = {
   id: 118, guest: "MD NURUL ALAM TAYEB", room: "101",
-  checkin: "2026-08-13", checkout: "2026-08-16", nights: 3,
-  roomRate: 2500, baseAmount: 4000, invoiceTotal: 4000, discAmt: 5000,
+  checkin: "2026-08-13", checkout: "2026-08-15", nights: 2,
+  roomRate: 2500, baseAmount: 4000, invoiceTotal: 8000, discAmt: 1000,
   extraRooms: [{ number: "104", name: "Rose Valley", acChoice: "AC", rate: 2500, grossAmt: 2500, discAmt: 500, amount: 2000 }],
   paymentHistory: [
     pay("2026-08-13T11:52:59Z", 4000, "Advance paid"),
@@ -28,26 +31,24 @@ describe("the stay that printed wrong", () => {
     expect(bd.baseCheckout).toBe("2026-08-14");
   });
 
-  it("finds both extensions from the payment notes", () => {
-    expect(bd.extensions).toHaveLength(2);
-    expect(bd.extensionNights).toBe(2);
-    expect(bd.extensionTotal).toBe(4000);
+  it("reads two rooms extended together as ONE night, not two", () => {
+    expect(bd.extensions).toHaveLength(1);
+    expect(bd.extensionNights).toBe(1);
+    expect(bd.extensionTotal).toBe(4000);          // 2,000 per room
+    expect(bd.extensions[0].parts).toHaveLength(2);
   });
 
-  it("gives each extension its own dates, in order", () => {
-    expect(bd.extensions[0]).toMatchObject({ from: "2026-08-14", to: "2026-08-15", nights: 1, amount: 2000 });
-    expect(bd.extensions[1]).toMatchObject({ from: "2026-08-15", to: "2026-08-16", nights: 1, amount: 2000 });
+  it("dates the extension to the night actually stayed", () => {
+    expect(bd.extensions[0]).toMatchObject({ from: "2026-08-14", to: "2026-08-15", nights: 1, amount: 4000 });
   });
 
   it("still adds up to the whole stay", () => {
-    expect(bd.totalNights).toBe(3);
+    expect(bd.totalNights).toBe(2);
     expect(bd.baseNights + bd.extensionNights).toBe(nightsBetween(b118.checkin, b118.checkout));
   });
 
-  it("rebuilds the original invoice even though the stored total went stale", () => {
-    // stored total (4,000) minus extensions (4,000) would be zero — the room
-    // amounts have to win, or the invoice prints nothing for the first night.
-    expect(baseInvoiceAmount(b118, bd)).toBe(4000);
+  it("rebuilds the original invoice from the room amounts", () => {
+    expect(baseInvoiceAmount(b118, bd)).toBe(4000);   // 2,000 + 2,000 for the first night
   });
 
   it("makes the invoice total match the money actually collected", () => {

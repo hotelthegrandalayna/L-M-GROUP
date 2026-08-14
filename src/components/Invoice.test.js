@@ -99,9 +99,9 @@ describe("RULE: single-room invoices still balance", () => {
 describe("RULE: an extended stay bills the original nights, then each extension", () => {
   const b118 = {
     id: 118, guest: "MD NURUL ALAM TAYEB", phone: "01309401048", room: "101", status: "checked-in",
-    checkin: "2026-08-13", checkout: "2026-08-16", nights: 3,
-    roomRate: 2500, acChoice: "Non-AC", baseAmount: 4000, invoiceTotal: 4000, amount: 4000,
-    discAmt: 5000, discType: "flat", advance: 4000, restPayment: 4000,
+    checkin: "2026-08-13", checkout: "2026-08-15", nights: 2,
+    roomRate: 2500, acChoice: "Non-AC", baseAmount: 4000, invoiceTotal: 8000, amount: 8000,
+    discAmt: 1000, discType: "flat", advance: 4000, restPayment: 4000,
     extraRooms: [{ number: "104", name: "Rose Valley", acChoice: "AC", rate: 2500, grossAmt: 2500, discAmt: 500, amount: 2000 }],
     paymentHistory: [
       { ts: "2026-08-13T11:52:59Z", amount: 4000, method: "Cash", note: "Advance paid", type: "room" },
@@ -117,17 +117,17 @@ describe("RULE: an extended stay bills the original nights, then each extension"
     expect(html).not.toContain("Accommodation (3 Nights)");
   });
 
-  it("shows both extensions as their own charge lines", () => {
+  it("shows the extension once per room, for the one night both rooms stayed", () => {
     expect(html).toContain("Stay Extension");
-    expect(html).toContain("Extension #1 — Room 101 (1 Night)");
-    expect(html).toContain("Extension #2 — Room 101 (1 Night)");
-    expect(amountAfter(html, "Extension Sub-total")).toBe(4000);
+    expect(html).toContain("Extension — Room 101 (1 Night)");
+    expect(html).toContain("Extension — Room 104 (1 Night)");
+    expect(amountAfter(html, "Extension Sub-total")).toBe(4000);   // 2,000 per room
   });
 
   it("prints the check-out date and explains the night count", () => {
     expect(html).toContain("Check-Out");
-    expect(html).toContain("16 Aug 2026");
-    expect(html).toContain("(1 + 2 extended)");
+    expect(html).toContain("15 Aug 2026");
+    expect(html).toContain("(1 + 1 extended)");
   });
 
   it("totals to the money actually collected", () => {
