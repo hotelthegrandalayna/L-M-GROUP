@@ -4,6 +4,7 @@
 // MONEY FOLLOWS THE NIGHT STAYED (see CLAUDE.md §1 and lib/hotelMoney.js).
 // ─────────────────────────────────────────────────────────────────────────────
 import { bookingMonthlyParts, bookingPaid, bookingTotal, forfeitedAllocation } from "./hotelMoney";
+import { stayBreakdown } from "./stayBreakdown";
 
 const isLive = b => b && b.status !== "cancelled";
 
@@ -49,6 +50,85 @@ export function legNightsInMonth(leg, month) {
   let n = 0;
   for (let i = 0; i < total; i++) if (localDay(leg.checkin, i).slice(0, 7) === month) n++;
   return n;
+}
+
+// ── Full house ───────────────────────────────────────────────────────────────
+// A FULL HOUSE NIGHT is one night on which every guest room was occupied.
+//
+// Counted night by night, the same basis as revenue: a two-night full house is
+// two full nights, not one event. For each of those nights every room is also
+// classified by WHY that guest was in the building, which is the part the owner
+// actually wants — a full house made of six same-day arrivals is a very
+// different night from one made of five people who were already staying.
+//
+//   arrived   — the guest checked into that room that day
+//   staying   — carried over from an earlier night, inside the original booking
+//   extension — a night that exists only because the stay was extended
+//
+// The original stay end comes from stayBreakdown, not b.checkout, because an
+// extension moves b.checkout and would otherwise disguise itself as a normal night.
+
+/** Which room numbers count towards a full house. */
+export function guestRoomNumbers(rooms = [], exclude = []) {
+  const skip = new Set((exclude || []).map(String));
+  return (rooms || []).map(r => String(r.number)).filter(n => n && !skip.has(n));
+}
+
+function nightKind(b, leg, date) {
+  if (leg.checkin === date) return "arrived";
+  const base = stayBreakdown(b).baseCheckout;
+  return base && date >= base ? "extension" : "staying";
+}
+
+/**
+ * @param {Array}  bookings
+ * @param {Array}  roomNumbers  the rooms that must ALL be occupied
+ * @param {string} month        "YYYY-MM", or blank for every month
+ */
+export function fullHouseStats(bookings = [], roomNumbers = [], month = "") {
+  const wanted = (roomNumbers || []).map(String).filter(Boolean);
+  const empty = { count: 0, arrived: 0, staying: 0, extension: 0, nights: [], roomCount: wanted.length };
+  if (!wanted.length) return empty;
+
+  // date -> room -> who is in it that night
+  const byDate = new Map();
+  (bookings || []).filter(isLive).forEach(b => {
+    roomLegs(b).forEach(leg => {
+      if (!wanted.includes(leg.number) || !leg.checkin) return;
+      const nights = Math.max(0, Math.round(
+        (new Date((leg.checkout || leg.checkin) + "T00:00:00") - new Date(leg.checkin + "T00:00:00")) / 86400000));
+      for (let i = 0; i < Math.max(1, nights); i++) {
+        const date = localDay(leg.checkin, i);
+        if (month && date.slice(0, 7) !== month) continue;
+        if (!byDate.has(date)) byDate.set(date, new Map());
+        // First booking found wins the room for that night; a double booking is a
+        // data problem, not something to count twice.
+        if (byDate.get(date).has(leg.number)) continue;
+        byDate.get(date).set(leg.number, {
+          number: leg.number, guest: b.guest || "", bookingId: b.id,
+          kind: nightKind(b, leg, date), nightNo: i + 1,
+        });
+      }
+    });
+  });
+
+  const nights = [...byDate.entries()]
+    .filter(([, rooms]) => wanted.every(n => rooms.has(n)))
+    .map(([date, rooms]) => {
+      const list = wanted.map(n => rooms.get(n));
+      const tally = k => list.filter(r => r.kind === k).length;
+      return { date, rooms: list, arrived: tally("arrived"), staying: tally("staying"), extension: tally("extension") };
+    })
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  return {
+    count: nights.length,
+    arrived:   nights.reduce((s, n) => s + n.arrived, 0),
+    staying:   nights.reduce((s, n) => s + n.staying, 0),
+    extension: nights.reduce((s, n) => s + n.extension, 0),
+    nights,
+    roomCount: wanted.length,
+  };
 }
 
 // ── Per-room performance ─────────────────────────────────────────────────────

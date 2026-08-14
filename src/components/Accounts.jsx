@@ -11,7 +11,7 @@ import AdminRooms from "./Admin/AdminRooms";
 import {
   roomStats, acStats, occupancy, discountStats, patternStats,
   revenueByDay, revenueByWeek, revenueByMonth, costByCategoryOverMonths, salaryStats,
-  weekdayStats, sourceStats, referrerStats,
+  weekdayStats, sourceStats, referrerStats, fullHouseStats, guestRoomNumbers,
 } from "../lib/accounts";
 
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -19,6 +19,16 @@ const monthLabel = m => m ? `${MONTHS[+m.slice(5,7)-1]} ${m.slice(0,4)}` : "All 
 const WEEKDAYS_SHORT = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 const WEEKDAY_FULL   = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
 const SERIES = ["#5f8f86","#c96a63","#d9a441","#7d93b5","#9b8bbf","#89a06f","#c98fa8","#b08968"];
+
+// Rooms that exist in the room list but are not let to guests, so they must not
+// be required for a "full house". Edit this if a room changes use.
+const NON_GUEST_ROOMS = ["107", "108"];
+
+const FH_KIND = {
+  arrived:   { bg:"#D6EEC6", fg:"#356010", label:"in today" },
+  staying:   { bg:"#DAD4F8", fg:"#332b7a", label:"" },
+  extension: { bg:"#FAE4A6", fg:"#6b4600", label:"extended" },
+};
 
 const card  = { background:"var(--bg2)", border:"1px solid var(--border)", borderRadius:12, padding:"13px 14px" };
 const capLbl = { fontSize:10, fontWeight:600, letterSpacing:.8, textTransform:"uppercase", color:"var(--text2)" };
@@ -30,6 +40,83 @@ function Tile({ label, value, sub, color, accent }) {
       <div style={{ fontSize:8.5, letterSpacing:.5, textTransform:"uppercase", color:accent?"#a6832c":"var(--text3)", fontWeight:600, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{label}</div>
       <div style={{ fontSize:14.5, fontWeight:600, color:color||"var(--text)", marginTop:2, ...num, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{value}</div>
       {sub && <div style={{ fontSize:9, color:"var(--text3)", marginTop:1, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{sub}</div>}
+    </div>
+  );
+}
+
+// ── Full house ───────────────────────────────────────────────────────────────
+// Closed it is a single row, because Accounts already carries a lot of panels.
+// Open it lists the nights; open a night and it names the six rooms and why each
+// guest was there. Nothing grows the page until it is asked to.
+function FullHousePanel({ stats, month }) {
+  const [open, setOpen] = useState(false);
+  const [night, setNight] = useState("");
+  const nightLabel = iso => new Date(iso + "T00:00:00")
+    .toLocaleDateString("en-GB", { weekday:"short", day:"numeric", month:"short" });
+  const composition = n => [
+    n.arrived   ? `${n.arrived} arrived`     : "",
+    n.staying   ? `${n.staying} staying`     : "",
+    n.extension ? `${n.extension} extension` : "",
+  ].filter(Boolean).join(" · ");
+
+  return (
+    <div style={{ ...card, padding:0, overflow:"hidden", marginBottom:12 }}>
+      <button type="button" onClick={() => setOpen(o => !o)}
+        style={{ display:"flex", alignItems:"center", gap:9, width:"100%", padding:"9px 12px", flexWrap:"wrap",
+          border:"none", cursor:"pointer", fontFamily:"inherit", textAlign:"left",
+          background: open ? "var(--bg4)" : "transparent" }}>
+        <i className={"ti ti-chevron-" + (open ? "down" : "right")} style={{ color:"var(--text3)", fontSize:15 }} />
+        <span style={capLbl}>Full house · all {stats.roomCount} rooms</span>
+        <span style={{ fontSize:11, color:"var(--text3)" }}>{monthLabel(month)}</span>
+        <span style={{ marginLeft:"auto", fontSize:11.5, borderRadius:20, padding:"2px 9px", ...num,
+          background: stats.count ? "#DAD4F8" : "var(--bg3)", color: stats.count ? "#332b7a" : "var(--text3)" }}>
+          {stats.count} night{stats.count === 1 ? "" : "s"}
+        </span>
+      </button>
+
+      {open && (stats.count === 0 ? (
+        <div style={{ fontSize:12, color:"var(--text3)", padding:"10px 12px", borderTop:"1px solid var(--border)" }}>
+          The house was never completely full in this period.
+        </div>
+      ) : (
+        <div style={{ maxHeight:290, overflowY:"auto" }}>
+          {stats.nights.map(n => {
+            const sel = night === n.date;
+            return (
+              <div key={n.date}>
+                <button type="button" onClick={() => setNight(sel ? "" : n.date)}
+                  style={{ display:"flex", alignItems:"center", gap:9, width:"100%", padding:"8px 12px", flexWrap:"wrap",
+                    borderTop:"1px solid var(--border)", borderLeft:"none", borderRight:"none", borderBottom:"none",
+                    cursor:"pointer", fontFamily:"inherit", textAlign:"left",
+                    background: sel ? "var(--bg3)" : "transparent" }}>
+                  <span style={{ fontSize:12, fontWeight:600, minWidth:82 }}>{nightLabel(n.date)}</span>
+                  <span style={{ fontSize:11, color:"var(--text3)" }}>{composition(n)}</span>
+                  <i className={"ti ti-chevron-" + (sel ? "down" : "right")}
+                    style={{ marginLeft:"auto", color: sel ? "#7F77DD" : "var(--border2)", fontSize:14 }} />
+                </button>
+                {sel && (
+                  <div style={{ display:"flex", gap:5, flexWrap:"wrap", padding:"9px 12px", background:"var(--bg3)" }}>
+                    {n.rooms.map(r => {
+                      const k = FH_KIND[r.kind] || FH_KIND.staying;
+                      const note = r.kind === "staying" ? `night ${r.nightNo}` : k.label;
+                      return (
+                        <span key={r.number} title={r.guest}
+                          style={{ background:k.bg, color:k.fg, borderRadius:6, padding:"4px 8px", fontSize:11,
+                            lineHeight:1.35, textAlign:"center", minWidth:52 }}>
+                          <span style={{ fontWeight:700, ...num }}>{r.number}</span><br />
+                          <span style={{ fontSize:9.5, display:"block", maxWidth:74, overflow:"hidden",
+                            textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{r.guest || "—"}</span>
+                          <span style={{ fontSize:9 }}>{note}</span>
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      ))}
     </div>
   );
 }
@@ -204,6 +291,9 @@ export default function Accounts() {
   const ac          = useMemo(() => acStats(scoped, month), [scoped, month]);
   const disc        = useMemo(() => discountStats(scoped, month), [scoped, month]);
   const pattern     = useMemo(() => patternStats(scoped, month), [scoped, month]);
+  const fullHouse   = useMemo(
+    () => fullHouseStats(scoped, guestRoomNumbers(rooms, NON_GUEST_ROOMS), month),
+    [scoped, rooms, month]);
   const salary      = useMemo(() => salaryStats(expenses, month), [expenses, month]);
   const byMonth     = useMemo(() => revenueByMonth(scoped, revenues), [scoped, revenues]);
   const expByMonth  = useMemo(() => {
@@ -348,6 +438,8 @@ export default function Accounts() {
 
       {/* ── OVERVIEW ── */}
       {tab==="overview" && (<>
+        <FullHousePanel stats={fullHouse} month={month} />
+
         {/* Revenue trend — was its own tab, now lives here */}
         <div style={{ ...card, marginBottom:12 }}>
           <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4, flexWrap:"wrap" }}>
