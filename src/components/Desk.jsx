@@ -5,7 +5,7 @@ import { todayStr, money, bookingConflicts, getRoomDisplayStatus, bookingCoversR
 import { buildInvoiceHTML, buildTCHtml, hotelPrint, roomLabel, allRoomNumbers } from "./Invoice";
 import { NewBookingModal, InvoicePreviewModal } from "./Bookings";
 import { monthMoney, forfeitedAllocation, bookingPaid } from "../lib/hotelMoney";
-import { receiptEntries } from "../lib/accounts";
+import { receiptEntries, guestRoomNumbers } from "../lib/accounts";
 import { stayExtensions } from "../lib/stayBreakdown";
 import { todaysDepartures, hasDeparted } from "../lib/departures";
 import { deviceTz } from "../lib/hotelTime";
@@ -1313,8 +1313,14 @@ export default function Desk() {
     setTaskDone(prev => ({ ...prev, [`${task.id}_${due}`]: { by: curUser || "staff", at: new Date().toISOString(), hasPhoto: false } }));
     notify(`"${task.title}" marked done ✓`, "success");
   }
-  const occ = rooms.filter(r => getRoomDisplayStatus(r, bookings, today) === "occupied").length;
-  const occPct = rooms.length ? Math.round(occ/rooms.length*100) : 0;
+  // Against the SIX real guest rooms. Counting the game zone and pray room made a
+  // completely full night read as 75%. Overflow rooms are reported beside it, not
+  // folded in, so the percentage can never exceed 100. See lib/accounts.js.
+  const guestRoomSet = new Set(guestRoomNumbers(rooms));
+  const isOccupied = r => getRoomDisplayStatus(r, bookings, today) === "occupied";
+  const occ = rooms.filter(r => guestRoomSet.has(String(r.number)) && isOccupied(r)).length;
+  const occOverflow = rooms.filter(r => !guestRoomSet.has(String(r.number)) && isOccupied(r)).length;
+  const occPct = guestRoomSet.size ? Math.round(occ/guestRoomSet.size*100) : 0;
 
   const pendingBal = bookings.filter(b => ["confirmed","checked-in"].includes(b.status)).map(b => {
     const due = getHotelDue(b);
@@ -1667,7 +1673,7 @@ export default function Desk() {
       {/* ── Stat bar ── */}
       <div style={{ display:"grid", gridTemplateColumns:isMobile ? "repeat(2,1fr)" : (curRole==="admin" ? "repeat(6,1fr)" : "repeat(4,1fr)"), gap:6, marginBottom:14 }}>
         {[
-          { label:"Occupancy",    value:occPct+"%",           sub:occ+" of "+rooms.length+" rooms", icon:"ti-percentage",    color:"var(--navy)" },
+          { label:"Occupancy",    value:occPct+"%",           sub:occ+" of "+guestRoomSet.size+" rooms"+(occOverflow ? " · +"+occOverflow+" overflow" : ""), icon:"ti-percentage",    color:"var(--navy)" },
           { label:"In-House",     value:inhouse.length,       sub:"guests staying",                  icon:"ti-users",         color:"#5b3fa0" },
           { label:"Today Revenue",value:money(dRev),          sub:"tap to see breakdown",             icon:"ti-currency-taka", color:"var(--gold2)", onClick:()=>setShowRevDetail(true) },
           curRole==="admin"

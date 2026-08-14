@@ -68,12 +68,6 @@ export function legNightsInMonth(leg, month) {
 // The original stay end comes from stayBreakdown, not b.checkout, because an
 // extension moves b.checkout and would otherwise disguise itself as a normal night.
 
-/** Which room numbers count towards a full house. */
-export function guestRoomNumbers(rooms = [], exclude = []) {
-  const skip = new Set((exclude || []).map(String));
-  return (rooms || []).map(r => String(r.number)).filter(n => n && !skip.has(n));
-}
-
 function nightKind(b, leg, date) {
   if (leg.checkin === date) return "arrived";
   const base = stayBreakdown(b).baseCheckout;
@@ -174,9 +168,28 @@ export function acStats(bookings = [], month = "") {
 }
 
 // ── Nights sold + occupancy ──────────────────────────────────────────────────
-export function nightsSold(bookings = [], month = "") {
+// Rooms that exist in the room list but are NOT let as guest rooms. 107 is the
+// game zone and 108 the pray room; they take an overflow guest when the hotel is
+// already full. The hotel is SIX rooms — counting eight made a completely full
+// night read as 75% on the Desk and dragged the monthly figure down to 20%.
+//
+// One definition, read by both the Desk and Accounts, so the app cannot hold two
+// different ideas of how big the hotel is.
+export const OVERFLOW_ROOMS = ["107", "108"];
+
+/** The real guest rooms, in order. */
+export function guestRoomNumbers(rooms = [], exclude = OVERFLOW_ROOMS) {
+  const skip = new Set((exclude || []).map(String));
+  return (rooms || []).map(r => String(r.number)).filter(n => n && !skip.has(n));
+}
+
+export function nightsSold(bookings = [], month = "", roomNumbers = null) {
   let n = 0;
-  bookings.filter(isLive).forEach(b => roomLegs(b).forEach(leg => { n += legNightsInMonth(leg, month); }));
+  const only = roomNumbers ? new Set(roomNumbers.map(String)) : null;
+  bookings.filter(isLive).forEach(b => roomLegs(b).forEach(leg => {
+    if (only && !only.has(String(leg.number))) return;
+    n += legNightsInMonth(leg, month);
+  }));
   return n;
 }
 export function daysInMonth(month) {
@@ -184,11 +197,20 @@ export function daysInMonth(month) {
   const [y, m] = month.split("-").map(Number);
   return new Date(y, m, 0).getDate();
 }
-export function occupancy(bookings, roomCount, month) {
+/**
+ * Occupancy against the REAL guest rooms.
+ * `guestRooms` is the list of lettable room numbers; nights sold in an overflow
+ * room are reported separately as `overflow` rather than folded in, so the
+ * percentage stays honest and can never exceed 100%.
+ */
+export function occupancy(bookings, guestRooms, month) {
+  const list = Array.isArray(guestRooms) ? guestRooms.map(String) : null;
+  const roomCount = list ? list.length : (parseInt(guestRooms, 10) || 0);
+  const sold = nightsSold(bookings, month, list);
+  const overflow = list ? nightsSold(bookings, month) - sold : 0;
   const avail = roomCount * daysInMonth(month);
-  if (!avail) return { sold: nightsSold(bookings, month), available: 0, pct: 0 };
-  const sold = nightsSold(bookings, month);
-  return { sold, available: avail, pct: Math.round(sold / avail * 100) };
+  if (!avail) return { sold, available: 0, pct: 0, overflow };
+  return { sold, available: avail, pct: Math.round(sold / avail * 100), overflow };
 }
 
 // ── Discounts ────────────────────────────────────────────────────────────────

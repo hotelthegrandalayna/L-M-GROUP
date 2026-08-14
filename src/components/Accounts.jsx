@@ -21,10 +21,6 @@ const WEEKDAYS_SHORT = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 const WEEKDAY_FULL   = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
 const SERIES = ["#5f8f86","#c96a63","#d9a441","#7d93b5","#9b8bbf","#89a06f","#c98fa8","#b08968"];
 
-// Rooms that exist in the room list but are not let to guests, so they must not
-// be required for a "full house". Edit this if a room changes use.
-const NON_GUEST_ROOMS = ["107", "108"];
-
 const FH_KIND = {
   arrived:   { bg:"#D6EEC6", fg:"#356010", label:"in today" },
   staying:   { bg:"#DAD4F8", fg:"#332b7a", label:"" },
@@ -392,14 +388,14 @@ export default function Accounts() {
   const allExpTotal = allPeriodExpenses.reduce((s,e) => s + (parseFloat(e.amount)||0), 0);
   const nonBizTotal = Math.max(0, allExpTotal - costTotal);
   const cashInHand  = mm.collected - costTotal - nonBizTotal;
-  const occ         = occupancy(scoped, (rooms||[]).length, month);
+  // Against the six real guest rooms, not all eight — see lib/accounts.js.
+  const guestRooms  = useMemo(() => guestRoomNumbers(rooms), [rooms]);
+  const occ         = occupancy(scoped, guestRooms, month);
   const rStats      = useMemo(() => roomStats(scoped, rooms, month), [scoped, rooms, month]);
   const ac          = useMemo(() => acStats(scoped, month), [scoped, month]);
   const disc        = useMemo(() => discountStats(scoped, month), [scoped, month]);
   const pattern     = useMemo(() => patternStats(scoped, month), [scoped, month]);
-  const fullHouse   = useMemo(
-    () => fullHouseStats(scoped, guestRoomNumbers(rooms, NON_GUEST_ROOMS), month),
-    [scoped, rooms, month]);
+  const fullHouse   = useMemo(() => fullHouseStats(scoped, guestRooms, month), [scoped, guestRooms, month]);
   const salary      = useMemo(() => salaryStats(expenses, month), [expenses, month]);
   const byMonth     = useMemo(() => revenueByMonth(scoped, revenues), [scoped, revenues]);
   const expByMonth  = useMemo(() => {
@@ -570,7 +566,8 @@ export default function Accounts() {
         <Tile label="Revenue" value={money(mm.collected)} color="#2f7d4f"
           sub={revDelta === null ? null : `${revDelta>=0?"▲":"▼"} ${Math.abs(revDelta)}% vs ${monthLabel(prevMonth)}`} />
         <Tile label="Nights sold" value={occ.sold} sub={occ.available ? `of ${occ.available}` : null} />
-        <Tile label="Occupancy" value={occ.available ? occ.pct+"%" : "—"} />
+        <Tile label="Occupancy" value={occ.available ? occ.pct+"%" : "—"}
+          sub={occ.overflow > 0 ? `+${occ.overflow} overflow night${occ.overflow===1?"":"s"}` : null} />
         <Tile label="Avg rate" value={occ.sold ? money(Math.round(mm.collected/occ.sold)) : "—"} sub="per night" />
         <Tile label="Costs" value={money(costTotal)} color="#b5322a" />
         <Tile label="Net profit" value={money(netProfit)} color={netProfit>=0?"#2f7d4f":"#b5322a"}

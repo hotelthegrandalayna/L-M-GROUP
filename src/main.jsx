@@ -4,6 +4,11 @@ import { createRoot } from 'react-dom/client';
 import App from './App';
 import './styles/app.css';
 import { startAutoUpdate } from './utils/autoUpdate';
+import { installDevWriteWatch } from './lib/devSession';
+
+// Before anything else, so it covers the very first request the app makes.
+// Does nothing outside a local dev session; compiled out of the live build.
+installDevWriteWatch();
 
 // Keep every device on the latest, data-safe build automatically.
 startAutoUpdate();

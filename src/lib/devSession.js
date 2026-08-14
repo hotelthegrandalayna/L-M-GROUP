@@ -48,3 +48,34 @@ export function blockCloudWrite(what) {
   console.info(`[dev read-only] blocked cloud write: ${what}`);
   return true;
 }
+
+/**
+ * A tripwire, not a lock. The lock above is a list of places I found; this
+ * catches anything I did not. Wraps fetch before the app mounts and shouts if a
+ * non-GET ever reaches Supabase from a dev session, so a missed write path
+ * announces itself instead of quietly altering live data.
+ *
+ * window.__cloudWrites holds any that got through, for checking after the fact.
+ */
+export function installDevWriteWatch() {
+  if (!isDevSession() || typeof window === "undefined" || window.__cloudWriteWatch) return;
+  window.__cloudWriteWatch = true;
+  window.__cloudWrites = [];
+  window.__cloudReads = 0;
+  const original = window.fetch;
+  window.fetch = function (input, init) {
+    try {
+      const url = typeof input === "string" ? input : (input && input.url) || "";
+      const method = ((init && init.method) || (input && input.method) || "GET").toUpperCase();
+      if (/supabase\.co/.test(url)) {
+        if (method === "GET") window.__cloudReads++;
+        else {
+          window.__cloudWrites.push(method + " " + url);
+          // eslint-disable-next-line no-console
+          console.error(`[dev read-only] A WRITE ESCAPED THE LOCK: ${method} ${url}`);
+        }
+      }
+    } catch { /* never let the tripwire break a request */ }
+    return original.apply(this, arguments);
+  };
+}

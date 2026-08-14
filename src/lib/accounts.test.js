@@ -98,6 +98,48 @@ describe("nights sold and occupancy", () => {
     expect(occ.sold).toBe(6);
     expect(occ.pct).toBe(Math.round(6 / 248 * 100));
   });
+
+  // The hotel is SIX rooms. 107 (game zone) and 108 (pray room) take an overflow
+  // guest when it is already full, and counting them as sellable made a
+  // completely full night read as 75% on the Desk and 20% for the month.
+  describe("only the real guest rooms count", () => {
+    const guestRooms = ["101", "102", "103", "104", "105", "106"];
+    const withOverflow = [
+      ...bookings,
+      { id: 9, guest: "Overflow", room: "107", status: "checked-out",
+        checkin: "2026-08-20", checkout: "2026-08-22", nights: 2, invoiceTotal: 2000,
+        paymentHistory: [{ ts: "2026-08-20T10:00:00Z", amount: 2000, method: "Cash" }] },
+    ];
+
+    it("measures against six rooms, not eight", () => {
+      const occ = occupancy(bookings, guestRooms, "2026-08");
+      expect(occ.available).toBe(6 * 31);
+      expect(occ.pct).toBe(Math.round(6 / 186 * 100));
+    });
+
+    it("reports overflow nights separately instead of hiding them", () => {
+      const occ = occupancy(withOverflow, guestRooms, "2026-08");
+      expect(occ.sold).toBe(6);        // guest rooms only
+      expect(occ.overflow).toBe(2);    // the two nights in 107
+    });
+
+    it("can never exceed 100% just because the overflow rooms were used", () => {
+      const everyRoomEveryNight = guestRooms.map((room, i) => ({
+        id: 200 + i, guest: "G", room, status: "checked-out",
+        checkin: "2026-09-01", checkout: "2026-10-01", nights: 30, invoiceTotal: 1000,
+      }));
+      const occ = occupancy([...everyRoomEveryNight,
+        { id: 300, guest: "X", room: "108", status: "checked-out",
+          checkin: "2026-09-05", checkout: "2026-09-07", nights: 2, invoiceTotal: 500 },
+      ], guestRooms, "2026-09");
+      expect(occ.pct).toBe(100);
+      expect(occ.overflow).toBe(2);
+    });
+
+    it("still accepts a plain room count, so older callers keep working", () => {
+      expect(occupancy(bookings, 6, "2026-08").available).toBe(6 * 31);
+    });
+  });
 });
 
 describe("discounts", () => {
