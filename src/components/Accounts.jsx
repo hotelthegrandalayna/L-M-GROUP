@@ -150,7 +150,6 @@ function BarChart({ data, compare, height = 168, isMobile }) {
   if (!data.length) return null;
   const max = Math.max(1, ...data.map(d => d.amount), ...(compare?.bars || [0]));
   const short = v => v >= 1000 ? (Math.round(v / 100) / 10).toFixed(1).replace(/\.0$/, "") + "k" : Math.round(v);
-  const step = Math.max(1, Math.ceil(data.length / 10));
   // Roughly how many columns fit a 5-character number. Two stacked numbers cost
   // height, not width, so the limit is the same either way.
   const roomForValues = data.length <= (isMobile ? 10 : 24);
@@ -198,14 +197,30 @@ function BarChart({ data, compare, height = 168, isMobile }) {
           );
         })}
       </div>
-      <div style={{ display:"flex", gap:2, marginTop:3 }}>
+      {/* EVERY period is labelled, in the same column grid as the bars — one cell
+          per bar, each centred, so a date always sits under its own column. The
+          old rule drew one label per ten columns, which dropped half the dates of
+          a short month and left nothing for the survivors to line up against. */}
+      <div style={{ display:"flex", gap:2, marginTop:4 }}>
         {data.map((d, i) => (
-          <div key={i} style={{ flex:1, minWidth:0, textAlign:"center", fontSize:8.5, color:"var(--text3)",
+          <div key={i} style={{ flex:1, minWidth:0, textAlign:"center", fontSize:8.5, ...num,
+            color: i === data.length - 1 ? "#2f7d4f" : "var(--text3)",
             whiteSpace:"nowrap", overflow:"hidden" }}>
-            {i === data.length - 1 || i % step === 0 ? d.label : ""}
+            {d.label}
           </div>
         ))}
       </div>
+      {data.some(d => d.sub) && (
+        <div style={{ display:"flex", gap:2, marginTop:1 }}>
+          {data.map((d, i) => (
+            <div key={i} style={{ flex:1, minWidth:0, textAlign:"center", fontSize:7.5,
+              color: i === data.length - 1 ? "#2f7d4f" : "var(--border2)",
+              whiteSpace:"nowrap", overflow:"hidden" }}>
+              {d.sub || ""}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
