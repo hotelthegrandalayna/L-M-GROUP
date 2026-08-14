@@ -140,12 +140,17 @@ export default function Accounts() {
         return new Set([...legacy, ...v1].map(String));
       } catch { return new Set(); }
     })();
-    const live = (bookings || []).filter(b => !deleted.has(String(b.id)) && !deleted.has(String(b.supabaseBookingId ?? "")));
+    const alive = b => !deleted.has(String(b.id)) && !deleted.has(String(b.supabaseBookingId ?? ""));
+    const live = (bookings || []).filter(alive);
     if (!allRows.length) return live;
-    const have = new Set(live.map(b => String(b.supabaseBookingId ?? b.id)));
-    const add = allRows.filter(b => !have.has(String(b.supabaseBookingId ?? b.id))
-      && !deleted.has(String(b.id)) && !deleted.has(String(b.supabaseBookingId ?? "")));
-    return add.length ? [...live, ...add] : live;
+    // THE CLOUD WINS. Reports are built from the full cloud history; the device's
+    // own copy only contributes bookings the cloud has never seen. Letting the
+    // local copy win is what made two computers report two different totals —
+    // each had its own leftovers from the 30-day sync window.
+    const cloud = allRows.filter(alive);
+    const have = new Set(cloud.map(b => String(b.supabaseBookingId ?? b.id)));
+    const localOnly = live.filter(b => !have.has(String(b.supabaseBookingId ?? b.id)));
+    return localOnly.length ? [...cloud, ...localOnly] : cloud;
   }, [bookings, allRows]);
 
   // Date range narrows the booking set when used

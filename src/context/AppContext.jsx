@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import { hasHotelSupabaseConfig, loadHotelBookingsFromSupabase, loadRoomsFromSupabase, saveRoomsToSupabase, persistHotelBookingBundle, deleteHotelBooking } from "../lib/hotelSupabase";
+import { mergeBooking } from "../lib/bookingMerge";
 import { hasSupabase, upsertRows, loadRows, saveConfig, loadConfig, deleteRow } from "../utils/supabaseSync";
 import { restoreUserPasswords } from "../utils/userPass";
 import { onRemoteChange } from "../utils/realtimeSync";
@@ -307,36 +308,22 @@ export function AppProvider({ children }) {
         const localSnap = (() => { try { return JSON.parse(localStorage.getItem('ga_bookings') || '[]'); } catch { return []; } })();
         // Companions synced via app_config — lets other devices restore spouse/group members
         const compSnap = (() => { try { return JSON.parse(localStorage.getItem('ga_companions') || '{}'); } catch { return {}; } })();
+        // ONE merge rule, shared and tested — see lib/bookingMerge.js. The cloud
+        // is the truth for money; the device only contributes payments the cloud
+        // has not seen yet, and those get pushed rather than kept locally. This is
+        // what stops two computers showing two different revenue figures.
+        const rePush = [];
         const merged = filtered.map(sb => {
           // Match by Supabase id (local ids are now collision-proof and differ
           // from the cloud serial id), falling back to a plain id match for
           // legacy bookings created before the id-collision fix.
           const loc = localSnap.find(l => String(l.supabaseBookingId ?? l.id) === String(sb.id));
           const comp = compSnap[String(sb.id)] || null;
-          if (!loc && !comp) return sb;
-          const l = loc || {};
-          return {
-            ...sb,
-            discAmt:          sb.discAmt        || l.discAmt        || 0,
-            discType:         sb.discType       || l.discType       || "",
-            discReason:       sb.discReason     || l.discReason     || "",
-            baseAmount:       sb.baseAmount     || l.baseAmount     || 0,
-            // No Supabase column — always restore from local
-            invoiceExtras:    l.invoiceExtras?.length  ? l.invoiceExtras  : (sb.invoiceExtras  || []),
-            extrasAdvance:    l.extrasAdvance != null  ? l.extrasAdvance  : (sb.extrasAdvance  || 0),
-            paymentHistory:   (Array.isArray(l.paymentHistory) && l.paymentHistory.length) ? l.paymentHistory : (Array.isArray(sb.paymentHistory) ? sb.paymentHistory : []),
-            extraPersonCharge: l.extraPersonCharge || sb.extraPersonCharge || null,
-            // Extension log has no Supabase column — always restore from local, or the
-            // month-split rule loses track of which nights were an extension.
-            extensions:       (Array.isArray(l.extensions) && l.extensions.length) ? l.extensions : (Array.isArray(sb.extensions) ? sb.extensions : []),
-            invoiceDate:      l.invoiceDate    || sb.invoiceDate    || "",
-            tcPrinted:        l.tcPrinted      || sb.tcPrinted      || false,
-            guestType:        l.guestType      || sb.guestType      || comp?.guestType || "single",
-            spouseName:       l.spouseName     || sb.spouseName     || comp?.spouseName || "",
-            spousePhone:      l.spousePhone    || sb.spousePhone    || comp?.spousePhone || "",
-            groupMembers:     l.groupMembers?.length ? l.groupMembers : (sb.groupMembers?.length ? sb.groupMembers : (comp?.groupMembers || [])),
-          };
+          const { booking, needsPush } = mergeBooking(sb, loc, comp);
+          if (needsPush) rePush.push(booking);
+          return booking;
         });
+        rePush.forEach(b => { persistHotelBookingBundle(b).catch(() => {}); });
         // Never drop local bookings that haven't reached Supabase (failed insert) —
         // keep them visible and retry the push, so a save failure can't silently
         // lose a booking on the next sync.
@@ -558,10 +545,21 @@ export function AppProvider({ children }) {
               gaRecordDeleted('bkg', l.id);
               if (l.supabaseBookingId) deleteHotelBooking(l.supabaseBookingId, l.guest_id).catch(() => {});
             });
-            setBookings(filtered);
+            // Same merge rule as the poll. Without it this path threw away the
+            // fields the cloud cannot store (invoice extras, companions), so the
+            // figures flipped every time a realtime event arrived.
+            const localSnapRt = (() => { try { return JSON.parse(localStorage.getItem('ga_bookings') || '[]'); } catch { return []; } })();
+            const compSnapRt = (() => { try { return JSON.parse(localStorage.getItem('ga_companions') || '{}'); } catch { return {}; } })();
+            const mergedRt = filtered.map(sb => {
+              const loc = localSnapRt.find(l => String(l.supabaseBookingId ?? l.id) === String(sb.id));
+              const { booking, needsPush } = mergeBooking(sb, loc, compSnapRt[String(sb.id)] || null);
+              if (needsPush) persistHotelBookingBundle(booking).catch(() => {});
+              return booking;
+            });
+            setBookings(mergedRt);
             const cutoff = new Date(); cutoff.setMonth(cutoff.getMonth() - 6);
             const cutoffStr = cutoff.toISOString().slice(0, 10);
-            try { localStorage.setItem('ga_bookings', JSON.stringify(slimForCache(filtered.filter(b => ['confirmed','checked-in'].includes(b.status) || (b.checkout && b.checkout >= cutoffStr))))); } catch {}
+            try { localStorage.setItem('ga_bookings', JSON.stringify(slimForCache(mergedRt.filter(b => ['confirmed','checked-in'].includes(b.status) || (b.checkout && b.checkout >= cutoffStr))))); } catch {}
           }).catch(() => {});
         })
         .on("postgres_changes", { event: "*", schema: "public", table: "revenues" }, () => {

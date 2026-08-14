@@ -121,12 +121,14 @@ export default function Expenses() {
   const revBookings = useMemo(() => {
     const extra = monthBookings[filterMonth || "ALL"] || [];
     if (!extra.length) return bookings;
-    const have = new Set(bookings.map(b => String(b.supabaseBookingId ?? b.id)));
     const deleted = (() => { try { return new Set(JSON.parse(localStorage.getItem('ga_deleted_booking_ids') || '[]')); } catch { return new Set(); } })();
-    const add = extra.filter(b =>
-      !have.has(String(b.supabaseBookingId ?? b.id)) &&
-      !deleted.has(String(b.id)) && !deleted.has(String(b.supabaseBookingId ?? '')));
-    return add.length ? [...bookings, ...add] : bookings;
+    const alive = b => !deleted.has(String(b.id)) && !deleted.has(String(b.supabaseBookingId ?? ''));
+    // The cloud wins, exactly as in Accounts — the device only adds bookings the
+    // cloud has never seen. Otherwise each computer reports its own leftovers.
+    const cloud = extra.filter(alive);
+    const have = new Set(cloud.map(b => String(b.supabaseBookingId ?? b.id)));
+    const localOnly = bookings.filter(b => alive(b) && !have.has(String(b.supabaseBookingId ?? b.id)));
+    return localOnly.length ? [...cloud, ...localOnly] : cloud;
   }, [bookings, monthBookings, filterMonth]);
 
   const setF = (k,v) => setForm(p => ({ ...p, [k]:v }));
