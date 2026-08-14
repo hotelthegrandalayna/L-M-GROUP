@@ -5,7 +5,7 @@ import { checkAdminPassword } from "../../utils/auth";
 import { deleteHotelBooking, deleteHotelBookings, loadHotelGuestImages, persistHotelBookingBundle, loadHotelBookingsForRange } from "../../lib/hotelSupabase";
 import { useMonthBookings, bookingMonthlyParts } from "../../lib/hotelMoney";
 import { allRoomNumbers, roomLabel, buildInvoiceHTML, buildTCHtml, hotelPrint } from "../Invoice";
-import { filterInvoices } from "../../lib/invoiceFilter";
+import { filterInvoices, invoiceShare } from "../../lib/invoiceFilter";
 import { logEvent } from "../../utils/auditLog";
 
 const STATUS_OPTS = ["All", "checked-in", "reserved", "checked-out", "cancelled"];
@@ -906,21 +906,10 @@ export default function AdminInvoices() {
   // A stay that crosses a month boundary belongs partly to each month, so when one
   // month is being viewed this returns just that month's share of the invoice.
   // With no month selected it returns the whole invoice.
-  const shareOf = useCallback((bk) => {
-    // A cancelled invoice may still be listed, but its money is NOT revenue —
-    // the revenue engine ignores cancelled bookings, so the totals must too.
-    if (bk.status === "cancelled") return { billed: 0, collected: 0, partial: false, cancelled: true };
-    if (!filterMonth) {
-      const total = bk.invoiceTotal ?? bk.amount ?? 0;
-      return { billed: total, collected: calcPaid(bk), partial: false };
-    }
-    let billed = 0, collected = 0;
-    bookingMonthlyParts(bk).forEach(p => {
-      if (p.month === filterMonth) { billed += p.billed; collected += p.collected; }
-    });
-    const full = bk.invoiceTotal ?? bk.amount ?? 0;
-    return { billed, collected, partial: Math.abs(billed - full) > 1 };
-  }, [filterMonth]);
+  // The rule lives in lib/invoiceFilter.js so this screen and reconciliation.test.js
+  // run the SAME code. When it lived here, the test had its own copy and the two
+  // silently disagreed about cancelled invoices.
+  const shareOf = useCallback((bk) => invoiceShare(bk, filterMonth), [filterMonth]);
 
   // The figures on top always describe exactly what you are looking at:
   //  · tick some rows  → only those invoices
@@ -1204,14 +1193,19 @@ export default function AdminInvoices() {
 
         {filtered.map(bk => {
           const paid    = calcPaid(bk);
-          const total   = bk.invoiceTotal ?? bk.amount ?? 0;
-          const balance = Math.max(0, total - paid);
+          const stayTotal = bk.invoiceTotal ?? bk.amount ?? 0;
+          const share   = shareOf(bk);
+          // A cancelled stay is worth what was KEPT, and nothing is owed on it.
+          // Showing the booked 4,000 with 2,800 "due" put debt in the list that
+          // nobody owes.
+          const cancelled = bk.status === "cancelled";
+          const total   = cancelled ? share.billed : stayTotal;
+          const balance = cancelled ? 0 : Math.max(0, stayTotal - paid);
           const checked = selectedIds.has(bk.id);
           const sColor  = { "checked-out": "#065f46", "checked-in": "#1e3a8a", "cancelled": "#991b1b" }[bk.status] || "#92400e";
           const sBg     = { "checked-out": "#d1fae5", "checked-in": "#dbeafe", "cancelled": "#fee2e2"  }[bk.status] || "#fef3c7";
 
           const rooms = allRoomNumbers(bk);
-          const share = shareOf(bk);
 
           // On a phone the eight-column row is 397px wider than the screen and is
           // CLIPPED, not scrollable — the whole Actions column sat off-screen and
@@ -1242,8 +1236,9 @@ export default function AdminInvoices() {
                 </div>
                 <div style={{ textAlign: "right", flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>
                   <div style={{ fontWeight: 600 }}>{fmtMoney(share.partial ? share.billed : total)}</div>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: balance > 0 ? "#b5322a" : "#2f7d4f" }}>
-                    {balance > 0 ? fmtMoney(balance) + " due" : "paid"}
+                  <div style={{ fontSize: 11, fontWeight: 600, color: cancelled ? "#8a6200" : (balance > 0 ? "#b5322a" : "#2f7d4f") }}>
+                    {cancelled ? (total > 0 ? "cancellation charge" : "refunded")
+                      : balance > 0 ? fmtMoney(balance) + " due" : "paid"}
                   </div>
                 </div>
               </div>
@@ -1295,7 +1290,12 @@ export default function AdminInvoices() {
                 {fmtMoney(share.partial ? share.billed : total)}
                 {share.partial && (
                   <div style={{ fontSize: 9.5, color: "var(--text3)", fontWeight: 400 }}>
-                    this month · of {fmtMoney(total)}
+                    this month · of {fmtMoney(stayTotal)}
+                  </div>
+                )}
+                {cancelled && (
+                  <div style={{ fontSize: 9.5, color: "#8a6200", fontWeight: 400 }}>
+                    {total > 0 ? "cancellation charge" : "refunded"}
                   </div>
                 )}
               </div>

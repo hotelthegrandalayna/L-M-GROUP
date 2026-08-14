@@ -13,7 +13,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { describe, it, expect } from "vitest";
 import { monthMoney, bookingMonthlyParts, bookingPaid } from "./hotelMoney";
-import { filterInvoices } from "./invoiceFilter";
+import { filterInvoices, invoiceListTotals as listTotals, invoiceShare } from "./invoiceFilter";
 import { paymentStats, revenueByDay, allReceiptEntries } from "./accounts";
 
 const pay = (ts, amount) => ({ ts, amount, note: "Advance paid", type: "room" });
@@ -36,18 +36,14 @@ const bookings = [
 
 // What the Invoices tab shows for a month: filter by month, then sum each row's
 // share of that month — exactly what the UI does.
+// Deliberately calls the SAME function the Invoices screen calls. A previous
+// version of this helper reimplemented the rule, so when the screen started
+// zeroing cancelled invoices the test carried on passing and the two tabs
+// disagreed by 1,200 in production.
 function invoiceListTotals(month) {
   const rows = filterInvoices(bookings, { month });
-  let billed = 0, collected = 0;
-  rows.forEach(bk => {
-    // No special case for cancelled here on purpose: bookingMonthlyParts is the
-    // ONE rule, and it already returns nothing for a cancellation that kept
-    // nothing, and only the kept deposit for one that did.
-    bookingMonthlyParts(bk).forEach(p => {
-      if (p.month === month) { billed += p.billed; collected += p.collected; }
-    });
-  });
-  return { billed, collected, count: rows.length };
+  const t = listTotals(rows, month);
+  return { billed: t.billed, collected: t.collected, count: t.count };
 }
 
 // Every taka that counts as revenue: all payments on a live booking, but only
@@ -282,6 +278,25 @@ describe("Invoices tab must reconcile with the revenue engine", () => {
 
     it("a cancellation that kept nothing still earns nothing", () => {
       expect(bookingMonthlyParts(bookings.find(b => b.id === 60))).toEqual([]);
+    });
+
+    // The bug the owner reported: Invoices read 83,900 while Accounts read
+    // 85,100 for the same August, because the Invoices screen zeroed every
+    // cancelled invoice after the engine started keeping forfeited deposits.
+    it("the Invoices tab counts the kept deposit, exactly once", () => {
+      const kept = invoiceShare(forfeited, "2026-08");
+      expect(kept).toMatchObject({ billed: 1200, collected: 1200, cancelled: true });
+    });
+
+    it("a refunded cancellation contributes nothing to the Invoices totals", () => {
+      expect(invoiceShare(bookings.find(b => b.id === 60), "2026-08"))
+        .toMatchObject({ billed: 0, collected: 0 });
+    });
+
+    it("nothing is owed on a cancelled invoice", () => {
+      // It must never look like the guest still owes the rest of the stay.
+      const s = invoiceShare(forfeited, "2026-08");
+      expect(Math.max(0, s.billed - s.collected)).toBe(0);
     });
   });
 });

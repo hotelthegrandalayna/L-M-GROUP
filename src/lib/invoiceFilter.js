@@ -1,7 +1,7 @@
 // Pure invoice search/filter logic — no React, no data loading, so it can be
 // tested exactly. Used by the Invoices tab. See CLAUDE.md §2 for the multi-room
 // rule: a search must match ANY room on a booking, not just the primary one.
-import { forfeitedAllocation } from "./hotelMoney";
+import { forfeitedAllocation, bookingMonthlyParts } from "./hotelMoney";
 
 // Every room number on a booking (both storage shapes)
 export function invoiceRooms(b) {
@@ -82,6 +82,52 @@ export function filterInvoices(bookings, opts = {}) {
     )) return false;
     return true;
   }).sort((a, b) => String(b.checkin || b.createdAt || "").localeCompare(String(a.checkin || a.createdAt || "")));
+}
+
+/**
+ * What ONE invoice contributes to the totals, for the month being viewed (or the
+ * whole stay when no month is picked).
+ *
+ * Lives here, not inside the Invoices screen, because the reconciliation test and
+ * the screen must run the SAME code. They did not: the screen zeroed every
+ * cancelled invoice while the revenue engine had started keeping forfeited
+ * deposits, so the Invoices tab sat 1,200 below Accounts for August 2026 and no
+ * test noticed, because the test had its own copy of the rule.
+ */
+export function invoiceShare(bk, month = "") {
+  if (!bk) return { billed: 0, collected: 0, partial: false, cancelled: false };
+
+  // A cancelled booking is not worth the stay that never happened — only a
+  // deposit that was kept, in the month it was taken. bookingMonthlyParts is the
+  // single rule and already returns nothing when the money was refunded.
+  if (bk.status === "cancelled") {
+    let billed = 0, collected = 0;
+    bookingMonthlyParts(bk).forEach(p => {
+      if (!month || p.month === month) { billed += p.billed; collected += p.collected; }
+    });
+    return { billed, collected, partial: false, cancelled: true };
+  }
+
+  if (!month) {
+    const total = invoiceTotal(bk);
+    return { billed: total, collected: invoicePaid(bk), partial: false, cancelled: false };
+  }
+
+  let billed = 0, collected = 0;
+  bookingMonthlyParts(bk).forEach(p => {
+    if (p.month === month) { billed += p.billed; collected += p.collected; }
+  });
+  return { billed, collected, partial: Math.abs(billed - invoiceTotal(bk)) > 1, cancelled: false };
+}
+
+/** The totals for a list of invoices — what the Invoices tab prints on top. */
+export function invoiceListTotals(rows, month = "") {
+  let billed = 0, collected = 0;
+  (rows || []).forEach(bk => {
+    const s = invoiceShare(bk, month);
+    billed += s.billed; collected += s.collected;
+  });
+  return { billed, collected, balance: Math.max(0, billed - collected), count: (rows || []).length };
 }
 
 // Summary figures for whatever is currently listed
