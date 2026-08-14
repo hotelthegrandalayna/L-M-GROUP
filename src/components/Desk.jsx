@@ -379,9 +379,11 @@ function RoomModal({ room, onClose, onCheckout, onExtend, onCollect, onService, 
           <div style={{ fontSize:9.5, fontWeight:600, color:"var(--text3)", textTransform:"uppercase", letterSpacing:.9, marginBottom:6 }}>Availability — next 7 days</div>
           <div style={{ display:"flex", gap:5 }}>
             {availStrip.slice(0, 7).map(dd => {
-              const cell = dd.state === "occupied" ? { bg:"#fdeeee", fg:"#8f2323", bd:"#e0b3b0" }
-                         : dd.state === "reserved" ? { bg:"#f0eefb", fg:"#332b7a", bd:"#c6c0ea" }
-                         : { bg:"#fff", fg:"var(--text2)", bd:"var(--border)" };
+              // Same tints as the room map (STATUS_STYLE) instead of its own washed-out
+              // copies — a reserved day was so pale it read as free.
+              const st = STATUS_STYLE[dd.state];
+              const cell = st ? { bg:st.tint, fg:st.stripTx, bd:st.dot }
+                              : { bg:"#fff", fg:"var(--text2)", bd:"var(--border)" };
               return (
                 <div key={dd.ds} title={dd.state === "free" ? "Free" : (dd.state + " · " + dd.guest)}
                   style={{ flex:1, textAlign:"center", padding:"5px 0", borderRadius:8, fontSize:11,
@@ -394,8 +396,8 @@ function RoomModal({ room, onClose, onCheckout, onExtend, onCollect, onService, 
             })}
           </div>
           <div style={{ display:"flex", gap:12, fontSize:10, color:"var(--text3)", marginTop:6 }}>
-            <span><span style={{ display:"inline-block", width:8, height:8, borderRadius:2, background:"#d98a86", verticalAlign:"0px" }} /> occupied</span>
-            <span><span style={{ display:"inline-block", width:8, height:8, borderRadius:2, background:"#a9a2e0", verticalAlign:"0px" }} /> reserved</span>
+            <span><span style={{ display:"inline-block", width:8, height:8, borderRadius:2, background:STATUS_STYLE.occupied.dot, verticalAlign:"0px" }} /> occupied</span>
+            <span><span style={{ display:"inline-block", width:8, height:8, borderRadius:2, background:STATUS_STYLE.reserved.dot, verticalAlign:"0px" }} /> reserved</span>
             <span><span style={{ display:"inline-block", width:8, height:8, borderRadius:2, background:"#fff", border:"1px solid #ccc", verticalAlign:"0px" }} /> free</span>
           </div>
         </div>
@@ -1286,7 +1288,9 @@ export default function Desk() {
 
   // Add service charge from Desk
   function handleAddService(b, desc, amt, date) {
-    const newExtra = { desc, qty:1, rate:amt, date };
+    // `addedAt` is when the charge was put on the invoice, which is not always the
+    // date it is billed for — the invoice history prints the former.
+    const newExtra = { desc, qty:1, rate:amt, date, addedAt: new Date().toISOString() };
     const extras = [...(b.invoiceExtras||[]), newExtra];
     const newTotal = (b.invoiceTotal ?? b.amount ?? 0) + amt;
     const newDue = getHotelDue(b) + amt;
@@ -1317,7 +1321,9 @@ export default function Desk() {
       restPayment: (b.restPayment || 0) + advance,
       paymentHistory: [...(b.paymentHistory||[]), ...extPayEntry],
       // Track each extension so the room popup can show original → extension → total
-      extensions: [...(b.extensions || []), { nights: extraNights, amount: extTotal, from: b.checkout, to: newCheckout, at: today }],
+      // `ts` carries the time of day so the invoice history can print it; `at` stays
+      // the plain date every other reader already expects.
+      extensions: [...(b.extensions || []), { nights: extraNights, amount: extTotal, from: b.checkout, to: newCheckout, at: today, ts: new Date().toISOString() }],
     };
 
     updateBookings(prev => prev.map(x => x.id === b.id ? updated : x));
