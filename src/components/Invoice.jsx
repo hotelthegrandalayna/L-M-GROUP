@@ -7,7 +7,16 @@ import { loadWaConfig, sendWhatsAppAlert, buildHotelPrintAlertMessage } from "..
 import { sendNtfyAlert } from "../utils/ntfy";
 import { persistHotelBookingBundle } from "../lib/hotelSupabase";
 import { stayBreakdown, baseInvoiceAmount } from "../lib/stayBreakdown";
-import { fmtDate, fmtStamp, hotelDay } from "../lib/hotelTime";
+import { fmtDate, fmtStamp, hotelDay, deviceTz } from "../lib/hotelTime";
+
+// A moment as "14 Aug 2026 18:48", on the clock of whoever recorded it. The zone
+// is marked only when it was not the hotel's own — see lib/hotelTime.js.
+function stampText(v, tz, sep) {
+  const s = fmtStamp(v, tz);
+  if (!s.date) return "";
+  if (!s.time) return s.date;
+  return s.date + (sep || " ") + s.time + (s.zone ? ' <span style="color:#b08a3c;">' + s.zone + '</span>' : "");
+}
 
 const HOTEL_INFO = {
   name: "Hotel The Grand Alayna",
@@ -127,9 +136,13 @@ export function buildInvoiceHTML(b, rooms, invExtras, mode) {
   // Date AND time of issue. createdAt is the only stored stamp carrying a clock
   // time, so it is used only when it really is the invoice date — an invoice saved
   // on a later day keeps that day and simply shows no time.
-  const invIssued = fmtStamp(
-    b.createdAt && hotelDay(b.createdAt) === invDate ? b.createdAt : invDate,
-  );
+  // The invoice date is shown on the clock of whoever raised it — Bangladesh for
+  // anything the desk makes, the owner's own zone for anything raised abroad.
+  // Bookings made before the zone was recorded fall back to the hotel's.
+  const invTz = b.createdTz || "";
+  const invIssuedTxt = b.createdAt && hotelDay(b.createdAt, invTz) === invDate
+    ? stampText(b.createdAt, invTz, " · ")
+    : fmtDate(invDate);
 
   // "3 Nights (1 + 2 extended)" so the count on the header always explains itself.
   const stayNightsLabel = stay.wasExtended
@@ -167,9 +180,7 @@ export function buildInvoiceHTML(b, rooms, invExtras, mode) {
       + '</div>'
       + '<div style="text-align:right;">'
         + '<div style="display:inline-block;border:2px solid #1a1a2e;border-radius:4px;padding:5px 16px;margin-bottom:8px;"><span style="font-family:Georgia,serif;font-size:16px;font-weight:700;color:#1a1a2e;letter-spacing:4px;">INVOICE</span></div>'
-        + '<div>' + mr("Invoice No.",invNum)
-          + mr("Date", invIssued.date + (invIssued.time ? ' <span style="color:#666;font-weight:600;">· ' + invIssued.time + '</span>' : ''))
-        + '</div>'
+        + '<div>' + mr("Invoice No.",invNum) + mr("Date", invIssuedTxt) + '</div>'
       + '</div>'
     + '</div>'
     + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:0;padding-top:12px;border-top:1px solid #e8e4dc;">'
@@ -383,9 +394,9 @@ export function buildInvoiceHTML(b, rooms, invExtras, mode) {
     tableBody += secHdr("Payments Received");
     payHist.forEach(h => {
       // Was rendering in the viewer's timezone, so a payment taken at 18:48 in
-      // Sitakunda read 14:48 in Denmark. Hotel clock, for everyone.
-      const ps = fmtStamp(h.ts || h.date || "");
-      const pDate = ps.date ? ps.date + (ps.time ? " " + ps.time : "") : "—";
+      // Sitakunda read 14:48 in Denmark. Now it reads on the clock of whoever
+      // took it, for everyone.
+      const pDate = stampText(h.ts || h.date || "", h.tz) || "—";
       const pDesc = (h.type==="service"?"Service":"Room") + " Payment — " + h.method + (h.note?" · "+h.note:"");
       tableBody += '<tr style="background:#f5fff8;">'
         + '<td style="'+pTD+'color:#555;">'+pDate+'</td>'
@@ -436,9 +447,10 @@ export function buildInvoiceHTML(b, rooms, invExtras, mode) {
   // never invented for them.
   const cLog = (b.changeLog || []);
   const histEvents = [];
-  if (b.createdAt) histEvents.push({ at:b.createdAt, what:"Invoice raised" });
+  if (b.createdAt) histEvents.push({ at:b.createdAt, tz:b.createdTz, what:"Invoice raised" });
   extLines.forEach(e => histEvents.push({
     at: e.ts || e.at,
+    tz: e.tz,
     what: "Stay extended",
     detail: e.nights + " night" + (e.nights > 1 ? "s" : "")
       + ((e.from && e.to) ? " · " + fmtDate(e.from) + " → " + fmtDate(e.to) : ""),
@@ -446,12 +458,14 @@ export function buildInvoiceHTML(b, rooms, invExtras, mode) {
   }));
   validExtras.forEach(x => histEvents.push({
     at: x.addedAt || x.date,
+    tz: x.addedTz,
     what: "Service charge added",
     detail: x.desc || "Service",
     amount: (x.qty || 1) * (x.rate || 0),
   }));
   cLog.forEach(c => histEvents.push({
     at: c.ts || c.at,
+    tz: c.tz,
     what: c.field + " changed",
     detail: (/heck|date/i).test(c.field) ? fmtDate(c.from) + " → " + fmtDate(c.to) : c.from + " → " + c.to,
     by: c.by || "staff",
@@ -464,10 +478,11 @@ export function buildInvoiceHTML(b, rooms, invExtras, mode) {
       + '<div style="border:1px solid #e0dbd2;border-radius:6px;overflow:hidden;">'
       + '<div style="background:#faf6ee;padding:6px 12px;font-size:8.5px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase;color:#8a6200;border-bottom:1px solid #eee;">Invoice History</div>'
       + histEvents.map(ev => {
-          const s = fmtStamp(ev.at);
+          const s = fmtStamp(ev.at, ev.tz);
           return '<div style="display:flex;align-items:baseline;gap:10px;padding:5px 12px;font-size:10px;color:#555;border-bottom:1px solid #f2efe8;">'
-            + '<span style="min-width:104px;color:#999;white-space:nowrap;">' + s.date
-              + (s.time ? ' <span style="color:#bbb;">' + s.time + '</span>' : '') + '</span>'
+            + '<span style="min-width:112px;color:#999;white-space:nowrap;">' + s.date
+              + (s.time ? ' <span style="color:#bbb;">' + s.time + '</span>' : '')
+              + (s.zone ? ' <span style="color:#b08a3c;">' + s.zone + '</span>' : '') + '</span>'
             + '<span style="flex:1;"><strong style="color:#333;">' + ev.what + '</strong>'
               + (ev.detail ? ' <span style="color:#777;">' + ev.detail + '</span>' : '')
               + (ev.by ? ' <span style="color:#aaa;">· by ' + ev.by + '</span>' : '')
@@ -693,7 +708,7 @@ export default function Invoice() {
 
   function addExtraRow() {
     if (!selBk) { notify("Select a booking first","error"); return; }
-    setExtras(prev => [...prev, { desc:"", qty:1, rate:0, date:todayStr(), addedAt:new Date().toISOString() }]);
+    setExtras(prev => [...prev, { desc:"", qty:1, rate:0, date:todayStr(), addedAt:new Date().toISOString(), addedTz:deviceTz() }]);
   }
   function removeExtra(i) { setExtras(prev => prev.filter((_,idx) => idx !== i)); }
   function updateExtra(i, field, val) {

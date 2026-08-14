@@ -21,6 +21,7 @@ import { sendWhatsAppAlert, buildHotelWaMessage } from "../utils/whatsapp";
 import { sendNtfyAlert } from "../utils/ntfy";
 import { logEvent } from "../utils/auditLog";
 import { persistHotelBookingBundle } from "../lib/hotelSupabase";
+import { deviceTz } from "../lib/hotelTime";
 import { buildInvoiceHTML, buildTCHtml, hotelPrint, roomLabel } from "./Invoice";
 
 export function InvoicePreviewModal({ booking, rooms, onClose, onComplete, onEdit }) {
@@ -135,7 +136,7 @@ function BookingModal({ booking, onClose }) {
     const amt = parseFloat(payAmt) || 0;
     if (amt <= 0) { notify("Enter a valid amount", "error"); return; }
     if (amt > balance + 0.01) { notify("Amount exceeds balance due", "error"); return; }
-    const entry = { ts: new Date().toISOString(), amount: amt, method: payMtd,
+    const entry = { ts: new Date().toISOString(), tz: deviceTz(), amount: amt, method: payMtd,
       txnNumber: needsTxn ? payTxn : "", note: payNote || "Payment collected", type: "room", by: curUser || "staff" };
     const newRest = (parseFloat(b.restPayment) || 0) + amt;
     const newDue = Math.max(0, invoiceTotal - (parseFloat(b.advance) || 0) - newRest);
@@ -760,7 +761,7 @@ export function NewBookingModal({ onClose, prefill, editBooking }) {
     const a   = isEdit ? (priorPaid + newPay) : adv;
     const t   = needsTxn ? txnNum.trim() : "";
     const priorHistory = isEdit ? (eb.paymentHistory || []) : [];
-    const newHistoryEntry = newPay > 0 ? [{ ts: new Date().toISOString(), amount: newPay, method, txnNumber: t, note: isEdit ? "Payment at check-in" : "Advance paid", type: "room", by: curUser || "staff" }] : [];
+    const newHistoryEntry = newPay > 0 ? [{ ts: new Date().toISOString(), tz: deviceTz(), amount: newPay, method, txnNumber: t, note: isEdit ? "Payment at check-in" : "Advance paid", type: "room", by: curUser || "staff" }] : [];
     return {
       id, guest: name.trim(), phone: phone.trim(), email: "",
       room: selRoom.number, type: selRoom.type,
@@ -792,7 +793,11 @@ export function NewBookingModal({ onClose, prefill, editBooking }) {
       spouseName: guestType === "couple" ? spouseName.trim() : "",
       spousePhone: guestType === "couple" ? spousePhone.trim() : "",
       groupMembers: guestType === "group" ? groupMembers.filter(m=>m.name.trim()||m.phone.trim()) : [],
-      createdAt: isEdit ? (eb.createdAt || new Date().toISOString()) : new Date().toISOString(), by: curUser || "staff",
+      createdAt: isEdit ? (eb.createdAt || new Date().toISOString()) : new Date().toISOString(),
+      // The invoice prints its date on the clock of whoever raised it, so the
+      // zone travels with the booking. See lib/hotelTime.js.
+      createdTz: isEdit ? (eb.createdTz || deviceTz()) : deviceTz(),
+      by: curUser || "staff",
       // Preserve cloud-sync identity so the existing rows are updated, not duplicated
       ...(isEdit ? { guest_id: eb.guest_id, supabaseBookingId: eb.supabaseBookingId ?? eb.dbBookingId, dbBookingId: eb.dbBookingId, tcPrinted: eb.tcPrinted } : {}),
     };
@@ -819,7 +824,7 @@ export function NewBookingModal({ onClose, prefill, editBooking }) {
     const a  = isEdit ? (priorPaid + newPay) : multiAdv;
     const t  = needsTxn ? txnNum.trim() : "";
     const priorHistory = isEdit ? (eb.paymentHistory || []) : [];
-    const newHistoryEntry = newPay > 0 ? [{ ts: new Date().toISOString(), amount: newPay, method, txnNumber: t, note: isEdit ? "Payment at check-in" : "Advance paid", type: "room", by: curUser || "staff" }] : [];
+    const newHistoryEntry = newPay > 0 ? [{ ts: new Date().toISOString(), tz: deviceTz(), amount: newPay, method, txnNumber: t, note: isEdit ? "Payment at check-in" : "Advance paid", type: "room", by: curUser || "staff" }] : [];
     const minCi = multiRoomData.reduce((mn, c) => c.ci < mn ? c.ci : mn, multiRoomData[0].ci);
     const maxCo = multiRoomData.reduce((mx, c) => c.co > mx ? c.co : mx, "");
     const maxNights = multiRoomData.reduce((mx, c) => c.nights > mx ? c.nights : mx, 0);
@@ -851,7 +856,11 @@ export function NewBookingModal({ onClose, prefill, editBooking }) {
       restPayment: 0, dueAmount: Math.max(0, multiTotal - a),
       paymentHistory: [...priorHistory, ...newHistoryEntry],
       guestType: guestType || "single", spouseName: "", spousePhone: "", groupMembers: [],
-      createdAt: isEdit ? (eb.createdAt || new Date().toISOString()) : new Date().toISOString(), by: curUser || "staff",
+      createdAt: isEdit ? (eb.createdAt || new Date().toISOString()) : new Date().toISOString(),
+      // The invoice prints its date on the clock of whoever raised it, so the
+      // zone travels with the booking. See lib/hotelTime.js.
+      createdTz: isEdit ? (eb.createdTz || deviceTz()) : deviceTz(),
+      by: curUser || "staff",
       ...(isEdit ? { guest_id: eb.guest_id, supabaseBookingId: eb.supabaseBookingId ?? eb.dbBookingId, dbBookingId: eb.dbBookingId, tcPrinted: eb.tcPrinted } : {}),
     };
   }

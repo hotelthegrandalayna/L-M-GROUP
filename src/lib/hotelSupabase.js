@@ -148,9 +148,12 @@ function buildBookingRow(booking, guestId) {
     // the same reason the status does: there is no column for it. A forced
     // (early) checkout keeps its booked checkout_date, so without this the
     // cloud has no record of when the room really emptied.
+    // `_tz` is the timezone of whoever raised the booking — the invoice prints its
+    // date and time on that clock, so it has to reach every other device.
     notes: (booking.status && !["confirmed","checked-in"].includes(booking.status)
       ? `[_st:${booking.status}]` : "")
       + (booking.checkedOutOn ? `[_out:${booking.checkedOutOn}]` : "")
+      + (booking.createdTz ? `[_tz:${booking.createdTz}]` : "")
       + (toText(booking.notes) || ""),
     is_reservation: (booking.status || "") === "confirmed",
     created_by: null,
@@ -213,7 +216,7 @@ function fromDbBooking(row, guest) {
     advance: toNum(row.advance_amount, 0),
     restPayment: toNum(row.rest_payment, 0),
     dueAmount: toNum(row.due_amount, 0),
-    notes: (row.notes || "").replace(/^(?:\[_st:[^\]]+\])?(?:\[_out:[^\]]+\])?/, ""),
+    notes: (row.notes || "").replace(/^(?:\[_st:[^\]]+\])?(?:\[_out:[^\]]+\])?(?:\[_tz:[^\]]+\])?/, ""),
     status: (() => {
       const m = (row.notes || "").match(/^\[_st:([^\]]+)\]/);
       if (m) return m[1];
@@ -221,6 +224,10 @@ function fromDbBooking(row, guest) {
     })(),
     checkedOutOn: (() => {
       const m = (row.notes || "").match(/^(?:\[_st:[^\]]+\])?\[_out:([^\]]+)\]/);
+      return m ? m[1] : "";
+    })(),
+    createdTz: (() => {
+      const m = (row.notes || "").match(/^(?:\[_st:[^\]]+\])?(?:\[_out:[^\]]+\])?\[_tz:([^\]]+)\]/);
       return m ? m[1] : "";
     })(),
     isReservation: Boolean(row.is_reservation),

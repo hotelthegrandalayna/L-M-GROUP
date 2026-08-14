@@ -7,6 +7,7 @@ import { NewBookingModal, InvoicePreviewModal } from "./Bookings";
 import { monthMoney } from "../lib/hotelMoney";
 import { stayExtensions } from "../lib/stayBreakdown";
 import { todaysDepartures, hasDeparted } from "../lib/departures";
+import { deviceTz } from "../lib/hotelTime";
 import { sendNtfyAlert } from "../utils/ntfy";
 import { hotelBusinessOnly } from "../utils/expenseType";
 import { pendingTasks, freqLabel } from "../utils/tasks";
@@ -206,11 +207,11 @@ function RoomModal({ room, onClose, onCheckout, onExtend, onCollect, onService, 
     const t   = ["bKash","Nagad"].includes(mtd) ? txn : "";
     const bk  = { id, guest: nm.trim(), phone: ph.trim(), room: room.number, type: room.type,
       checkin: ci, checkout: co, nights: n, amount: amt, advance: a,
-      paymentHistory: a > 0 ? [{ ts: new Date().toISOString(), amount: a, method: mtd, txnNumber: t, note: "Reservation advance", type: "room", by: curUser || "staff" }] : [],
+      paymentHistory: a > 0 ? [{ ts: new Date().toISOString(), tz: deviceTz(), amount: a, method: mtd, txnNumber: t, note: "Reservation advance", type: "room", by: curUser || "staff" }] : [],
       paymentMethod: mtd, txnNumber: t, transactionNumber: t, restPayment: 0, dueAmount: Math.max(0, amt - a), status: "confirmed", notes: nt.trim(),
       acChoice: isDual ? acChoice : undefined, roomRate,
       source: "Walk-in", adults: 2, children: 0, nationality: "", discountType: "none",
-      discountAmount: 0, createdAt: new Date().toISOString(), by: curUser || "staff" };
+      discountAmount: 0, createdAt: new Date().toISOString(), createdTz: deviceTz(), by: curUser || "staff" };
     updateBookings([...bookings, bk]);
     void persistHotelBookingBundle(bk)
       .then(({ guest, booking }) => {
@@ -1272,7 +1273,7 @@ export default function Desk() {
   // Collect payment from Desk
   function handleCollectPayment(b, amt, mtd, txn, note) {
     if (amt <= 0) { notify("Enter a valid amount","error"); return; }
-    const entry = { ts:new Date().toISOString(), amount:amt, method:mtd, txnNumber:txn||"", note:note||"", type:"room", by:curUser||"staff" };
+    const entry = { ts:new Date().toISOString(), tz:deviceTz(), amount:amt, method:mtd, txnNumber:txn||"", note:note||"", type:"room", by:curUser||"staff" };
     const updated = { ...b,
       restPayment: (b.restPayment||0) + amt,
       dueAmount: Math.max(0, getHotelDue(b) - amt),
@@ -1290,7 +1291,7 @@ export default function Desk() {
   function handleAddService(b, desc, amt, date) {
     // `addedAt` is when the charge was put on the invoice, which is not always the
     // date it is billed for — the invoice history prints the former.
-    const newExtra = { desc, qty:1, rate:amt, date, addedAt: new Date().toISOString() };
+    const newExtra = { desc, qty:1, rate:amt, date, addedAt: new Date().toISOString(), addedTz: deviceTz() };
     const extras = [...(b.invoiceExtras||[]), newExtra];
     const newTotal = (b.invoiceTotal ?? b.amount ?? 0) + amt;
     const newDue = getHotelDue(b) + amt;
@@ -1307,7 +1308,7 @@ export default function Desk() {
     const totalNights = (b.nights || 0) + extraNights;
 
     const extPayEntry = advance > 0 ? [{
-      ts: new Date().toISOString(), amount: advance, method, txnNumber: txn||"",
+      ts: new Date().toISOString(), tz: deviceTz(), amount: advance, method, txnNumber: txn||"",
       note: `Extend stay +${extraNights} night${extraNights>1?"s":""}`, type: "room", by: curUser||"staff",
     }] : [];
     const origTotal = b.invoiceTotal ?? b.amount ?? 0;
@@ -1323,7 +1324,7 @@ export default function Desk() {
       // Track each extension so the room popup can show original → extension → total
       // `ts` carries the time of day so the invoice history can print it; `at` stays
       // the plain date every other reader already expects.
-      extensions: [...(b.extensions || []), { nights: extraNights, amount: extTotal, from: b.checkout, to: newCheckout, at: today, ts: new Date().toISOString() }],
+      extensions: [...(b.extensions || []), { nights: extraNights, amount: extTotal, from: b.checkout, to: newCheckout, at: today, ts: new Date().toISOString(), tz: deviceTz() }],
     };
 
     updateBookings(prev => prev.map(x => x.id === b.id ? updated : x));
@@ -1350,7 +1351,7 @@ export default function Desk() {
     const isMulti = !!(b.isMultiRoomBooking && (b.multiRooms || []).length);
     const nights = Math.max(1, Math.round((new Date(newCo) - new Date(newCi)) / 86400000));
     const changes = [];
-    const stamp = { at: today, by: curUser || "staff", ts: new Date().toISOString() };
+    const stamp = { at: today, by: curUser || "staff", ts: new Date().toISOString(), tz: deviceTz() };
 
     // Conflict checks (exclude this booking itself)
     if (isMulti) {
