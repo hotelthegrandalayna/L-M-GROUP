@@ -1,6 +1,7 @@
 // Pure invoice search/filter logic — no React, no data loading, so it can be
 // tested exactly. Used by the Invoices tab. See CLAUDE.md §2 for the multi-room
 // rule: a search must match ANY room on a booking, not just the primary one.
+import { forfeitedAllocation } from "./hotelMoney";
 
 // Every room number on a booking (both storage shapes)
 export function invoiceRooms(b) {
@@ -18,6 +19,12 @@ export function invoiceMonth(b) {
 // otherwise a 31 Jul → 2 Aug stay earns August money but never appears in August.
 export function monthOverlap(b, month) {
   if (!month) return true;
+  // A cancelled reservation is still LISTED under the month it was booked for —
+  // the owner needs to see that it happened. If its deposit was kept, that money
+  // counts in the month it was RECEIVED (see hotelMoney.js), so the row must also
+  // appear there or the two sides of the reconciliation stop agreeing. When the
+  // two months differ the row shows in both, but only ever carries money in one.
+  if (b?.status === "cancelled" && forfeitedAllocation(b).some(a => a.month === month)) return true;
   const ci = String(b?.checkin || "");
   const co = String(b?.checkout || "");
   if (!ci) return false;

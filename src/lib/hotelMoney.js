@@ -67,6 +67,55 @@ export function bookingMonth(b) {
   return (b.checkin || b.createdAt || "").slice(0, 7);
 }
 
+// ── Forfeited deposits ───────────────────────────────────────────────────────
+// A cancelled reservation normally earns nothing. But when the guest cancels and
+// the hotel KEEPS the deposit, that money was genuinely earned and must not
+// vanish from revenue — cancelling used to delete it outright.
+//
+// There is no night stayed to follow here: the stay never happened. The only
+// honest basis is the month the money was actually received, so the kept amount
+// is taken from the booking's own payments, in order, until it runs out.
+//
+// Every screen reads these two functions, so the Desk, Accounts, Expenses & Cash
+// and the Invoices tab can never disagree about a cancellation charge.
+
+/** What this cancelled booking kept. Zero for anything not cancelled. */
+export function forfeitedAmount(b) {
+  if (!b || b.status !== "cancelled") return 0;
+  const n = parseFloat(b.forfeitedAmount);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+/** Does this booking still contribute money? */
+export function countsAsRevenue(b) {
+  return !!b && (b.status !== "cancelled" || forfeitedAmount(b) > 0);
+}
+
+/** Which payments make up the kept amount, with their month, day and method. */
+export function forfeitedAllocation(b) {
+  const kept = forfeitedAmount(b);
+  if (kept <= 0.005) return [];
+  const out = [];
+  let left = kept;
+  const pays = (b.paymentHistory || [])
+    .filter(p => p && p.ts)
+    .sort((x, y) => String(x.ts).localeCompare(String(y.ts)));
+  for (const p of pays) {
+    if (left <= 0.005) break;
+    const take = Math.min(left, parseFloat(p.amount) || 0);
+    if (take <= 0) continue;
+    out.push({ amount: take, month: String(p.ts).slice(0, 7), day: String(p.ts).slice(0, 10),
+      method: p.method || b.paymentMethod || "Cash" });
+    left -= take;
+  }
+  // Kept more than the recorded payments account for — never drop it.
+  if (left > 0.005) {
+    out.push({ amount: left, month: bookingMonth(b), day: b.checkin || "",
+      method: b.paymentMethod || "Cash" });
+  }
+  return out;
+}
+
 const inMonth = (dateStr, month) => typeof dateStr === "string" && dateStr.slice(0, 7) === month;
 
 // The month an extension's extra night belongs to: the first extra night (`from`
@@ -111,6 +160,14 @@ function nightsByMonth(ciIso, coIso) {
 // in Jul 31 and leaves Aug 2 puts the Jul-31 night in July and the Aug-1 night in
 // August. Recorded extensions keep their own exact amount and month.
 export function bookingMonthlyParts(b) {
+  // A cancelled booking contributes nothing at all, unless its deposit was kept —
+  // then it contributes exactly that, in the month it was received, and nothing
+  // of the stay that never happened.
+  if (b && b.status === "cancelled") {
+    const byMonth = new Map();
+    forfeitedAllocation(b).forEach(a => byMonth.set(a.month, (byMonth.get(a.month) || 0) + a.amount));
+    return [...byMonth.entries()].map(([month, amount]) => ({ month, billed: amount, collected: amount }));
+  }
   const logged = (b.extensions || []).map(e => ({ billed: parseFloat(e.amount) || 0, month: extensionMonth(e, b) }));
   const exts = logged.length ? logged : legacyExtensionsFromPayments(b);
   const extTotal = exts.reduce((s, e) => s + e.billed, 0);
@@ -161,12 +218,13 @@ export function bookingMonthlyParts(b) {
 }
 
 // Canonical monthly figures. `bookings` must already be de-duplicated and must
-// exclude deleted rows (useMonthBookings does this). Cancelled are ignored here.
+// exclude deleted rows (useMonthBookings does this). A cancelled booking brings
+// nothing unless its deposit was forfeited — bookingMonthlyParts is the single
+// place that decides, so there is no second rule to keep in step here.
 export function monthMoney({ bookings = [], revenues = [], expenses = [], month }) {
   let roomBilled = 0, roomCollected = 0;
   const monthB = [];
   bookings.forEach(b => {
-    if (b.status === "cancelled") return;
     let touches = false;
     bookingMonthlyParts(b).forEach(p => {
       if (p.month !== month) return;

@@ -24,7 +24,7 @@ import { persistHotelBookingBundle } from "../lib/hotelSupabase";
 import { deviceTz } from "../lib/hotelTime";
 import { buildInvoiceHTML, buildTCHtml, hotelPrint, roomLabel } from "./Invoice";
 
-export function InvoicePreviewModal({ booking, rooms, onClose, onComplete, onEdit }) {
+export function InvoicePreviewModal({ booking, rooms, onClose, onComplete, onEdit, onCancel }) {
   const html = buildInvoiceHTML(booking, rooms, booking.extras || [], "room");
   const isReservation = booking.status === "confirmed";
   const print = () => {
@@ -64,6 +64,18 @@ export function InvoicePreviewModal({ booking, rooms, onClose, onComplete, onEdi
               borderRadius:8, padding:"7px 18px", fontWeight:700, cursor:"pointer", fontSize:13 }}>
               <i className="ti ti-printer" style={{ marginRight:6 }} />Print
             </button>
+            {/* Destructive, so it sits behind a divider and stays outlined — as far
+                from Complete Check-In as the row allows. Reservations only: a guest
+                who has checked in gets checked out, not cancelled. */}
+            {isReservation && onCancel && (
+              <>
+                <span style={{ width:1, alignSelf:"stretch", background:"rgba(255,255,255,.2)" }} />
+                <button onClick={() => onCancel(booking)} style={{ background:"transparent", color:"#f0a8a8",
+                  border:"1px solid #e08a8a", borderRadius:8, padding:"7px 14px", fontWeight:700, cursor:"pointer", fontSize:13 }}>
+                  <i className="ti ti-calendar-x" style={{ marginRight:6 }} />Cancel reservation
+                </button>
+              </>
+            )}
             <button onClick={onClose} style={{ background:"rgba(255,255,255,.15)", color:"#fff",
               border:"none", borderRadius:8, padding:"7px 12px", cursor:"pointer", fontSize:16 }}>
               <i className="ti ti-x" />

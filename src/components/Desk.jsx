@@ -2,12 +2,13 @@ import { useState, useRef, useEffect, Fragment, useMemo } from "react";
 import { useApp } from "../context/AppContext";
 import useIsMobile from "../hall/useIsMobile";
 import { todayStr, money, bookingConflicts, getRoomDisplayStatus, bookingCoversRoom, roomBookingWindow, maxId, formatDate } from "../utils/helpers";
-import { buildInvoiceHTML, buildTCHtml, hotelPrint, roomLabel } from "./Invoice";
+import { buildInvoiceHTML, buildTCHtml, hotelPrint, roomLabel, allRoomNumbers } from "./Invoice";
 import { NewBookingModal, InvoicePreviewModal } from "./Bookings";
-import { monthMoney } from "../lib/hotelMoney";
+import { monthMoney, forfeitedAllocation, bookingPaid } from "../lib/hotelMoney";
 import { stayExtensions } from "../lib/stayBreakdown";
 import { todaysDepartures, hasDeparted } from "../lib/departures";
 import { deviceTz } from "../lib/hotelTime";
+import { logEvent } from "../utils/auditLog";
 import { sendNtfyAlert } from "../utils/ntfy";
 import { hotelBusinessOnly } from "../utils/expenseType";
 import { pendingTasks, freqLabel } from "../utils/tasks";
@@ -148,7 +149,7 @@ function getHotelDue(b) {
   return Math.max(0, total - paid);
 }
 
-function RoomModal({ room, onClose, onCheckout, onExtend, onCollect, onService, onInvoice, onNewBooking, onCompleteRes }) {
+function RoomModal({ room, onClose, onCheckout, onExtend, onCollect, onService, onInvoice, onNewBooking, onCompleteRes, onCancelRes }) {
   const { curUser, curRole, bookings, updateBookings, revenues, updateRevenues, notify, setActiveTab, setPendingCompleteId } = useApp();
   const today = todayStr();
 
@@ -250,14 +251,11 @@ function RoomModal({ room, onClose, onCheckout, onExtend, onCollect, onService, 
     onClose();
   }
 
+  // Hands off to the Desk's cancel dialog — the ONE place a cancellation is
+  // decided, so this path and the invoice preview cannot drift apart.
   function cancelRes(bid) {
-    if (!window.confirm("Cancel this reservation?")) return;
     const b = bookings.find(x => x.id === bid);
-    const cancelled = { ...b, status: "cancelled" };
-    updateBookings(bookings.map(x => x.id === bid ? cancelled : x));
-    updateRevenues(prev => prev.filter(r => r.bookingId !== bid && !(b && r.note && r.note.includes(b.guest) && r.note.includes("Rm "+b.room))));
-    void persistHotelBookingBundle(cancelled).catch(err => console.error("Supabase cancelRes sync failed:", err));
-    notify("Reservation cancelled and revenue reversed", "success"); onClose();
+    if (b) onCancelRes(b);
   }
 
   function chkOut(bid) {
@@ -563,6 +561,86 @@ function CheckoutModal({ b, onConfirm, onClose }) {
           <button onClick={() => onConfirm(b.id, hasBal)} style={{ padding:"10px 22px", borderRadius:8, border:"none", cursor:"pointer", fontWeight:800, fontSize:14, fontFamily:"inherit",
             background:"linear-gradient(135deg,#C62828,#7a1a1a)", color:"#fff", boxShadow:"0 3px 14px rgba(198,40,40,.4)" }}>
             <i className="ti ti-logout" /> {hasBal ? "Collect & Check Out" : "Confirm Check Out"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Cancel Reservation Modal ───────────────────────────────────────────────
+// Cancelling used to delete the deposit revenue outright, so a guest who
+// cancelled and did NOT get their money back still wiped it off the books. The
+// desk has to say which happened — the app cannot guess.
+function CancelReservationModal({ b, onConfirm, onClose }) {
+  const paid = bookingPaid(b);
+  const [keep, setKeep] = useState(true);
+  const rooms = allRoomNumbers(b).join(", ");
+
+  const Choice = ({ on, title, note, tone }) => (
+    <button type="button" onClick={() => setKeep(on)}
+      style={{ display:"flex", gap:10, alignItems:"flex-start", width:"100%", textAlign:"left", cursor:"pointer",
+        fontFamily:"inherit", padding:"11px 12px", marginBottom:8, borderRadius:8,
+        background: keep === on ? (tone === "keep" ? "var(--green-bg)" : "var(--bg3)") : "var(--bg2)",
+        border: keep === on ? "2px solid " + (tone === "keep" ? "var(--green)" : "var(--border2)") : "1px solid var(--border)" }}>
+      <span style={{ width:14, height:14, borderRadius:"50%", flexShrink:0, marginTop:2,
+        border: keep === on ? "4px solid " + (tone === "keep" ? "var(--green)" : "var(--text2)") : "1.5px solid var(--border2)" }} />
+      <span>
+        <span style={{ display:"block", fontSize:13, fontWeight:700 }}>{title}</span>
+        <span style={{ display:"block", fontSize:11.5, color:"var(--text3)", marginTop:3 }}>{note}</span>
+      </span>
+    </button>
+  );
+
+  return (
+    <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && onClose()} style={{ zIndex:10002 }}>
+      <div className="modal-box" style={{ maxWidth:460 }}>
+        <div className="modal-header">
+          <div className="modal-title"><i className="ti ti-calendar-x" style={{ color:"#C62828" }} /> Cancel Reservation</div>
+          <button className="modal-close" onClick={onClose}><i className="ti ti-x" /></button>
+        </div>
+
+        <div style={{ background:"var(--bg3)", borderRadius:10, padding:"12px 16px", marginBottom:14 }}>
+          <div style={{ fontSize:14, fontWeight:700 }}>{b.guest}</div>
+          <div style={{ fontSize:12, color:"var(--text3)", marginTop:2 }}>
+            Room{rooms.includes(",") ? "s" : ""} {rooms} · {formatDate(b.checkin)} → {formatDate(b.checkout)}
+          </div>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", marginTop:10, paddingTop:10, borderTop:"1px dashed var(--border)" }}>
+            <span style={{ fontSize:12, color:"var(--text3)" }}>Already paid</span>
+            <strong style={{ fontSize:17 }}>{money(paid)}</strong>
+          </div>
+        </div>
+
+        {paid > 0 ? (
+          <>
+            <div style={{ fontSize:10, fontWeight:700, letterSpacing:.8, textTransform:"uppercase", color:"var(--text3)", marginBottom:9 }}>
+              What happens to the {money(paid)}?
+            </div>
+            <Choice on={true}  tone="keep"   title="Keep it — cancellation charge"
+              note={"Stays in revenue for the month it was received. Guest is not refunded."} />
+            <Choice on={false} tone="refund" title="Refund it"
+              note="Reverses the revenue. The money leaves the books entirely." />
+          </>
+        ) : (
+          <div style={{ fontSize:12.5, color:"var(--text3)", marginBottom:14 }}>
+            Nothing has been paid on this reservation, so there is no money to keep or refund.
+          </div>
+        )}
+
+        <div style={{ background:"var(--bg4)", borderRadius:8, padding:"10px 12px", fontSize:11.5, color:"var(--text2)", lineHeight:1.7, marginBottom:6 }}>
+          <i className="ti ti-arrow-right" style={{ fontSize:13, verticalAlign:"-2px" }} /> Room{rooms.includes(",") ? "s" : ""} {rooms} go back on sale.<br />
+          <i className="ti ti-arrow-right" style={{ fontSize:13, verticalAlign:"-2px" }} />{" "}
+          {paid > 0 && keep
+            ? <>{money(paid)} stays in revenue as a cancellation charge.</>
+            : paid > 0 ? <>{money(paid)} is removed from revenue.</> : <>Revenue is unchanged.</>}
+        </div>
+
+        <div className="modal-actions" style={{ gap:10 }}>
+          <button className="btn" onClick={onClose}>Keep reservation</button>
+          <button onClick={() => onConfirm(b.id, paid > 0 && keep)}
+            style={{ padding:"10px 22px", borderRadius:8, border:"none", cursor:"pointer", fontWeight:800, fontSize:14, fontFamily:"inherit",
+              background:"linear-gradient(135deg,#C62828,#7a1a1a)", color:"#fff", boxShadow:"0 3px 14px rgba(198,40,40,.4)" }}>
+            <i className="ti ti-calendar-x" /> {paid > 0 && keep ? "Cancel & keep " + money(paid) : "Cancel reservation"}
           </button>
         </div>
       </div>
@@ -1163,6 +1241,7 @@ export default function Desk() {
   const [pnlRevOpen, setPnlRevOpen] = useState(false);         // revenue breakdown expanded
   const [pnlExpOpen, setPnlExpOpen] = useState(false);         // expenses breakdown expanded
   const [checkoutTarget, setCheckoutTarget] = useState(null);
+  const [cancelTarget, setCancelTarget] = useState(null);
   const [postCheckout, setPostCheckout] = useState(null);
   const [surveyBooking, setSurveyBooking] = useState(null);
   const [expandedRow, setExpandedRow] = useState(null);        // booking id of expanded in-house row
@@ -1204,7 +1283,13 @@ export default function Desk() {
   const bookingRevEntries = useMemo(() => {
     const entries = [];
     bookings.forEach(b => {
-      if (b.status === "cancelled") return;
+      // A cancelled booking brings in only its forfeited deposit — see hotelMoney.js.
+      if (b.status === "cancelled") {
+        forfeitedAllocation(b).forEach(a => entries.push({ date: a.day || b.checkin, amount: a.amount,
+          bookingId: b.id, room: b.room, method: a.method, kind: "Cancellation charge",
+          note: `cancellation charge (${a.method})` }));
+        return;
+      }
       const history = b.paymentHistory || [];
       if (history.length > 0) {
         history.forEach(p => {
@@ -1472,6 +1557,32 @@ export default function Desk() {
     }]);
     notify(`Room ${rn} marked clean ✓ — now available`, "success");
     setCleanTarget(null);
+  }
+
+  // Called from CancelReservationModal. Both cancel paths — the invoice preview
+  // and the ✕ in the room popup — come through here, so a cancellation can never
+  // behave one way in one place and another way elsewhere.
+  function doCancelReservation(bid, keepDeposit) {
+    const b = bookings.find(x => x.id === bid); if (!b) return;
+    const paid = bookingPaid(b);
+    const kept = keepDeposit ? paid : 0;
+    const cancelled = { ...b, status: "cancelled", forfeitedAmount: kept, cancelledOn: today, cancelledTz: deviceTz() };
+    updateBookings(bookings.map(x => x.id === bid ? cancelled : x));
+    // Revenue is derived from the booking itself (bookingRevEntries), so the kept
+    // amount needs no revenue row of its own. Only the old booking-linked rows go,
+    // and only when the money is actually being given back.
+    if (!keepDeposit)
+      updateRevenues(prev => prev.filter(r => r.bookingId !== bid
+        && !(r.note && r.note.includes(b.guest) && r.note.includes("Rm " + b.room))));
+    void persistHotelBookingBundle(cancelled).catch(err => console.error("Supabase cancel sync failed:", err));
+    logEvent("hotel", "reservation_cancelled",
+      `${b.guest} Rm ${allRoomNumbers(b).join(", ")} — ${kept > 0 ? "kept " + money(kept) : "refunded"}`, curUser);
+    notify(kept > 0
+      ? `Reservation cancelled — ${money(kept)} kept as a cancellation charge`
+      : "Reservation cancelled and revenue reversed", "success");
+    setCancelTarget(null);
+    setSel(null);
+    setConfirmRes(null);
   }
 
   // Called from CheckoutModal when staff confirms
@@ -1987,12 +2098,16 @@ export default function Desk() {
         onService={(b) => { setSel(null); setServiceTarget(b); }}
         onInvoice={(b) => { setSel(null); setInvoiceTarget(b); }}
         onNewBooking={(prefill) => { setSel(null); setNewBooking(prefill); }}
-        onCompleteRes={(bk) => { setSel(null); setCompleteBooking(bk); }} />}
+        onCompleteRes={(bk) => { setSel(null); setCompleteBooking(bk); }}
+        onCancelRes={(bk) => setCancelTarget(bk)} />}
       {newBooking && <NewBookingModal prefill={newBooking} onClose={() => setNewBooking(null)} />}
       {confirmRes && <InvoicePreviewModal booking={confirmRes} rooms={rooms}
         onClose={() => setConfirmRes(null)}
         onEdit={(bk) => { setConfirmRes(null); setEditResTarget(bk); }}
+        onCancel={curRole === "admin" ? (bk) => setCancelTarget(bk) : undefined}
         onComplete={(bk) => { setConfirmRes(null); setCompleteBooking(bk); }} />}
+      {cancelTarget && <CancelReservationModal b={cancelTarget} onConfirm={doCancelReservation}
+        onClose={() => setCancelTarget(null)} />}
       {completeBooking && <NewBookingModal editBooking={completeBooking} onClose={() => setCompleteBooking(null)} />}
       {editResTarget && <EditReservationModal booking={editResTarget} rooms={rooms} bookings={bookings}
         onClose={() => setEditResTarget(null)} onSave={(data) => handleEditReservation(editResTarget, data)} />}

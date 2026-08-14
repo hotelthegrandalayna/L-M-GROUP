@@ -3,7 +3,7 @@
 // All money attribution follows the same rule as the rest of the app:
 // MONEY FOLLOWS THE NIGHT STAYED (see CLAUDE.md §1 and lib/hotelMoney.js).
 // ─────────────────────────────────────────────────────────────────────────────
-import { bookingMonthlyParts, bookingPaid, bookingTotal } from "./hotelMoney";
+import { bookingMonthlyParts, bookingPaid, bookingTotal, forfeitedAllocation } from "./hotelMoney";
 
 const isLive = b => b && b.status !== "cancelled";
 
@@ -147,6 +147,15 @@ export function paymentStats(bookings = [], month = "", expenses = []) {
       const m = b.paymentMethod || "Cash";
       byMethod[m] = (byMethod[m] || 0) + bookingPaid(b);
     }
+  });
+  // A cancelled booking that kept its deposit really did take that money in, so
+  // it belongs here too — otherwise "received" would no longer tie to revenue.
+  // Only the kept part counts; anything refunded never reaches this screen.
+  bookings.filter(b => b && b.status === "cancelled").forEach(b => {
+    forfeitedAllocation(b).forEach(a => {
+      if (month && a.month !== month) return;
+      byMethod[a.method] = (byMethod[a.method] || 0) + a.amount;
+    });
   });
   const rows = Object.entries(byMethod).map(([method, amount]) => ({ method, amount }))
     .sort((a, b) => b.amount - a.amount);

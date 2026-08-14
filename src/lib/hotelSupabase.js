@@ -154,6 +154,9 @@ function buildBookingRow(booking, guestId) {
       ? `[_st:${booking.status}]` : "")
       + (booking.checkedOutOn ? `[_out:${booking.checkedOutOn}]` : "")
       + (booking.createdTz ? `[_tz:${booking.createdTz}]` : "")
+      // A forfeited deposit IS revenue. If this tag failed to travel, the money
+      // would vanish from every other device's books.
+      + (booking.forfeitedAmount > 0 ? `[_ff:${booking.forfeitedAmount}]` : "")
       + (toText(booking.notes) || ""),
     is_reservation: (booking.status || "") === "confirmed",
     created_by: null,
@@ -216,7 +219,7 @@ function fromDbBooking(row, guest) {
     advance: toNum(row.advance_amount, 0),
     restPayment: toNum(row.rest_payment, 0),
     dueAmount: toNum(row.due_amount, 0),
-    notes: (row.notes || "").replace(/^(?:\[_st:[^\]]+\])?(?:\[_out:[^\]]+\])?(?:\[_tz:[^\]]+\])?/, ""),
+    notes: (row.notes || "").replace(/^(?:\[_st:[^\]]+\])?(?:\[_out:[^\]]+\])?(?:\[_tz:[^\]]+\])?(?:\[_ff:[^\]]+\])?/, ""),
     status: (() => {
       const m = (row.notes || "").match(/^\[_st:([^\]]+)\]/);
       if (m) return m[1];
@@ -229,6 +232,10 @@ function fromDbBooking(row, guest) {
     createdTz: (() => {
       const m = (row.notes || "").match(/^(?:\[_st:[^\]]+\])?(?:\[_out:[^\]]+\])?\[_tz:([^\]]+)\]/);
       return m ? m[1] : "";
+    })(),
+    forfeitedAmount: (() => {
+      const m = (row.notes || "").match(/\[_ff:([\d.]+)\]/);
+      return m ? parseFloat(m[1]) || 0 : 0;
     })(),
     isReservation: Boolean(row.is_reservation),
     createdAt: row.created_at || "",

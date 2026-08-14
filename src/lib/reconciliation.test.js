@@ -29,6 +29,9 @@ const bookings = [
   { id: 31, guest: "July only",  room: "101", status: "checked-out", checkin: "2026-07-03", checkout: "2026-07-04", nights: 1, invoiceTotal: 1800, paymentHistory: [pay("2026-07-03T10:00:00Z", 1800)] },
   { id: 50, guest: "Long stay",  room: "104", status: "checked-out", checkin: "2026-07-28", checkout: "2026-08-03", nights: 6, invoiceTotal: 6000, paymentHistory: [pay("2026-07-28T10:00:00Z", 6000)] },
   { id: 60, guest: "Cancelled",  room: "108", status: "cancelled",   checkin: "2026-08-04", checkout: "2026-08-05", nights: 1, invoiceTotal: 9999, paymentHistory: [pay("2026-08-04T10:00:00Z", 9999)] },
+  // Cancelled but the deposit was KEPT: guest cancelled, hotel did not refund.
+  // The 1,200 is real revenue in the month it was taken; the 4,000 stay is not.
+  { id: 113, guest: "Forfeited", room: "102", status: "cancelled",   checkin: "2026-08-18", checkout: "2026-08-19", nights: 1, invoiceTotal: 4000, forfeitedAmount: 1200, paymentHistory: [pay("2026-08-10T15:31:00Z", 1200)] },
 ];
 
 // What the Invoices tab shows for a month: filter by month, then sum each row's
@@ -37,14 +40,21 @@ function invoiceListTotals(month) {
   const rows = filterInvoices(bookings, { month });
   let billed = 0, collected = 0;
   rows.forEach(bk => {
-    // Cancelled invoices are listed but contribute no money — same as the app
-    if (bk.status === "cancelled") return;
+    // No special case for cancelled here on purpose: bookingMonthlyParts is the
+    // ONE rule, and it already returns nothing for a cancellation that kept
+    // nothing, and only the kept deposit for one that did.
     bookingMonthlyParts(bk).forEach(p => {
       if (p.month === month) { billed += p.billed; collected += p.collected; }
     });
   });
   return { billed, collected, count: rows.length };
 }
+
+// Every taka that counts as revenue: all payments on a live booking, but only
+// the KEPT part of a cancelled one — the rest was refunded and left the books.
+const revenuePaid = b => b.status === "cancelled"
+  ? (b.forfeitedAmount || 0)
+  : b.paymentHistory.reduce((t, p) => t + p.amount, 0);
 
 describe("Invoices tab must reconcile with the revenue engine", () => {
   for (const month of ["2026-07", "2026-08"]) {
@@ -76,9 +86,7 @@ describe("Invoices tab must reconcile with the revenue engine", () => {
   });
 
   it("every taka lands in exactly one month across the whole data set", () => {
-    const paidTotal = bookings
-      .filter(b => b.status !== "cancelled")
-      .reduce((s, b) => s + b.paymentHistory.reduce((t, p) => t + p.amount, 0), 0);
+    const paidTotal = bookings.reduce((s, b) => s + revenuePaid(b), 0);
     const months = ["2026-07", "2026-08", "2026-09"];
     const spread = months.reduce((s, m) => s + monthMoney({ bookings, month: m }).collected, 0);
     expect(spread).toBeCloseTo(paidTotal, 2);
@@ -89,7 +97,6 @@ describe("Invoices tab must reconcile with the revenue engine", () => {
   it("ALL MONTHS equals the sum of the individual months", () => {
     const months = new Set();
     bookings.forEach(b => {
-      if (b.status === "cancelled") return;
       bookingMonthlyParts(b).forEach(p => p.month && months.add(p.month));
     });
     let billed = 0, collected = 0;
@@ -98,10 +105,8 @@ describe("Invoices tab must reconcile with the revenue engine", () => {
       billed += mm.billed; collected += mm.collected;
     });
 
-    // Every taka actually paid, across the whole data set
-    const paidTotal = bookings
-      .filter(b => b.status !== "cancelled")
-      .reduce((s, b) => s + b.paymentHistory.reduce((t, p) => t + p.amount, 0), 0);
+    // Every taka that counts as revenue, across the whole data set
+    const paidTotal = bookings.reduce((s, b) => s + revenuePaid(b), 0);
 
     expect(collected).toBeCloseTo(paidTotal, 2);
     expect(billed).toBeGreaterThanOrEqual(collected);
@@ -117,24 +122,23 @@ describe("Invoices tab must reconcile with the revenue engine", () => {
     it("all-time received (every method) equals all-time revenue collected", () => {
       const received = paymentStats(bookings, "", []).totalIn;
       const months = new Set();
-      bookings.filter(b => b.status !== "cancelled")
-        .forEach(b => bookingMonthlyParts(b).forEach(p => p.month && months.add(p.month)));
+      bookings.forEach(b => bookingMonthlyParts(b).forEach(p => p.month && months.add(p.month)));
       let collected = 0;
       months.forEach(m => { collected += monthMoney({ bookings, month: m }).collected; });
       expect(received).toBeCloseTo(collected, 2);
     });
 
-    it("all-time received equals every taka in the payment history", () => {
+    it("all-time received equals every taka that counts as revenue", () => {
       const received = paymentStats(bookings, "", []).totalIn;
-      const paid = bookings.filter(b => b.status !== "cancelled")
-        .reduce((s, b) => s + bookingPaid(b), 0);
+      const paid = bookings.reduce((s, b) =>
+        s + (b.status === "cancelled" ? (b.forfeitedAmount || 0) : bookingPaid(b)), 0);
       expect(received).toBeCloseTo(paid, 2);
     });
 
     it("the months of received money add up to the all-time figure", () => {
       const all = paymentStats(bookings, "", []).totalIn;
       const months = new Set();
-      bookings.filter(b => b.status !== "cancelled").forEach(b => {
+      bookings.forEach(b => {
         (b.paymentHistory || []).forEach(p => months.add(String(p.ts || b.checkin).slice(0, 7)));
         if (!(b.paymentHistory || []).length) months.add(String(b.checkin).slice(0, 7));
       });
@@ -193,5 +197,40 @@ describe("Invoices tab must reconcile with the revenue engine", () => {
     const rev = monthMoney({ bookings, month: "2026-08" });
     expect(rev.collected).toBeLessThan(9999 + 20000); // the 9,999 cancelled row never counts
     expect(filterInvoices(bookings, { month: "2026-08", status: "All" }).some(b => b.id === 60)).toBe(true);
+  });
+
+  // The owner's case: a reservation cancelled without a refund. Deleting that
+  // money was the old behaviour and it took real revenue off the books.
+  describe("a cancelled reservation that kept its deposit", () => {
+    const forfeited = bookings.find(b => b.id === 113);
+
+    it("keeps exactly the deposit as revenue — never the whole stay", () => {
+      const parts = bookingMonthlyParts(forfeited);
+      expect(parts).toHaveLength(1);
+      expect(parts[0]).toEqual({ month: "2026-08", billed: 1200, collected: 1200 });
+    });
+
+    it("counts in the month the money was received, not the month of the stay", () => {
+      // Paid 10 Aug for an 18 Aug booking. The stay never happened, so the only
+      // honest basis is when the money actually came in.
+      expect(bookingMonthlyParts(forfeited)[0].month).toBe("2026-08");
+    });
+
+    it("appears on the Invoices tab in that same month, so both sides agree", () => {
+      expect(filterInvoices(bookings, { month: "2026-08" }).some(b => b.id === 113)).toBe(true);
+      const list = invoiceListTotals("2026-08");
+      const rev = monthMoney({ bookings, month: "2026-08" });
+      expect(list.collected).toBeCloseTo(rev.collected, 2);
+    });
+
+    it("shows up in money received, so Accounts still ties to revenue", () => {
+      const aug = paymentStats(bookings, "2026-08", []).totalIn;
+      const without = paymentStats(bookings.filter(b => b.id !== 113), "2026-08", []).totalIn;
+      expect(aug - without).toBeCloseTo(1200, 2);
+    });
+
+    it("a cancellation that kept nothing still earns nothing", () => {
+      expect(bookingMonthlyParts(bookings.find(b => b.id === 60))).toEqual([]);
+    });
   });
 });

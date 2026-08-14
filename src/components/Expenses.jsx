@@ -2,7 +2,7 @@ import { useState, useMemo, useRef, useEffect } from "react";
 import { useApp } from "../context/AppContext";
 import { todayStr, money } from "../utils/helpers";
 import { loadHotelBookingsForMonth, loadHotelBookingsForRange, hasHotelSupabaseConfig } from "../lib/hotelSupabase";
-import { monthMoney, bookingMonthlyParts } from "../lib/hotelMoney";
+import { monthMoney, bookingMonthlyParts, forfeitedAllocation } from "../lib/hotelMoney";
 import { deleteRow, hasSupabase } from "../utils/supabaseSync";
 import { gaRecordDeleted } from "../context/AppContext";
 import { hotelExpenseType } from "../utils/expenseType";
@@ -144,7 +144,11 @@ export default function Expenses() {
   const allRevEntries = useMemo(() => {
     const entries = [];
     revBookings.forEach(b => {
-      if (b.status === "cancelled") return;
+      // A cancelled booking brings in only what it kept — see hotelMoney.js.
+      if (b.status === "cancelled") {
+        forfeitedAllocation(b).forEach(a => entries.push({ date: a.day || b.checkin, amount: a.amount }));
+        return;
+      }
       const history = b.paymentHistory || [];
       if (history.length > 0) {
         history.forEach(p => {
@@ -171,7 +175,7 @@ export default function Expenses() {
     if (!filterMonth) {
       const months = new Set();
       revBookings.forEach(b => {
-        if (!b || b.status === "cancelled") return;
+        if (!b) return;
         bookingMonthlyParts(b).forEach(p => p.month && months.add(p.month));
       });
       (revenues || []).forEach(r => {
