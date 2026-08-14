@@ -30,6 +30,16 @@ const FH_KIND = {
   extension: { bg:"#FAE4A6", fg:"#6b4600", label:"extended" },
 };
 
+// How many days of a month to draw: all of them, except the month in progress,
+// which stops at today. A future day is not a day that earned nothing.
+function daysShownIn(month) {
+  const [yy, mm] = month.split("-").map(Number);
+  const inMonth = new Date(yy, mm, 0).getDate();
+  const now = new Date();
+  const isCurrent = now.getFullYear() === yy && now.getMonth() + 1 === mm;
+  return isCurrent ? Math.min(inMonth, now.getDate()) : inMonth;
+}
+
 const card  = { background:"var(--bg2)", border:"1px solid var(--border)", borderRadius:12, padding:"13px 14px" };
 const capLbl = { fontSize:10, fontWeight:600, letterSpacing:.8, textTransform:"uppercase", color:"var(--text2)" };
 const num   = { fontVariantNumeric:"tabular-nums" };
@@ -121,7 +131,56 @@ function FullHousePanel({ stats, month }) {
   );
 }
 
-// Smooth line + soft fill — reads as a trend rather than a wall of bars.
+// Daily earnings are discrete — one bar per day, not a smooth curve implying the
+// days flow into each other. The comparison month sits behind as a dashed outline.
+function BarChart({ data, compare, height = 168 }) {
+  if (!data.length) return null;
+  const max = Math.max(1, ...data.map(d => d.amount), ...(compare?.bars || [0]));
+  const short = v => v >= 1000 ? (Math.round(v / 100) / 10).toFixed(1).replace(/\.0$/, "") + "k" : Math.round(v);
+  const step = Math.max(1, Math.ceil(data.length / 10));
+  const peak = data.reduce((a, b, i) => b.amount > data[a].amount ? i : a, 0);
+
+  return (
+    <div>
+      <div style={{ display:"flex", alignItems:"flex-end", gap:2, height,
+        borderBottom:"1px solid var(--border)", paddingBottom:1 }}>
+        {data.map((d, i) => {
+          const h = Math.round(d.amount / max * (height - 20));
+          const ch = compare ? Math.round((compare.bars[i] || 0) / max * (height - 20)) : 0;
+          return (
+            <div key={i} title={`${d.label}${d.sub ? " " + d.sub : ""} · ${money(Math.round(d.amount))}`
+              + (compare ? `\n${monthLabel(compare.month)}: ${money(Math.round(compare.bars[i] || 0))}` : "")}
+              style={{ flex:1, minWidth:0, position:"relative", display:"flex", flexDirection:"column",
+                justifyContent:"flex-end", alignItems:"center", height:"100%" }}>
+              {i === peak && d.amount > 0 && (
+                <span style={{ position:"absolute", top:0, fontSize:9, color:"#2f7d4f", whiteSpace:"nowrap", ...num }}>
+                  {short(d.amount)}
+                </span>
+              )}
+              {compare && ch > 0 && (
+                <span style={{ position:"absolute", bottom:0, width:"92%", height:ch,
+                  border:"1px dashed var(--border2)", borderBottom:"none", borderRadius:"3px 3px 0 0" }} />
+              )}
+              <span style={{ width:"62%", height:Math.max(d.amount > 0 ? 2 : 0, h), background:"#5f8f86",
+                borderRadius:"3px 3px 0 0", position:"relative" }} />
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ display:"flex", gap:2, marginTop:3 }}>
+        {data.map((d, i) => (
+          <div key={i} style={{ flex:1, minWidth:0, textAlign:"center", fontSize:8.5, color:"var(--text3)",
+            whiteSpace:"nowrap", overflow:"hidden" }}>
+            {i === data.length - 1 || i % step === 0 ? d.label : ""}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Smooth line + soft fill — kept for the weekly and monthly views, where a trend
+// across periods is the point.
 // Pure SVG, no chart library, so nothing extra to load.
 function AreaChart({ data, height = 200 }) {
   if (!data.length) return null;
@@ -321,19 +380,41 @@ export default function Accounts() {
     if (grain === "monthly") return byMonth.map(x => ({ label: monthLabel(x.month), amount: x.amount }));
     if (grain === "weekly")  return revenueByWeek(scoped, revenues, month).map(x => ({ label: x.label, amount: x.amount }));
     const wd = iso => new Date(iso + "T00:00:00").toLocaleDateString("en-GB", { weekday: "short" });
-    // With a month picked, include EVERY day — a day that earned nothing must show
-    // as zero rather than vanish, or the timeline is misleading.
+    // Every day of the month, so a day that earned nothing still shows as zero —
+    // BUT the month in progress stops at today. Days that have not happened are
+    // not days you earned nothing on, and drawing them made "days with no income"
+    // report the rest of the calendar (17, on the 14th of a 31-day month).
     if (month) {
-      const [yy, mm2] = month.split("-").map(Number);
-      const days = new Date(yy, mm2, 0).getDate();
+      const days = daysShownIn(month);
       const byDay = new Map(dayRows.map(r => [r.day, r.amount]));
       return Array.from({ length: days }, (_, i) => {
         const iso = `${month}-${String(i + 1).padStart(2, "0")}`;
-        return { label: String(i + 1), sub: wd(iso), amount: byDay.get(iso) || 0 };
+        return { label: String(i + 1), sub: wd(iso), amount: byDay.get(iso) || 0, iso };
       });
     }
-    return dayRows.map(x => ({ label: x.day.slice(8), sub: wd(x.day), amount: x.amount }));
+    return dayRows.map(x => ({ label: x.day.slice(8), sub: wd(x.day), amount: x.amount, iso: x.day }));
   }, [grain, dayRows, month, byMonth, scoped, revenues]);
+
+  // The month being compared against — previous month by default, any month pickable.
+  const [cmpMonth, setCmpMonth] = useState("");
+  const compareMonth = cmpMonth || prevMonth;
+  const cmpDayRows = useMemo(
+    () => (grain === "daily" && month && compareMonth) ? revenueByDay(scoped, revenues, compareMonth) : [],
+    [grain, month, compareMonth, scoped, revenues]);
+
+  // Like for like: on the 14th, compare 1–14 against 1–14 of the other month, not
+  // against its whole 31 days, or the month in progress always looks like a slump.
+  const compare = useMemo(() => {
+    if (!cmpDayRows.length && !compareMonth) return null;
+    const n = series.length;
+    const byDay = new Map(cmpDayRows.map(r => [r.day, r.amount]));
+    const bars = Array.from({ length: n }, (_, i) =>
+      byDay.get(`${compareMonth}-${String(i + 1).padStart(2, "0")}`) || 0);
+    const cmpTotal = bars.reduce((s, v) => s + v, 0);
+    const total = series.reduce((s, d) => s + d.amount, 0);
+    const pct = cmpTotal > 0 ? Math.round((total - cmpTotal) / cmpTotal * 100) : null;
+    return { bars, cmpTotal, pct, month: compareMonth, days: n };
+  }, [cmpDayRows, compareMonth, series]);
 
   // Period summary shown beside the chart title
   const seriesStats = useMemo(() => {
@@ -342,7 +423,7 @@ export default function Accounts() {
     const best  = withMoney.length ? withMoney.reduce((a, b) => b.amount > a.amount ? b : a) : null;
     const quiet = withMoney.length ? withMoney.reduce((a, b) => b.amount < a.amount ? b : a) : null;
     return { total, avg: series.length ? total / series.length : 0,
-      best, quiet, emptyDays: series.length - withMoney.length };
+      best, quiet, emptyDays: series.length - withMoney.length, shown: series.length };
   }, [series]);
 
   const bestDay = useMemo(
@@ -445,27 +526,60 @@ export default function Accounts() {
           <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4, flexWrap:"wrap" }}>
             <span style={capLbl}>Revenue</span>
             <span style={{ fontSize:11, color:"var(--text3)" }}>
-              {monthLabel(month)} · total <strong style={{ color:"var(--text)", ...num }}>{money(Math.round(seriesStats.total))}</strong>
+              {monthLabel(month)}{grain === "daily" && month && seriesStats.shown ? ` 1–${seriesStats.shown}` : ""}
+              {" · total "}<strong style={{ color:"var(--text)", ...num }}>{money(Math.round(seriesStats.total))}</strong>
               {grain === "daily" && <> · avg <strong style={{ color:"var(--text)", ...num }}>{money(Math.round(seriesStats.avg))}</strong>/day</>}
             </span>
-            <span style={{ marginLeft:"auto", display:"inline-flex", border:"1px solid var(--border)", borderRadius:7, overflow:"hidden" }}>
-              {["daily","weekly","monthly"].map(g => (
-                <button key={g} onClick={()=>setGrain(g)} style={{ padding:"4px 11px", border:"none", cursor:"pointer", fontFamily:"inherit",
-                  fontSize:11, fontWeight:600, textTransform:"capitalize",
-                  background: grain===g ? "var(--navy)" : "transparent", color: grain===g ? "#fff" : "var(--text2)" }}>{g}</button>
-              ))}
+            <span style={{ marginLeft:"auto", display:"inline-flex", gap:6, alignItems:"center", flexWrap:"wrap" }}>
+              {grain === "daily" && month && (
+                <select value={compareMonth} onChange={e => setCmpMonth(e.target.value)}
+                  style={{ fontFamily:"inherit", fontSize:11, padding:"3px 7px", borderRadius:7,
+                    border:"1px solid var(--border)", background:"var(--bg2)", color:"var(--text2)" }}>
+                  <option value="">no comparison</option>
+                  {allMonths.filter(m => m !== month).map(m => (
+                    <option key={m} value={m}>vs {monthLabel(m)}</option>
+                  ))}
+                </select>
+              )}
+              <span style={{ display:"inline-flex", border:"1px solid var(--border)", borderRadius:7, overflow:"hidden" }}>
+                {["daily","weekly","monthly"].map(g => (
+                  <button key={g} onClick={()=>setGrain(g)} style={{ padding:"4px 11px", border:"none", cursor:"pointer", fontFamily:"inherit",
+                    fontSize:11, fontWeight:600, textTransform:"capitalize",
+                    background: grain===g ? "var(--navy)" : "transparent", color: grain===g ? "#fff" : "var(--text2)" }}>{g}</button>
+                ))}
+              </span>
             </span>
           </div>
+          {grain === "daily" && month && compare && compare.cmpTotal > 0 && (
+            <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap", marginBottom:7, fontSize:11 }}>
+              <span style={{ borderRadius:20, padding:"2px 9px", ...num,
+                background: compare.pct >= 0 ? "var(--green-bg)" : "#FEF2F2",
+                color: compare.pct >= 0 ? "#356010" : "#9B1C1C" }}>
+                {compare.pct >= 0 ? "▲" : "▼"} {Math.abs(compare.pct)}% vs the same {compare.days} days of {monthLabel(compare.month)}
+              </span>
+              <span style={{ color:"var(--text3)" }}>
+                {monthLabel(compare.month)} 1–{compare.days} was <strong style={{ color:"var(--text2)", ...num }}>{money(Math.round(compare.cmpTotal))}</strong>
+              </span>
+            </div>
+          )}
           {series.length
-            ? <AreaChart data={series} height={150} />
+            ? (grain === "daily"
+                ? <BarChart data={series} compare={compare && compare.cmpTotal > 0 ? compare : null} height={168} />
+                : <AreaChart data={series} height={150} />)
             : <div style={{ fontSize:12, color:"var(--text3)", padding:"14px 0" }}>No revenue in this period.</div>}
           {series.length > 0 && (
-            <div style={{ display:"flex", gap:16, flexWrap:"wrap", fontSize:10.5, color:"var(--text3)", marginTop:4 }}>
+            <div style={{ display:"flex", gap:16, flexWrap:"wrap", fontSize:10.5, color:"var(--text3)", marginTop:6, paddingTop:6, borderTop:"1px solid var(--border)" }}>
               {seriesStats.best  && <span>Best <strong style={{ color:"#2f7d4f" }}>{seriesStats.best.label}{seriesStats.best.sub?" "+seriesStats.best.sub:""} · {money(Math.round(seriesStats.best.amount))}</strong></span>}
               {seriesStats.quiet && seriesStats.quiet !== seriesStats.best &&
                 <span>Quietest <strong style={{ color:"#b5322a" }}>{seriesStats.quiet.label}{seriesStats.quiet.sub?" "+seriesStats.quiet.sub:""} · {money(Math.round(seriesStats.quiet.amount))}</strong></span>}
-              {grain === "daily" && <span>Days with no income <strong style={{ color:"var(--text)" }}>{seriesStats.emptyDays}</strong></span>}
-              <span style={{ marginLeft:"auto" }}>hover any point for its exact amount</span>
+              {grain === "daily" && (
+                <span>No income <strong style={{ color:"var(--text)" }}>{seriesStats.emptyDays} day{seriesStats.emptyDays===1?"":"s"}</strong>
+                  {month && <span style={{ color:"var(--border2)" }}> (of {seriesStats.shown} so far)</span>}</span>
+              )}
+              {grain === "daily" && compare && compare.cmpTotal > 0 && (
+                <span><span style={{ display:"inline-block", width:14, borderTop:"1px dashed var(--border2)", verticalAlign:3 }} /> {monthLabel(compare.month)}</span>
+              )}
+              <span style={{ marginLeft:"auto" }}>hover any {grain === "daily" ? "bar" : "point"} for its exact amount</span>
             </div>
           )}
         </div>

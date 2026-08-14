@@ -14,7 +14,7 @@
 import { describe, it, expect } from "vitest";
 import { monthMoney, bookingMonthlyParts, bookingPaid } from "./hotelMoney";
 import { filterInvoices } from "./invoiceFilter";
-import { paymentStats } from "./accounts";
+import { paymentStats, revenueByDay } from "./accounts";
 
 const pay = (ts, amount) => ({ ts, amount, note: "Advance paid", type: "room" });
 
@@ -190,6 +190,44 @@ describe("Invoices tab must reconcile with the revenue engine", () => {
       expect(cashInHand).toBeCloseTo(aug.collected - aug.expenses, 2);
       // and it can never exceed the revenue it came from
       expect(cashInHand).toBeLessThanOrEqual(aug.collected + 0.01);
+    });
+  });
+
+  // Reported bug: the Accounts daily chart showed 13.1k for a day the Desk called
+  // 11.0k, and its own total sat ~5,200 above the Revenue tile beside it. The
+  // chart was spreading each room's INVOICE TOTAL across its nights — billed, not
+  // collected. Nothing caught it because the only test asserted the billed figure.
+  describe("the daily revenue chart must reconcile with the revenue engine", () => {
+    for (const month of ["2026-07", "2026-08"]) {
+      it(`${month}: the days add up to monthMoney collected`, () => {
+        const days = revenueByDay(bookings, [], month);
+        const total = days.reduce((s, d) => s + d.amount, 0);
+        expect(total).toBeCloseTo(monthMoney({ bookings, month }).collected, 2);
+      });
+
+      it(`${month}: every day of the chart falls inside the month`, () => {
+        revenueByDay(bookings, [], month).forEach(d => {
+          expect(d.day.slice(0, 7)).toBe(month);
+        });
+      });
+    }
+
+    it("manual revenue lands on its own date and is counted once", () => {
+      const extra = [{ id: 1, date: "2026-08-14", amount: 500, note: "Laundry" }];
+      const withManual = revenueByDay(bookings, extra, "2026-08")
+        .reduce((s, d) => s + d.amount, 0);
+      const without = revenueByDay(bookings, [], "2026-08")
+        .reduce((s, d) => s + d.amount, 0);
+      expect(withManual - without).toBeCloseTo(500, 2);
+      expect(withManual).toBeCloseTo(monthMoney({ bookings, revenues: extra, month: "2026-08" }).collected, 2);
+    });
+
+    it("a kept deposit shows on the day the money came in", () => {
+      // Booking 113: cancelled, 1,200 kept, paid 10 Aug for an 18 Aug stay that
+      // never happened — so it has no nights to spread across.
+      const day = revenueByDay(bookings, [], "2026-08").find(d => d.day === "2026-08-10");
+      expect(day).toBeTruthy();
+      expect(day.amount).toBeGreaterThanOrEqual(1200);
     });
   });
 

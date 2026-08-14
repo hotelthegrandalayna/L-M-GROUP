@@ -358,16 +358,46 @@ export function referrerStats(bookings = [], month = "") {
 
 // ── Revenue series (daily / weekly / monthly) ────────────────────────────────
 // Uses the shared night-split so every bucket agrees with the rest of the app.
+// The distinct nights a booking occupies inside one month, oldest first.
+function bookingNightsInMonth(b, month) {
+  const days = new Set();
+  roomLegs(b).forEach(leg => {
+    if (!leg.checkin) return;
+    const total = Math.max(1, legNightsInMonth(leg, ""));
+    for (let i = 0; i < total; i++) {
+      const day = localDay(leg.checkin, i);
+      if (day.slice(0, 7) === month) days.add(day);
+    }
+  });
+  return [...days].sort();
+}
+
+// Revenue per calendar day.
+//
+// This used to spread each room's INVOICE TOTAL across its nights — what was
+// BILLED. The Desk counts what was COLLECTED, so the same day showed two
+// different figures on two screens (13.1k here against 11.0k on the desk), and
+// the chart's own total sat above the Revenue tile printed right beside it.
+//
+// It now takes each booking's collected share for the month straight from
+// bookingMonthlyParts — the one engine — and spreads only that across the nights
+// it covers in that month. The days therefore always add up to
+// monthMoney().collected, which reconciliation.test.js asserts.
 export function revenueByDay(bookings = [], revenues = [], month = "") {
   const out = new Map();
-  bookings.filter(isLive).forEach(b => {
-    roomLegs(b).forEach(leg => {
-      const total = Math.max(1, legNightsInMonth(leg, ""));
-      const perNight = (leg.amount || 0) / total;
-      for (let i = 0; i < total; i++) {
-        const day = localDay(leg.checkin, i);
-        if (month && day.slice(0, 7) !== month) continue;
-        out.set(day, (out.get(day) || 0) + perNight);
+  (bookings || []).forEach(b => {
+    bookingMonthlyParts(b).forEach(p => {
+      if (!p.month || (month && p.month !== month) || !(p.collected > 0)) return;
+      // A cancelled booking has NO nights — the stay never happened, and its
+      // dates are fictional. A kept deposit belongs on the day it was taken.
+      const days = b.status === "cancelled" ? [] : bookingNightsInMonth(b, p.month);
+      if (days.length) {
+        const each = p.collected / days.length;
+        days.forEach(d => out.set(d, (out.get(d) || 0) + each));
+      } else {
+        const alloc = forfeitedAllocation(b).filter(a => a.month === p.month);
+        const day = (alloc[0] && alloc[0].day) || (p.month + "-01");
+        out.set(day, (out.get(day) || 0) + p.collected);
       }
     });
   });
