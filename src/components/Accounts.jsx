@@ -3,6 +3,7 @@
 // agrees with the Desk, Expenses and Invoices screens.
 import { useState, useMemo, useEffect } from "react";
 import { useApp } from "../context/AppContext";
+import useIsMobile from "../hall/useIsMobile";
 import { money } from "../utils/helpers";
 import { hotelBusinessOnly } from "../utils/expenseType";
 import { monthMoney, bookingMonthlyParts } from "../lib/hotelMoney";
@@ -134,40 +135,62 @@ function FullHousePanel({ stats, month }) {
 const CUR_COLOR = "#5f8f86";  // the period being viewed
 const CMP_COLOR = "#c49a4a";  // the period being compared against
 
+const CUR_TEXT = "#3d6b62";
+const CMP_TEXT = "#a07c2c";
+
 // Earnings are discrete — one bar per period, not a smooth curve implying they
 // flow into each other. The comparison sits beside each bar in its own colour.
-function BarChart({ data, compare, height = 168 }) {
+//
+// Every bar carries its own amount, printed above it, because hovering to read a
+// figure is no way to read a chart. When both months are shown the two numbers
+// stack, colour-matched to their bars. They are hidden only when the columns get
+// too narrow to hold them — an unreadable smear of overlapping digits is worse
+// than falling back to hover.
+function BarChart({ data, compare, height = 168, isMobile }) {
   if (!data.length) return null;
   const max = Math.max(1, ...data.map(d => d.amount), ...(compare?.bars || [0]));
   const short = v => v >= 1000 ? (Math.round(v / 100) / 10).toFixed(1).replace(/\.0$/, "") + "k" : Math.round(v);
   const step = Math.max(1, Math.ceil(data.length / 10));
-  const peak = data.reduce((a, b, i) => b.amount > data[a].amount ? i : a, 0);
+  // Roughly how many columns fit a 5-character number. Two stacked numbers cost
+  // height, not width, so the limit is the same either way.
+  const roomForValues = data.length <= (isMobile ? 10 : 24);
+  const headroom = roomForValues ? (compare ? 26 : 16) : 6;
 
   return (
     <div>
       <div style={{ display:"flex", alignItems:"flex-end", gap:2, height,
         borderBottom:"1px solid var(--border)", paddingBottom:1 }}>
         {data.map((d, i) => {
-          const h = Math.round(d.amount / max * (height - 20));
-          const ch = compare ? Math.round((compare.bars[i] || 0) / max * (height - 20)) : 0;
+          const cmpAmt = compare ? (compare.bars[i] || 0) : 0;
+          const h  = Math.round(d.amount / max * (height - headroom));
+          const ch = Math.round(cmpAmt / max * (height - headroom));
           return (
             <div key={i} title={`${d.label}${d.sub ? " " + d.sub : ""} · ${money(Math.round(d.amount))}`
-              + (compare ? `\n${monthLabel(compare.month)}: ${money(Math.round(compare.bars[i] || 0))}` : "")}
-              style={{ flex:1, minWidth:0, position:"relative", display:"flex", flexDirection:"column",
+              + (compare ? `\n${monthLabel(compare.month)}: ${money(Math.round(cmpAmt))}` : "")}
+              style={{ flex:1, minWidth:0, display:"flex", flexDirection:"column",
                 justifyContent:"flex-end", alignItems:"center", height:"100%" }}>
-              {i === peak && d.amount > 0 && (
-                <span style={{ position:"absolute", top:0, fontSize:9, color:"#2f7d4f", whiteSpace:"nowrap", ...num }}>
-                  {short(d.amount)}
-                </span>
+              {roomForValues && (
+                <>
+                  <span style={{ fontSize:8.5, lineHeight:1.15, whiteSpace:"nowrap", ...num,
+                    color: d.amount > 0 ? CUR_TEXT : "var(--border2)" }}>
+                    {short(d.amount)}
+                  </span>
+                  {compare && (
+                    <span style={{ fontSize:8.5, lineHeight:1.15, whiteSpace:"nowrap", marginBottom:2, ...num,
+                      color: cmpAmt > 0 ? CMP_TEXT : "var(--border2)" }}>
+                      {short(cmpAmt)}
+                    </span>
+                  )}
+                </>
               )}
               {/* Two solid bars side by side in two colours, so which is which is
                   obvious without reading a caption. */}
               <span style={{ display:"flex", alignItems:"flex-end", justifyContent:"center",
-                gap:1, width:"100%", height:"100%" }}>
+                gap:1, width:"100%", flex:1, minHeight:0 }}>
                 <span style={{ width: compare ? "40%" : "62%", height:Math.max(d.amount > 0 ? 2 : 0, h),
                   background:CUR_COLOR, borderRadius:"3px 3px 0 0" }} />
                 {compare && (
-                  <span style={{ width:"40%", height:Math.max((compare.bars[i] || 0) > 0 ? 2 : 0, ch),
+                  <span style={{ width:"40%", height:Math.max(cmpAmt > 0 ? 2 : 0, ch),
                     background:CMP_COLOR, borderRadius:"3px 3px 0 0" }} />
                 )}
               </span>
@@ -266,6 +289,7 @@ function AreaChart({ data, height = 200 }) {
 
 export default function Accounts() {
   const { curRole, bookings, revenues, expenses, expTypes, rooms } = useApp();
+  const isMobile = useIsMobile();
   const thisMonth = new Date().toISOString().slice(0, 7);
   const [tab, setTab] = useState("overview");
   const [month, setMonth] = useState(thisMonth);
@@ -593,7 +617,8 @@ export default function Accounts() {
             </div>
           )}
           {series.length
-            ? <BarChart data={series} compare={grain === "daily" && compare && compare.cmpTotal > 0 ? compare : null} height={168} />
+            ? <BarChart data={series} compare={grain === "daily" && compare && compare.cmpTotal > 0 ? compare : null}
+                height={isMobile ? 150 : 178} isMobile={isMobile} />
             : <div style={{ fontSize:12, color:"var(--text3)", padding:"14px 0" }}>Nothing received in this period.</div>}
           {series.length > 0 && (
             <div style={{ display:"flex", gap:16, flexWrap:"wrap", fontSize:10.5, color:"var(--text3)", marginTop:6, paddingTop:6, borderTop:"1px solid var(--border)" }}>
