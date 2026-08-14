@@ -6,6 +6,8 @@ const SUPABASE_KEY =
   import.meta.env?.VITE_SUPABASE_PUBLISHABLE_KEY?.trim() ||
   import.meta.env?.VITE_SUPABASE_ANON_KEY?.trim() || "";
 
+import { blockCloudWrite } from "../lib/devSession";
+
 export function hasSupabase() {
   return Boolean(SUPABASE_URL && SUPABASE_KEY);
 }
@@ -46,7 +48,7 @@ export async function pingSupabase() {
 
 // Upsert a single row (insert or update by primary key)
 export async function upsertRow(table, row, conflictCol = "id") {
-  if (!hasSupabase()) return;
+  if (!hasSupabase() || blockCloudWrite(`upsertRow ${table}`)) return;
   await fetch(base(table), {
     method: "POST",
     headers: headers({ Prefer: `resolution=merge-duplicates,return=minimal` }),
@@ -57,7 +59,7 @@ export async function upsertRow(table, row, conflictCol = "id") {
 
 // Upsert many rows in one request
 export async function upsertRows(table, rows) {
-  if (!hasSupabase() || !rows.length) return;
+  if (!hasSupabase() || !rows.length || blockCloudWrite(`upsertRows ${table}`)) return;
   await fetch(base(table), {
     method: "POST",
     headers: headers({ Prefer: "resolution=merge-duplicates,return=minimal" }),
@@ -68,7 +70,7 @@ export async function upsertRows(table, rows) {
 
 // Delete a row by id
 export async function deleteRow(table, id) {
-  if (!hasSupabase()) return;
+  if (!hasSupabase() || blockCloudWrite(`deleteRow ${table}`)) return;
   await fetch(`${base(table)}?id=eq.${encodeURIComponent(id)}`, {
     method: "DELETE",
     headers: headers(),
@@ -91,6 +93,9 @@ export async function loadRows(table, query = "") {
 // Upsert a config value (key-value store). Throws if the write did not
 // reach Supabase so callers can distinguish "synced" from "local only".
 export async function saveConfig(key, value) {
+  // Returns quietly rather than throwing: callers treat a throw as "sync failed"
+  // and warn the user, which would be a lie — nothing was meant to be written.
+  if (blockCloudWrite(`saveConfig ${key}`)) return;
   if (!hasSupabase()) throw new Error("Supabase not configured");
   const res = await fetch(base("app_config"), {
     method: "POST",
@@ -116,7 +121,7 @@ export async function loadConfig(key) {
 
 // Delete a config row by key
 export async function deleteConfig(key) {
-  if (!hasSupabase()) return;
+  if (!hasSupabase() || blockCloudWrite(`deleteConfig ${key}`)) return;
   await fetch(`${base("app_config")}?key=eq.${encodeURIComponent(key)}`, {
     method: "DELETE",
     headers: headers(),

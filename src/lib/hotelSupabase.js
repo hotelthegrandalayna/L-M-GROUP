@@ -1,3 +1,5 @@
+import { blockCloudWrite } from "./devSession";
+
 const SUPABASE_URL = import.meta.env?.VITE_SUPABASE_URL?.trim() || "";
 const SUPABASE_KEY =
   import.meta.env?.VITE_SUPABASE_PUBLISHABLE_KEY?.trim() ||
@@ -264,7 +266,7 @@ function fromDbBooking(row, guest) {
 const inFlightSaves = new Map(); // localId -> Promise
 
 export async function persistHotelBookingBundle(booking) {
-  if (!hasHotelSupabaseConfig() || !booking?.guest) {
+  if (!hasHotelSupabaseConfig() || !booking?.guest || blockCloudWrite("persist booking")) {
     return { skipped: true, booking };
   }
   const guardKey = String(booking.supabaseBookingId ?? booking.id ?? "");
@@ -385,7 +387,7 @@ async function cleanupOrphanedGuest(guestId) {
 }
 
 export async function deleteHotelBooking(bookingId, guestId) {
-  if (!hasHotelSupabaseConfig() || !bookingId) return;
+  if (!hasHotelSupabaseConfig() || !bookingId || blockCloudWrite("delete booking")) return;
   await request("bookings", {
     method: "DELETE",
     query: { id: `eq.${bookingId}` },
@@ -394,7 +396,7 @@ export async function deleteHotelBooking(bookingId, guestId) {
 }
 
 export async function deleteHotelBookings(bookingIds = [], guestIds = []) {
-  if (!hasHotelSupabaseConfig() || !bookingIds.length) return;
+  if (!hasHotelSupabaseConfig() || !bookingIds.length || blockCloudWrite("delete bookings")) return;
   await request("bookings", {
     method: "DELETE",
     query: { id: `in.(${bookingIds.join(",")})` },
@@ -421,7 +423,7 @@ export async function loadRoomsFromSupabase() {
 }
 
 export async function saveRoomsToSupabase(rooms) {
-  if (!hasHotelSupabaseConfig()) return;
+  if (!hasHotelSupabaseConfig() || blockCloudWrite("save rooms")) return;
   const SUPABASE_URL = import.meta.env?.VITE_SUPABASE_URL?.trim() || "";
   const SUPABASE_KEY = import.meta.env?.VITE_SUPABASE_PUBLISHABLE_KEY?.trim() || import.meta.env?.VITE_SUPABASE_ANON_KEY?.trim() || "";
   const res = await fetch(

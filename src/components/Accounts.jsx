@@ -655,8 +655,11 @@ export default function Accounts() {
           )}
         </div>
 
-        {/* Which weekday earns most (wide) + revenue vs cost by month (narrow) */}
-        <div style={{ display:"grid", gridTemplateColumns:"minmax(0,1.6fr) minmax(0,1fr)", gap:12, marginBottom:12 }}>
+        {/* Which weekday earns most (wide) + revenue vs cost by month (narrow).
+            Stacks on a phone: side by side, the narrow column measured 121px while
+            its bars and figures need ~222px, so a third of the panel was clipped
+            off the screen with no way to scroll to it. */}
+        <div style={{ display:"grid", gridTemplateColumns: isMobile ? "minmax(0,1fr)" : "minmax(0,1.6fr) minmax(0,1fr)", gap:12, marginBottom:12 }}>
 
         <div style={card}>
           <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8, flexWrap:"wrap" }}>
@@ -871,10 +874,12 @@ export default function Accounts() {
           </div>
         </div>
 
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(3,minmax(0,1fr))", gap:12 }}>
+        {/* auto-fit, not a fixed 3: at 375px each card fell to ~101px and its own
+            figures overflowed the box */}
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(190px,1fr))", gap:12 }}>
           <div style={{ ...card, border:"1px solid "+(disc.total>0 ? "#e0b3b0" : "var(--border)") }}>
             <div style={{ ...capLbl, color: disc.total>0 ? "#8f2323" : "var(--text2)", marginBottom:8 }}>Discounts given</div>
-            <div style={{ display:"flex", alignItems:"baseline", gap:8 }}>
+            <div style={{ display:"flex", alignItems:"baseline", gap:8, flexWrap:"wrap" }}>
               <span style={{ fontSize:22, fontWeight:600, color:"#b5322a", ...num }}>{money(Math.round(disc.total))}</span>
               <span style={{ fontSize:11, color:"var(--text3)" }}>across {disc.count} booking{disc.count===1?"":"s"}</span>
             </div>
@@ -919,7 +924,7 @@ export default function Accounts() {
                     <div style={{ fontSize:11.5, fontWeight:600, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{p.name}</div>
                     {p.role && <div style={{ fontSize:9.5, color:"var(--text3)" }}>{p.role}</div>}
                   </div>
-                  <span style={{ fontSize:11.5, fontWeight:600, ...num }}>{money(Math.round(p.amount))}</span>
+                  <span style={{ fontSize:11.5, fontWeight:600, flexShrink:0, ...num }}>{money(Math.round(p.amount))}</span>
                 </div>
               ))}
               <div style={{ fontSize:10, color:"var(--text3)", marginTop:8 }}>

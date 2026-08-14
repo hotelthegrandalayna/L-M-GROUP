@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { useApp, gaRecordDeleted } from "../../context/AppContext";
+import useIsMobile from "../../hall/useIsMobile";
 import { checkAdminPassword } from "../../utils/auth";
 import { deleteHotelBooking, deleteHotelBookings, loadHotelGuestImages, persistHotelBookingBundle, loadHotelBookingsForRange } from "../../lib/hotelSupabase";
 import { useMonthBookings, bookingMonthlyParts } from "../../lib/hotelMoney";
@@ -811,6 +812,7 @@ function InvoiceDetail({ bk, onClose, autoEdit }) {
 // ── Main component ────────────────────────────────────────────────────────────
 export default function AdminInvoices() {
   const { bookings, updateBookings, notify, revenues, rooms } = useApp();
+  const isMobile = useIsMobile();
 
   const [search,         setSearch]         = useState("");
   // Default view is THIS month only — "All months" is available on demand.
@@ -1179,7 +1181,8 @@ export default function AdminInvoices() {
 
       {/* Table */}
       <div style={{ border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden", background: "var(--bg2)" }}>
-        {/* Header row */}
+        {/* Header row — the column titles mean nothing once the rows become cards */}
+        {!isMobile && (
         <div style={{ display: "grid", gridTemplateColumns: INV_COLS, gap: 8, background: "var(--bg3)", color: "var(--text3)", fontSize: 9.5, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.7, padding: "10px 12px", alignItems: "center" }}>
           <input type="checkbox" checked={allChecked}
             ref={el => { if (el) el.indeterminate = someChecked && !allChecked; }}
@@ -1193,6 +1196,7 @@ export default function AdminInvoices() {
           <span style={{ textAlign: "right" }}>Balance</span>
           <span style={{ textAlign: "center" }}>Actions</span>
         </div>
+        )}
 
         {filtered.length === 0 && (
           <div style={{ padding: 32, textAlign: "center", color: "var(--text3)", fontSize: 13 }}>No invoices match your search.</div>
@@ -1208,6 +1212,50 @@ export default function AdminInvoices() {
 
           const rooms = allRoomNumbers(bk);
           const share = shareOf(bk);
+
+          // On a phone the eight-column row is 397px wider than the screen and is
+          // CLIPPED, not scrollable — the whole Actions column sat off-screen and
+          // View / ID / Edit / Delete could not be reached at all. Each invoice
+          // becomes a stacked card instead, with the same actions in reach.
+          if (isMobile) return (
+            <div key={bk.id} onClick={() => setDetail(bk)}
+              style={{ padding: "11px 12px", borderTop: "1px solid var(--border)", fontSize: 12.5,
+                cursor: "pointer", background: checked ? "var(--bg3)" : "" }}>
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 9 }}>
+                <div onClick={e => e.stopPropagation()} style={{ paddingTop: 2 }}>
+                  <input type="checkbox" checked={checked} onChange={() => toggleOne(bk.id)}
+                    style={{ width: 15, height: 15, cursor: "pointer", accentColor: "var(--navy)" }} />
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: "flex", alignItems: "baseline", gap: 7, flexWrap: "wrap" }}>
+                    <span style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "100%" }}>{bk.guest || "—"}</span>
+                    <span style={{ fontSize: 10, fontWeight: 600, padding: "1px 8px", borderRadius: 20, background: sBg, color: sColor, whiteSpace: "nowrap" }}>
+                      {bk.status || "reserved"}
+                    </span>
+                  </div>
+                  <div style={{ color: "var(--text3)", fontSize: 11, marginTop: 2, fontVariantNumeric: "tabular-nums" }}>
+                    GA-{String(bk.id).padStart(4, "0")} · Room{rooms.length > 1 ? "s" : ""} {rooms.join(", ") || "—"}
+                  </div>
+                  <div style={{ color: "var(--text2)", fontSize: 11, marginTop: 2 }}>
+                    {fmtDate(bk.checkin)} → {fmtDate(bk.checkout)} · {bk.nights || "—"} night{bk.nights === 1 ? "" : "s"}
+                  </div>
+                </div>
+                <div style={{ textAlign: "right", flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>
+                  <div style={{ fontWeight: 600 }}>{fmtMoney(share.partial ? share.billed : total)}</div>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: balance > 0 ? "#b5322a" : "#2f7d4f" }}>
+                    {balance > 0 ? fmtMoney(balance) + " due" : "paid"}
+                  </div>
+                </div>
+              </div>
+              <div onClick={e => e.stopPropagation()} style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 9 }}>
+                <button onClick={() => setViewTarget(bk)} style={invBtn()}><i className="ti ti-eye" style={{ fontSize: 12 }} /> View</button>
+                <button onClick={() => setIdTarget(bk)} style={invBtn()}><i className="ti ti-id" style={{ fontSize: 12 }} /> ID</button>
+                <button onClick={() => { setDetail(bk); setEditIntent(bk.id); }} style={invBtn()}><i className="ti ti-lock" style={{ fontSize: 11 }} /> Edit</button>
+                <button onClick={() => { setDeleteTarget(bk); setDelPw(""); }} style={invBtn(true)}><i className="ti ti-lock" style={{ fontSize: 11 }} /> Delete</button>
+              </div>
+            </div>
+          );
+
           return (
             <div key={bk.id}
               onClick={() => setDetail(bk)}

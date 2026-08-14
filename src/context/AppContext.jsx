@@ -5,6 +5,7 @@ import { hasSupabase, upsertRows, loadRows, saveConfig, loadConfig, deleteRow } 
 import { restoreUserPasswords } from "../utils/userPass";
 import { onRemoteChange } from "../utils/realtimeSync";
 import { runDailyBackup } from "../utils/dailyBackup";
+import { devSession, isDevSession } from "../lib/devSession";
 import { cleanupOldTaskPhotos } from "../utils/tasks";
 import { syncNtfyConfigFromSupabase } from "../utils/ntfy";
 import { supabase } from "../lib/supabaseClient";
@@ -157,11 +158,18 @@ export function dedupeBookings(list) {
 
 export function AppProvider({ children }) {
   // Auth — restore session from localStorage so page refresh keeps you logged in
+  // On a local dev machine the staff sign-in is skipped so the app can be looked
+  // at while it is being worked on. The same switch makes every cloud write a
+  // no-op, so nothing in the live data can change while it is open — see
+  // lib/devSession.js. It is compiled out of the production build entirely.
+  const dev = devSession(import.meta.env.DEV, typeof location !== "undefined" ? location.hostname : "");
   const [curRole, setCurRole] = useState(() => {
-    try { const s = JSON.parse(localStorage.getItem('ga_sess')); return s?.role || ''; } catch { return ''; }
+    try { const s = JSON.parse(localStorage.getItem('ga_sess')); if (s?.role) return s.role; } catch { /* no session */ }
+    return dev?.role || '';
   });
   const [curUser, setCurUser] = useState(() => {
-    try { const s = JSON.parse(localStorage.getItem('ga_sess')); return s?.user || ''; } catch { return ''; }
+    try { const s = JSON.parse(localStorage.getItem('ga_sess')); if (s?.user) return s.user; } catch { /* no session */ }
+    return dev?.user || '';
   });
 
   // Track last local rooms edit so poll doesn't overwrite it before Supabase save completes
@@ -677,6 +685,9 @@ export function AppProvider({ children }) {
   // Daily rolling cloud backup — runs once per day, 90s after load so the
   // initial sync has settled and the snapshot reflects fresh data.
   useEffect(() => {
+    // Never on a dev machine: these two fire on their own and one of them
+    // DELETES old task photos. Just having the app open must not alter live data.
+    if (isDevSession()) return;
     const t = setTimeout(() => runDailyBackup(), 90_000);
     const c = setTimeout(() => cleanupOldTaskPhotos(), 120_000);
     return () => { clearTimeout(t); clearTimeout(c); };

@@ -403,7 +403,9 @@ export default function CRM() {
       </div>
 
       {/* Metric cards */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12, marginBottom: 18 }}>
+      {/* auto-fit rather than a fixed 4 columns: at 375px the four cards squeezed
+          to ~80px each and clipped their own labels ("RETURNING", "INACTIVE") */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 12, marginBottom: 18 }}>
         {[
           { label: "Total Guests",  value: gList.length,    sub: "Unique guests",         icon: "ti-users",   cls: "metric gold" },
           { label: "VIP Guests",    value: vipCount,        sub: "৳20k+ or 3+ stays",     icon: "ti-crown",   cls: "metric" },
