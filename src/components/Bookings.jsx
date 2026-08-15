@@ -21,6 +21,7 @@ import { sendWhatsAppAlert, buildHotelWaMessage } from "../utils/whatsapp";
 import { sendNtfyAlert } from "../utils/ntfy";
 import { logEvent } from "../utils/auditLog";
 import { persistHotelBookingBundle } from "../lib/hotelSupabase";
+import { primaryDiscShare } from "../lib/bookingDiscount";
 import { deviceTz } from "../lib/hotelTime";
 import { buildInvoiceHTML, buildTCHtml, hotelPrint, roomLabel } from "./Invoice";
 
@@ -522,7 +523,15 @@ export function NewBookingModal({ onClose, prefill, editBooking }) {
       ? eb.extraRooms.map(r => ({ number:String(r.number), acChoice:r.acChoice||"AC", discAmt:r.discAmt||"" }))
       : []
   ); // [{ number, acChoice, discAmt }]
-  const [primaryDiscAmt, setPrimaryDiscAmt] = useState(eb ? (eb.primaryDiscAmt || 0) : 0); // per-room discount for primary room in multi-room mode
+  // The primary room's own discount. `primaryDiscAmt` has no Supabase column and
+  // is not carried by mergeBooking, so it is wiped the first time a reservation
+  // round-trips through the cloud — reopening it to check the guest in then showed
+  // 0 and silently raised the bill by that amount. It is recoverable, because it
+  // is the same identity the invoice already uses: total discount minus what the
+  // extra rooms account for (see "Invoice line-item arithmetic" in CLAUDE.md).
+  const [primaryDiscAmt, setPrimaryDiscAmt] = useState(
+    eb ? (eb.primaryDiscAmt ?? primaryDiscShare(eb)) : 0
+  );
   // Multi-room mode
   const [bookingMode, setBookingMode] = useState(ebMulti ? "multi" : "single"); // "single" | "multi"
   const [multiRoomCards, setMultiRoomCards] = useState(
@@ -534,9 +543,17 @@ export function NewBookingModal({ onClose, prefill, editBooking }) {
   const [children, setChildren] = useState(eb ? (eb.children || 0) : 0);
   // Extra person
   const [epAccepted, setEpAccepted] = useState(!!(eb && eb.extraPersonCharge));
-  // Discount
-  const [discType, setDiscType] = useState(eb ? (eb.discType || "none") : "none");
-  const [discVal,  setDiscVal]  = useState(eb && eb.discType === "flat" ? (eb.discAmt || 0) : 0);
+  // Discount. Only the resulting taka (`discAmt`) is ever stored — never the
+  // percentage or the per-night rate that produced it. Restoring discType
+  // "percent" with a value of 0 therefore showed a discount that was worth
+  // nothing, and saving wrote the undiscounted total back. Reopen it as a FLAT
+  // discount of the same taka instead: identical money, identical invoice, and
+  // it cannot drift when the nights or the rate are edited.
+  const ebSingleDisc = !!eb && !ebMulti && (eb.discAmt || 0) > 0 && !(eb.extraRooms || []).length;
+  const [discType, setDiscType] = useState(
+    ebSingleDisc ? "flat" : (eb ? (eb.discType || "none") : "none")
+  );
+  const [discVal,  setDiscVal]  = useState(ebSingleDisc ? (eb.discAmt || 0) : 0);
   const [discReason, setDiscReason] = useState(eb ? (eb.discReason || "") : "");
   // Payment — in edit/complete mode this field is the ADDITIONAL payment taken at check-in
   const [method,   setMethod]   = useState(eb ? (eb.paymentMethod || "Cash") : "Cash");
