@@ -4,7 +4,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { useApp } from "../context/AppContext";
 import useIsMobile from "../hall/useIsMobile";
-import { money } from "../utils/helpers";
+import { money, todayStr } from "../utils/helpers";
 import { hotelBusinessOnly } from "../utils/expenseType";
 import { monthMoney, bookingMonthlyParts } from "../lib/hotelMoney";
 import { hasHotelSupabaseConfig, loadHotelBookingsForRange } from "../lib/hotelSupabase";
@@ -182,8 +182,17 @@ function BarChart({ data, compare, height = 168, isMobile }) {
                   obvious without reading a caption. */}
               <span style={{ display:"flex", alignItems:"flex-end", justifyContent:"center",
                 gap:1, width:"100%", flex:1, minHeight:0 }}>
-                <span style={{ width: compare ? "40%" : "62%", height:Math.max(d.amount > 0 ? 2 : 0, h),
-                  background:CUR_COLOR, borderRadius:"3px 3px 0 0" }} />
+                {/* A period still running is striped and one that has not
+                    started is an empty outline, so neither is mistaken for a
+                    finished period that simply earned very little. */}
+                <span style={{ width: compare ? "40%" : "62%",
+                  height: d.future ? 3 : Math.max(d.amount > 0 ? 2 : 0, h),
+                  background: d.future ? "transparent"
+                    : d.inProgress ? `repeating-linear-gradient(135deg, ${CUR_COLOR}, ${CUR_COLOR} 4px, #86ada6 4px, #86ada6 8px)`
+                    : CUR_COLOR,
+                  border: d.future ? "1px dashed var(--border2)" : "none",
+                  borderBottom: d.future ? "none" : undefined,
+                  borderRadius:"3px 3px 0 0" }} />
                 {compare && (
                   <span style={{ width:"40%", height:Math.max(cmpAmt > 0 ? 2 : 0, ch),
                     background:CMP_COLOR, borderRadius:"3px 3px 0 0" }} />
@@ -426,8 +435,16 @@ export default function Accounts() {
   const dayRows = useMemo(() => revenueByDay(scoped, revenues, month), [scoped, revenues, month]);
 
   const series = useMemo(() => {
-    if (grain === "monthly") return byMonth.map(x => ({ label: monthLabel(x.month), amount: x.amount }));
-    if (grain === "weekly")  return revenueByWeek(scoped, revenues, month).map(x => ({ label: x.label, amount: x.amount }));
+    if (grain === "monthly") return byMonth.map(x => ({
+      label: monthLabel(x.month), amount: x.amount,
+      // A month still running is not comparable with finished ones, so it is
+      // drawn differently and left out of best/quietest.
+      inProgress: x.month === todayStr().slice(0, 7),
+      rankable: x.month < todayStr().slice(0, 7),
+    }));
+    if (grain === "weekly") return revenueByWeek(scoped, revenues, month, todayStr())
+      .map(x => ({ label: x.label, sub: x.sub, amount: x.amount, days: x.days, short: x.short,
+                   inProgress: x.inProgress, future: x.future, rankable: x.rankable }));
     const wd = iso => new Date(iso + "T00:00:00").toLocaleDateString("en-GB", { weekday: "short" });
     // Every day of the month, so a day that earned nothing still shows as zero —
     // BUT the month in progress stops at today. Days that have not happened are
@@ -449,8 +466,11 @@ export default function Accounts() {
   // "" as "unset" meant picking "no comparison" snapped straight back on.
   const [cmpMonth, setCmpMonth] = useState(null);
   const compareMonth = cmpMonth === null ? prevMonth : cmpMonth;
+  // Weekly needs the comparison month too. It used to be fetched only for the
+  // daily view, so switching to Weekly silently dropped the comparison entirely.
   const cmpDayRows = useMemo(
-    () => (grain === "daily" && month && compareMonth) ? revenueByDay(scoped, revenues, compareMonth) : [],
+    () => ((grain === "daily" || grain === "weekly") && month && compareMonth)
+      ? revenueByDay(scoped, revenues, compareMonth) : [],
     [grain, month, compareMonth, scoped, revenues]);
 
   // The 12 months before the selected one, plus any month with data. The old list
@@ -471,25 +491,57 @@ export default function Accounts() {
   // against its whole 31 days, or the month in progress always looks like a slump.
   const compare = useMemo(() => {
     if (!cmpDayRows.length && !compareMonth) return null;
-    const n = series.length;
     const byDay = new Map(cmpDayRows.map(r => [r.day, r.amount]));
+    if (grain === "weekly") {
+      // Like for like by week NUMBER: August's week 2 against July's week 2, the
+      // same slice of the month rather than the whole of it. The week still
+      // running is compared only as far as today, so a month that has just
+      // started never reads as a collapse.
+      const today = todayStr();
+      const cmpWeeks = revenueByWeek([], cmpDayRows.map(r => ({ id: r.day, date: r.day, amount: r.amount })), compareMonth);
+      const bars = series.map((wk, i) => {
+        const c = cmpWeeks[i];
+        if (!c) return 0;
+        if (!wk.inProgress) return c.amount;
+        const upto = parseInt(today.slice(8), 10);
+        let part = 0;
+        for (let d = parseInt(c.from.slice(8), 10); d <= Math.min(upto, parseInt(c.to.slice(8), 10)); d++) {
+          part += byDay.get(`${compareMonth}-${String(d).padStart(2, "0")}`) || 0;
+        }
+        return part;
+      });
+      // Only weeks that have actually happened count toward the headline change.
+      const live = series.map((wk, i) => ({ wk, cmp: bars[i] })).filter(x => x.wk.started !== false && !x.wk.future);
+      const cmpTotal = live.reduce((s, x) => s + x.cmp, 0);
+      const total = live.reduce((s, x) => s + x.wk.amount, 0);
+      const pct = cmpTotal > 0 ? Math.round((total - cmpTotal) / cmpTotal * 100) : null;
+      return { bars, cmpTotal, pct, month: compareMonth, days: live.length, unit: "weeks" };
+    }
+    const n = series.length;
     const bars = Array.from({ length: n }, (_, i) =>
       byDay.get(`${compareMonth}-${String(i + 1).padStart(2, "0")}`) || 0);
     const cmpTotal = bars.reduce((s, v) => s + v, 0);
     const total = series.reduce((s, d) => s + d.amount, 0);
     const pct = cmpTotal > 0 ? Math.round((total - cmpTotal) / cmpTotal * 100) : null;
-    return { bars, cmpTotal, pct, month: compareMonth, days: n };
-  }, [cmpDayRows, compareMonth, series]);
+    return { bars, cmpTotal, pct, month: compareMonth, days: n, unit: "days" };
+  }, [cmpDayRows, compareMonth, series, grain]);
 
-  // Period summary shown beside the chart title
+  // Period summary shown beside the chart title.
+  // Best and quietest count only periods that have FINISHED. A week that has had
+  // one day, or a month half gone, was being named the quietest for being short.
   const seriesStats = useMemo(() => {
-    const withMoney = series.filter(d => d.amount > 0);
     const total = series.reduce((s, d) => s + d.amount, 0);
-    const best  = withMoney.length ? withMoney.reduce((a, b) => b.amount > a.amount ? b : a) : null;
-    const quiet = withMoney.length ? withMoney.reduce((a, b) => b.amount < a.amount ? b : a) : null;
+    const ranked = series.filter(d => d.rankable !== false);
+    const pool = grain === "daily" ? ranked.filter(d => d.amount > 0) : ranked;
+    const best  = pool.length > 1 ? pool.reduce((a, b) => b.amount > a.amount ? b : a) : null;
+    const quiet = pool.length > 1 ? pool.reduce((a, b) => b.amount < a.amount ? b : a) : null;
+    const shownDays = series.filter(d => d.future !== true);
     return { total, avg: series.length ? total / series.length : 0,
-      best, quiet, emptyDays: series.length - withMoney.length, shown: series.length };
-  }, [series]);
+      best, quiet,
+      emptyDays: series.filter(d => d.amount === 0 && d.future !== true).length,
+      shown: shownDays.length,
+      skipped: series.length - ranked.length };
+  }, [series, grain]);
 
   const bestDay = useMemo(
     () => dayRows.length ? dayRows.reduce((a, b) => b.amount > a.amount ? b : a) : null,
@@ -626,32 +678,42 @@ export default function Accounts() {
               </span>
             </span>
           </div>
-          {grain === "daily" && month && compare && compare.cmpTotal > 0 && (
+          {(grain === "daily" || grain === "weekly") && month && compare && compare.cmpTotal > 0 && (
             <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap", marginBottom:7, fontSize:11 }}>
               <span style={{ borderRadius:20, padding:"2px 9px", ...num,
                 background: compare.pct >= 0 ? "var(--green-bg)" : "#FEF2F2",
                 color: compare.pct >= 0 ? "#356010" : "#9B1C1C" }}>
-                {compare.pct >= 0 ? "▲" : "▼"} {Math.abs(compare.pct)}% vs the same {compare.days} days of {monthLabel(compare.month)}
+                {compare.pct >= 0 ? "▲" : "▼"} {Math.abs(compare.pct)}% vs the same {compare.days} {compare.unit} of {monthLabel(compare.month)}
               </span>
               <span style={{ color:"var(--text3)" }}>
-                {monthLabel(compare.month)} 1–{compare.days} was <strong style={{ color:"var(--text2)", ...num }}>{money(Math.round(compare.cmpTotal))}</strong>
+                {grain === "weekly"
+                  ? <>the same {compare.days} week{compare.days===1?"":"s"} of {monthLabel(compare.month)} took </>
+                  : <>{monthLabel(compare.month)} 1–{compare.days} was </>}
+                <strong style={{ color:"var(--text2)", ...num }}>{money(Math.round(compare.cmpTotal))}</strong>
               </span>
             </div>
           )}
           {series.length
-            ? <BarChart data={series} compare={grain === "daily" && compare && compare.cmpTotal > 0 ? compare : null}
+            ? <BarChart data={series} compare={(grain === "daily" || grain === "weekly") && compare && compare.cmpTotal > 0 ? compare : null}
                 height={isMobile ? 150 : 178} isMobile={isMobile} />
             : <div style={{ fontSize:12, color:"var(--text3)", padding:"14px 0" }}>Nothing received in this period.</div>}
           {series.length > 0 && (
             <div style={{ display:"flex", gap:16, flexWrap:"wrap", fontSize:10.5, color:"var(--text3)", marginTop:6, paddingTop:6, borderTop:"1px solid var(--border)" }}>
-              {seriesStats.best  && <span>Best <strong style={{ color:"#2f7d4f" }}>{seriesStats.best.label}{seriesStats.best.sub?" "+seriesStats.best.sub:""} · {money(Math.round(seriesStats.best.amount))}</strong></span>}
+              {seriesStats.best  && <span>Best {grain==="weekly"?"full week":grain==="monthly"?"month":""} <strong style={{ color:"#2f7d4f" }}>{seriesStats.best.label}{seriesStats.best.sub?" "+seriesStats.best.sub:""} · {money(Math.round(seriesStats.best.amount))}</strong></span>}
               {seriesStats.quiet && seriesStats.quiet !== seriesStats.best &&
-                <span>Quietest <strong style={{ color:"#b5322a" }}>{seriesStats.quiet.label}{seriesStats.quiet.sub?" "+seriesStats.quiet.sub:""} · {money(Math.round(seriesStats.quiet.amount))}</strong></span>}
+                <span>Quietest {grain==="weekly"?"full week":grain==="monthly"?"month":""} <strong style={{ color:"#b5322a" }}>{seriesStats.quiet.label}{seriesStats.quiet.sub?" "+seriesStats.quiet.sub:""} · {money(Math.round(seriesStats.quiet.amount))}</strong></span>}
               {grain === "daily" && (
                 <span>No income <strong style={{ color:"var(--text)" }}>{seriesStats.emptyDays} day{seriesStats.emptyDays===1?"":"s"}</strong>
                   {month && <span style={{ color:"var(--border2)" }}> (of {seriesStats.shown} so far)</span>}</span>
               )}
-              {grain === "daily" && compare && compare.cmpTotal > 0 && (
+              {/* Say plainly why a period is missing from best/quietest, rather
+                  than letting a week one day old be crowned the quietest. */}
+              {seriesStats.skipped > 0 && (
+                <span style={{ color:"var(--border2)" }}>
+                  {seriesStats.skipped} {grain === "monthly" ? "month" : "week"}{seriesStats.skipped===1?"":"s"} not finished — not ranked
+                </span>
+              )}
+              {(grain === "daily" || grain === "weekly") && compare && compare.cmpTotal > 0 && (
                 <span style={{ display:"inline-flex", gap:10 }}>
                   <span><span style={{ display:"inline-block", width:9, height:9, borderRadius:2, background:CUR_COLOR, verticalAlign:-1 }} /> {monthLabel(month)}</span>
                   <span><span style={{ display:"inline-block", width:9, height:9, borderRadius:2, background:CMP_COLOR, verticalAlign:-1 }} /> {monthLabel(compare.month)}</span>

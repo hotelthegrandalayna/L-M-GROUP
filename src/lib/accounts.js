@@ -493,16 +493,82 @@ export function revenueByMonth(bookings = [], revenues = []) {
   return [...out.entries()].map(([month, amount]) => ({ month, amount })).sort((a, b) => a.month.localeCompare(b.month));
 }
 
-export function revenueByWeek(bookings = [], revenues = [], month = "") {
-  const days = revenueByDay(bookings, revenues, month);
-  const out = new Map();
-  days.forEach(({ day, amount }) => {
-    const d = new Date(day + "T00:00:00");
-    const week = Math.ceil(d.getDate() / 7);
-    const key = `Week ${week}`;
-    out.set(key, (out.get(key) || 0) + amount);
+const MON_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+/**
+ * The weeks of a month: days 1–7, 8–14, 15–21, 22–28, then whatever is left.
+ *
+ * THE LAST WEEK IS NOT SEVEN DAYS — in a 31-day month it is three. Ranking a
+ * three-day week against a seven-day one named it the "quietest week" for being
+ * short, so every bucket carries its own length and whether it has finished.
+ * A week still running, or one that has not started, is never ranked.
+ */
+export function weekBuckets(month = "", today = "") {
+  if (!/^\d{4}-\d{2}$/.test(month)) return [];
+  const total = daysInMonth(month);
+  const m = Number(month.slice(5, 7));
+  const out = [];
+  for (let start = 1; start <= total; start += 7) {
+    const end = Math.min(start + 6, total);
+    const from = `${month}-${String(start).padStart(2, "0")}`;
+    const to   = `${month}-${String(end).padStart(2, "0")}`;
+    // `today` is passed in rather than read from the clock, so this is testable
+    // and a month in the past is never mistaken for one in progress.
+    const started  = !today || from <= today;
+    const finished = !today || to < today;
+    out.push({
+      week: out.length + 1, label: `Week ${out.length + 1}`, from, to,
+      days: end - start + 1,
+      short: end - start + 1 < 7,
+      sub: `${start}–${end} ${MON_SHORT[m - 1]}`,
+      started, finished,
+      inProgress: started && !finished,
+      future: !started,
+      // Only a finished week can honestly be called best or quietest.
+      rankable: finished,
+    });
+  }
+  return out;
+}
+
+/**
+ * Money received per week of a month. EVERY week is returned, including ones
+ * that took nothing — a week missing from the chart used to be left out
+ * altogether, so bars labelled 1, 3 and 5 read as three ordinary consecutive
+ * weeks and two dead weeks vanished.
+ */
+export function revenueByWeek(bookings = [], revenues = [], month = "", today = "") {
+  const buckets = weekBuckets(month, today);
+  const dayRows = revenueByDay(bookings, revenues, month);
+  if (!buckets.length) {
+    // No month selected — group whatever days exist, as before.
+    const out = new Map();
+    dayRows.forEach(({ day, amount }) => {
+      const key = `Week ${Math.ceil(new Date(day + "T00:00:00").getDate() / 7)}`;
+      out.set(key, (out.get(key) || 0) + amount);
+    });
+    return [...out.entries()].map(([label, amount]) => ({ label, amount }));
+  }
+  const byDay = new Map(dayRows.map(r => [r.day, r.amount]));
+  return buckets.map(b => {
+    let amount = 0;
+    for (let d = parseInt(b.from.slice(8), 10); d <= parseInt(b.to.slice(8), 10); d++) {
+      amount += byDay.get(`${month}-${String(d).padStart(2, "0")}`) || 0;
+    }
+    return { ...b, amount };
   });
-  return [...out.entries()].map(([label, amount]) => ({ label, amount }));
+}
+
+/**
+ * Best and quietest week, counting only weeks that have finished. Returns nulls
+ * when fewer than two weeks are rankable rather than crowning the only week
+ * that happens to have started.
+ */
+export function weekExtremes(rows = []) {
+  const done = rows.filter(r => r.rankable);
+  if (done.length < 2) return { best: null, quiet: null };
+  const sorted = [...done].sort((a, b) => b.amount - a.amount);
+  return { best: sorted[0], quiet: sorted[sorted.length - 1] };
 }
 
 // ── Which weekday earns most ─────────────────────────────────────────────────

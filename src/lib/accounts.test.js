@@ -5,6 +5,7 @@ import {
   roomLegs, legNightsInMonth, roomStats, acStats, nightsSold, occupancy,
   discountStats, paymentStats, patternStats, revenueByDay, revenueByMonth, salaryStats,
   costByCategoryOverMonths, weekdayStats, WEEKDAYS, sourceStats, referrerStats, referrerKey,
+  revenueByWeek, weekBuckets, weekExtremes,
 } from "./accounts";
 
 const rooms = [
@@ -208,6 +209,78 @@ describe("revenue series", () => {
     const aug = months.find(m => m.month === "2026-08");
     expect(jul.amount).toBeCloseTo(1500, 2);
     expect(aug.amount).toBeCloseTo(3400 + 6800 + 1500, 2);
+  });
+});
+
+describe("the weekly money-received chart", () => {
+  // Two faults this guards, both of which shipped:
+  //  1. a week that earned nothing vanished from the chart entirely, so bars
+  //     labelled 1, 3 and 5 sat side by side and read as consecutive weeks;
+  //  2. the last week of a 31-day month is THREE days, and was being crowned
+  //     "quietest week" for being short.
+  const rev = [
+    { id: 1, date: "2026-08-03", amount: 5000 },   // week 1
+    { id: 2, date: "2026-08-18", amount: 3000 },   // week 3
+    { id: 3, date: "2026-08-30", amount: 900 },    // week 5, only 3 days long
+  ];
+
+  it("draws every week of the month, including the empty ones", () => {
+    const rows = revenueByWeek([], rev, "2026-08");
+    expect(rows.map(r => r.label)).toEqual(["Week 1","Week 2","Week 3","Week 4","Week 5"]);
+    expect(rows.find(r => r.label === "Week 2").amount).toBe(0);
+    expect(rows.find(r => r.label === "Week 4").amount).toBe(0);
+  });
+
+  it("puts each week's takings in the right week", () => {
+    const rows = revenueByWeek([], rev, "2026-08");
+    expect(rows.map(r => r.amount)).toEqual([5000, 0, 3000, 0, 900]);
+  });
+
+  it("adds up to the month's receipts", () => {
+    const rows = revenueByWeek([], rev, "2026-08");
+    expect(rows.reduce((s, r) => s + r.amount, 0)).toBe(8900);
+  });
+
+  it("says how long each week is, so the short last one is obvious", () => {
+    const b = weekBuckets("2026-08");
+    expect(b.map(x => x.days)).toEqual([7,7,7,7,3]);
+    expect(b[4].short).toBe(true);
+    expect(b[0].short).toBe(false);
+    expect(b[4].sub).toBe("29–31 Aug");
+  });
+
+  it("handles February, where the last week is exactly 28", () => {
+    expect(weekBuckets("2026-02").map(x => x.days)).toEqual([7,7,7,7]);
+    expect(weekBuckets("2026-02").every(x => !x.short)).toBe(true);
+  });
+
+  it("never names a three-day week the quietest", () => {
+    const rows = revenueByWeek([], rev, "2026-08");   // no `today` — month is over
+    const { quiet } = weekExtremes(rows);
+    expect(quiet.label).not.toBe("Week 5");
+    expect(quiet.amount).toBe(0);                     // a genuinely dead week
+  });
+
+  it("does not rank the week that is still running", () => {
+    // Mid-month: today is the 15th, so week 3 has had one day.
+    const rows = revenueByWeek([], rev, "2026-08", "2026-08-15");
+    const wk3 = rows.find(r => r.label === "Week 3");
+    expect(wk3.inProgress).toBe(true);
+    expect(wk3.rankable).toBe(false);
+    expect(rows.find(r => r.label === "Week 4").future).toBe(true);
+    const { best, quiet } = weekExtremes(rows);
+    expect([best.label, quiet.label]).not.toContain("Week 3");
+    expect([best.label, quiet.label]).not.toContain("Week 4");
+  });
+
+  it("ranks nothing until two weeks have finished", () => {
+    const rows = revenueByWeek([], rev, "2026-08", "2026-08-05");
+    expect(weekExtremes(rows).best).toBeNull();
+  });
+
+  it("treats a month that is over as fully rankable", () => {
+    const rows = revenueByWeek([], rev, "2026-08", "2026-09-10");
+    expect(rows.every(r => r.rankable)).toBe(true);
   });
 });
 
