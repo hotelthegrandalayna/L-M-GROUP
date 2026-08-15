@@ -14,13 +14,15 @@ import { sendNtfyAlert } from "../utils/ntfy";
 import { hotelBusinessOnly } from "../utils/expenseType";
 import { pendingTasks, freqLabel } from "../utils/tasks";
 
+// Local y-m-d. Never toISOString().slice(0,10) — that shifts the day in UTC+6.
+function ymdLocal(d) {
+  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+}
+
 function addDaysIso(iso, days) {
   const d = new Date(iso + "T00:00:00");
   d.setDate(d.getDate() + days);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
+  return ymdLocal(d);
 }
 // Custom date input: shows DD/MM/YYYY, opens native calendar on click
 function DateDMY({ value, onChange, min, style }) {
@@ -72,6 +74,11 @@ const ROOM_MAP_CSS = `
 .rm-act { transition:background .12s ease, border-color .12s ease; }
 .rm-act:hover { background:var(--bg3) !important; border-color:var(--border-strong,#d6d6dc) !important; }
 .rm-act:active { transform:translateY(1px); }
+/* Overflow rooms (game zone / pray room) are not let as guest rooms — see
+   OVERFLOW_ROOMS in lib/accounts.js. They stay clickable and bookable but are
+   dimmed and narrow so the six real rooms get the width. */
+.rm-card.rm-ovf { opacity:.62; }
+.rm-card.rm-ovf:hover { opacity:1; }
 `;
 
 // Quiet outlined action button, matching the front-desk card system. `tint` is an
@@ -1322,6 +1329,23 @@ export default function Desk() {
   const occOverflow = rooms.filter(r => !guestRoomSet.has(String(r.number)) && isOccupied(r)).length;
   const occPct = guestRoomSet.size ? Math.round(occ/guestRoomSet.size*100) : 0;
 
+  // Room map: real guest rooms first at full width, overflow rooms last and narrow.
+  // Stable sort, so 101…106 keep their order and 107/108 keep theirs.
+  const mapRooms = [...rooms].sort((a,b) =>
+    (guestRoomSet.has(String(a.number)) ? 0 : 1) - (guestRoomSet.has(String(b.number)) ? 0 : 1));
+  const nOvfCols = mapRooms.filter(r => !guestRoomSet.has(String(r.number))).length;
+  const nGuestCols = mapRooms.length - nOvfCols;
+  const mapCols = `repeat(${Math.min(nGuestCols, 12)},minmax(0,1fr))`
+    + (nOvfCols ? ` repeat(${nOvfCols},minmax(0,.62fr))` : "");
+
+  // Cleaning log badge: distinct rooms cleaned today, and how many are still
+  // waiting. Green only when nothing is outstanding, so the badge answers
+  // "is today done?" without reading the timestamps.
+  const cleanedToday  = new Set((cleaningLog || [])
+    .filter(c => c.at && ymdLocal(new Date(c.at)) === today)
+    .map(c => String(c.room))).size;
+  const awaitingClean = Object.keys(dirtyRooms || {}).filter(k => dirtyRooms[k]).length;
+
   const pendingBal = bookings.filter(b => ["confirmed","checked-in"].includes(b.status)).map(b => {
     const due = getHotelDue(b);
     return { ...b, due };
@@ -1699,23 +1723,30 @@ export default function Desk() {
       <div style={{ display:"grid", gridTemplateColumns:isMobile ? "repeat(2,minmax(0,1fr))" : "repeat(4,minmax(0,1fr))", gap:8, marginBottom:14, alignItems:"stretch" }}>
         {[
           { title:"Today's Arrivals",   icon:"ti-login",         list:arrivals,   color:"var(--green)", bg:"var(--green-bg)" },
-          // Departure chips say whether the guest has actually gone, so the desk
-          // can see at a glance which rooms it is still waiting on.
+          // Departures show only the rooms still to leave — those are the desk's
+          // job. The ones already gone drop to a quiet line underneath, and the
+          // badge counts what is left rather than the day's total.
           { title:"Today's Departures", icon:"ti-logout",        list:departures, color:"var(--red2)",  bg:"var(--red-bg)",
-            chip: b => hasDeparted(b) ? { label:"left", done:true } : { label:"due", done:false } },
+            chip: b => hasDeparted(b) ? { label:"left", done:true } : { label:"due", done:false },
+            settled: hasDeparted, badgeSuffix:"still due", allSettled:"All checked out ✓" },
           { title:"Today's Extensions", icon:"ti-calendar-plus", list:extensions, color:"#7a4dd6",      bg:"#efe9fb" },
-        ].map(sec => (
+        ].map(sec => {
+          // Panels with a `settled` test split into "still to do" and a done line.
+          const openList  = sec.settled ? sec.list.filter(b => !sec.settled(b)) : sec.list;
+          const doneRooms = sec.settled ? sec.list.filter(sec.settled).flatMap(roomsOf) : [];
+          const count     = openList.reduce((n,b)=>n+roomsOf(b).length,0);
+          return (
           <div className="panel" key={sec.title} style={{ margin:0, border:"1px solid var(--border)", borderRadius:12 }}>
             <div className="panel-header" style={{ padding:"11px 13px" }}>
               <div className="panel-title" style={{ fontSize:12, gap:8, minWidth:0, flex:1, alignItems:"center" }}>
                 <span style={{ width:24, height:24, borderRadius:7, background:sec.bg, display:"inline-flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}><i className={"ti "+sec.icon} style={{ color:sec.color, fontSize:14 }} /></span>
                 <span style={{ fontWeight:600, fontSize:10.5, letterSpacing:.8, textTransform:"uppercase", color:"var(--text2)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{sec.title}</span>
-                <span style={{ marginLeft:"auto", flexShrink:0, background:sec.bg, color:sec.color, fontWeight:600, fontSize:10.5, padding:"1px 8px", borderRadius:20 }}>{sec.list.reduce((n,b)=>n+roomsOf(b).length,0)}</span>
+                <span style={{ marginLeft:"auto", flexShrink:0, background:count?sec.bg:"var(--green-bg)", color:count?sec.color:"var(--green)", fontWeight:600, fontSize:10.5, padding:"1px 8px", borderRadius:20, whiteSpace:"nowrap" }}>{count}{sec.badgeSuffix && count ? " "+sec.badgeSuffix : ""}</span>
               </div>
             </div>
-            {sec.list.length ? (
+            {openList.length ? (
               <div style={{ display:"flex", flexWrap:"wrap", gap:6, padding:"4px 13px 12px" }}>
-                {sec.list.flatMap(b => {
+                {openList.flatMap(b => {
                   const meta = sec.chip ? sec.chip(b) : null;
                   if (!meta) return roomsOf(b).map(rm => (
                     <span key={b.id+"-"+rm} style={{ minWidth:36, textAlign:"center", background:"var(--bg2)", color:sec.color, border:"1px solid "+sec.color, borderRadius:8, padding:"5px 10px", fontWeight:600, fontSize:14, lineHeight:1, fontVariantNumeric:"tabular-nums" }}>{rm}</span>
@@ -1724,7 +1755,7 @@ export default function Desk() {
                     <span key={b.id+"-"+rm} title={(b.guest || "") + (meta.done ? " — checked out" : " — still to check out")}
                       style={{ display:"inline-flex", flexDirection:"column", alignItems:"center", gap:1, minWidth:44,
                         background: meta.done ? sec.bg : "var(--bg2)", color: meta.done ? "var(--red)" : sec.color,
-                        border:"1px solid "+(meta.done ? "var(--red-bd)" : sec.color), borderRadius:8, padding:"5px 10px", lineHeight:1.15 }}>
+                        border:(sec.settled && !meta.done ? "2px solid " : "1px solid ")+(meta.done ? "var(--red-bd)" : sec.color), borderRadius:8, padding:"5px 10px", lineHeight:1.15 }}>
                       <span style={{ fontWeight:600, fontSize:14, fontVariantNumeric:"tabular-nums" }}>{rm}</span>
                       <span style={{ fontSize:9.5, fontWeight:500 }}>
                         {meta.done && <i className="ti ti-check" style={{ fontSize:10, verticalAlign:"-1px", marginRight:2 }} />}{meta.label}
@@ -1734,10 +1765,20 @@ export default function Desk() {
                 })}
               </div>
             ) : (
-              <div style={{ color:"var(--text3)", fontSize:11.5, textAlign:"center", padding:"6px 4px 14px" }}>None today</div>
+              <div style={{ color:doneRooms.length?"var(--green)":"var(--text3)", fontWeight:doneRooms.length?700:400, fontSize:11.5, textAlign:"center", padding:"6px 4px 14px" }}>
+                {doneRooms.length ? (sec.allSettled || "All done") : "None today"}
+              </div>
+            )}
+            {/* Rooms already handled — kept visible but out of the way */}
+            {doneRooms.length > 0 && openList.length > 0 && (
+              <div style={{ padding:"0 13px 11px", fontSize:10.5, color:"var(--text3)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
+                <i className="ti ti-check" style={{ fontSize:11, verticalAlign:"-1px", marginRight:3, color:"var(--green)" }} />
+                left: {doneRooms.join(" · ")}
+              </div>
             )}
           </div>
-        ))}
+          );
+        })}
 
         {/* Upcoming Reservations — room + arrival date; call-to-confirm folded in */}
         <div className="panel" style={{ margin:0, borderRadius:12, border:"1px solid "+(toConfirm.length ? "var(--gold2)" : "var(--border)") }}>
@@ -1787,8 +1828,9 @@ export default function Desk() {
             </div>
           </div>
           <style>{ROOM_MAP_CSS}</style>
-          <div style={{ display:"grid", gridTemplateColumns:isMobile ? "repeat(2,minmax(0,1fr))" : `repeat(${Math.min(rooms.length, 12)},minmax(0,1fr))`, gap:isMobile?14:10, marginBottom:14 }}>
-            {rooms.map(r => {
+          <div style={{ display:"grid", gridTemplateColumns:isMobile ? "repeat(2,minmax(0,1fr))" : mapCols, gap:isMobile?14:10, marginBottom:14 }}>
+            {mapRooms.map(r => {
+              const isOvf = !guestRoomSet.has(String(r.number));
               const rawDs = getRoomDisplayStatus(r, bookings, today);
               // A vacant room that was just checked out shows "needs cleaning"
               const needsClean = dirtyRooms && dirtyRooms[String(r.number)];
@@ -1824,7 +1866,7 @@ export default function Desk() {
                 isExtended = !!(bk.extensions && bk.extensions.length) || (bk.paymentHistory || []).some(p => /extend/i.test(p.note || ""));
               }
               return (
-                <div key={r.id} className="rm-card" onClick={() => ds === "cleaning" ? setCleanTarget(r) : setSel(r)}>
+                <div key={r.id} className={"rm-card" + (isOvf && !bk && ds !== "cleaning" ? " rm-ovf" : "")} onClick={() => ds === "cleaning" ? setCleanTarget(r) : setSel(r)}>
                   {/* Soft tinted status strip */}
                   <div style={{ background:st.tint, color:st.stripTx, fontSize:11, padding:"6px 12px", display:"flex", justifyContent:"space-between", alignItems:"center", gap:6 }}>
                     <span style={{ whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
@@ -1833,10 +1875,10 @@ export default function Desk() {
                     {ribbonNote && <span className={(!bk && fc>0) ? "rm-ahead" : ""} style={{ whiteSpace:"nowrap" }}>{ribbonNote}</span>}
                   </div>
                   {/* Body */}
-                  <div style={{ padding:"12px 13px 13px" }}>
+                  <div style={{ padding:isOvf ? "9px 10px 10px" : "12px 13px 13px" }}>
                     <div style={{ display:"flex", alignItems:"baseline", justifyContent:"space-between", gap:6 }}>
-                      <span style={{ fontSize:26, fontWeight:500, color:"var(--text)", letterSpacing:-.5, lineHeight:1 }}>{r.number}</span>
-                      <span style={{ fontSize:11, color:"var(--text3)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", maxWidth:"60%" }}>{r.name || r.type}</span>
+                      <span style={{ fontSize:isOvf?18:26, fontWeight:500, color:"var(--text)", letterSpacing:-.5, lineHeight:1 }}>{r.number}</span>
+                      <span style={{ fontSize:isOvf?10:11, color:"var(--text3)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", maxWidth:"60%" }}>{r.name || r.type}</span>
                     </div>
                     {ds === "cleaning" ? (
                       <div style={{ fontSize:14, color:"var(--text2)", marginTop:6 }}>Needs cleaning</div>
@@ -1849,7 +1891,11 @@ export default function Desk() {
                           : <span style={{ fontSize:11, background:"#D6EEC6", color:"#356010", padding:"2px 9px", borderRadius:20 }}>paid <i className="ti ti-check" style={{ fontSize:11 }} /></span>}
                         {isExtended && <span style={{ fontSize:11, background:"#DAD4F8", color:"#332b7a", padding:"2px 9px", borderRadius:20 }}><i className="ti ti-arrow-up-right" style={{ fontSize:11 }} /> extended</span>}
                       </div>
-                    </>) : (<>
+                    </>) : isOvf ? (
+                      // Idle overflow room: one quiet line instead of the full
+                      // "Available now / tap to book" block. Still opens on click.
+                      <div style={{ fontSize:10.5, color:"var(--text3)", marginTop:5 }}>overflow only</div>
+                    ) : (<>
                       <div style={{ fontSize:14, color:"var(--text2)", marginTop:6 }}>Available now</div>
                       <div style={{ marginTop:9 }}>
                         <span style={{ fontSize:11, background:"var(--bg3)", color:"var(--text3)", padding:"2px 9px", borderRadius:20 }}>tap to book</span>
@@ -1861,19 +1907,28 @@ export default function Desk() {
             })}
           </div>
 
-          {/* Today's Tasks — big, prominent panel under the room map & guests.
-              Flashes gold when due today, red when overdue, so it can't be missed. */}
+        {/* ── Today's Tasks + Cleaning Log ─────────────────────────────────────
+            Side by side at half width each, and capped at 4cm on desktop so a
+            busy day can never push the rest of the desk down — each card scrolls
+            inside itself instead. Grid stretch keeps the two exactly equal.
+            Staff see no cleaning log, so tasks take the full width for them. */}
+        <div style={{ display:"grid", gridTemplateColumns:(isMobile || curRole!=="admin") ? "minmax(0,1fr)" : "repeat(2,minmax(0,1fr))", gap:12, marginTop:14, alignItems:"stretch" }}>
+
+          {/* Today's Tasks — flashes gold when due today, red when overdue. */}
           <div className={pendingT.length ? (pendingT.some(p=>p.overdue) ? "task-flash-red" : "task-flash-gold") : ""}
-            style={{ background:"#fff", border:`2px solid ${pendingT.some(p=>p.overdue)?"var(--red2)":(pendingT.length?"var(--gold2)":"#86EFB0")}`, borderRadius:14, padding:"14px 16px", marginTop:14 }}>
-            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8, marginBottom:pendingT.length?12:0 }}>
-              <div style={{ fontSize:15, fontWeight:600, color:"var(--navy)", display:"flex", alignItems:"center", gap:9 }}>
-                <span style={{ width:26, height:26, borderRadius:8, background:"var(--bg3)", display:"inline-flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}><i className="ti ti-checklist" style={{ color:"var(--gold2)", fontSize:16 }} /></span> Today's Tasks
-                <span style={{ background:pendingT.length?"var(--red-bg)":"var(--green-bg)", color:pendingT.length?"var(--red2)":"var(--green)", fontWeight:600, fontSize:11, padding:"1px 9px", borderRadius:20 }}>{pendingT.length ? `${pendingT.length} to do` : "All done"}</span>
+            style={{ background:"#fff", border:`2px solid ${pendingT.some(p=>p.overdue)?"var(--red2)":(pendingT.length?"var(--gold2)":"#86EFB0")}`, borderRadius:14, padding:"12px 14px",
+              ...(isMobile ? {} : { maxHeight:"4cm" }), display:"flex", flexDirection:"column", minHeight:0, minWidth:0 }}>
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8, marginBottom:pendingT.length?10:0, flexShrink:0 }}>
+              <div style={{ fontSize:14, fontWeight:600, color:"var(--navy)", display:"flex", alignItems:"center", gap:8, minWidth:0 }}>
+                <span style={{ width:24, height:24, borderRadius:8, background:"var(--bg3)", display:"inline-flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}><i className="ti ti-checklist" style={{ color:"var(--gold2)", fontSize:15 }} /></span> Today's Tasks
+                <span style={{ background:pendingT.length?"var(--red-bg)":"var(--green-bg)", color:pendingT.length?"var(--red2)":"var(--green)", fontWeight:600, fontSize:11, padding:"1px 9px", borderRadius:20, whiteSpace:"nowrap" }}>{pendingT.length ? `${pendingT.length} to do` : "All done"}</span>
               </div>
-              <button onClick={()=>setActiveTab("tasks")} style={{ fontSize:12, fontWeight:700, background:"transparent", border:"1.5px solid var(--border)", borderRadius:8, padding:"6px 12px", color:"var(--navy)", cursor:"pointer" }}>Open all ▸</button>
+              <button onClick={()=>setActiveTab("tasks")} style={{ flexShrink:0, fontSize:11.5, fontWeight:700, background:"transparent", border:"1.5px solid var(--border)", borderRadius:8, padding:"5px 11px", color:"var(--navy)", cursor:"pointer" }}>Open all ▸</button>
             </div>
             {pendingT.length ? (
-              <div style={{ display:"grid", gridTemplateColumns:isMobile?"1fr":"repeat(auto-fill,minmax(280px,1fr))", gap:10 }}>
+              // auto-FIT, not auto-fill: one task stretches to fill the card
+              // instead of leaving an empty column beside it.
+              <div style={{ flex:1, minHeight:0, overflowY:"auto", display:"grid", gridTemplateColumns:isMobile?"1fr":"repeat(auto-fit,minmax(240px,1fr))", gap:8, alignContent:"start" }}>
                 {pendingT.map(({task,due,overdue}) => (
                   <div key={task.id+"_"+due} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:10, padding:"11px 13px", border:`1.5px solid ${overdue?"#fca5a5":"#e5e3de"}`, background:overdue?"#fff5f5":"#fafaf9", borderRadius:10 }}>
                     <div style={{ minWidth:0 }}>
@@ -1888,10 +1943,42 @@ export default function Desk() {
               <div style={{ color:"var(--green)", fontSize:13, fontWeight:700, padding:"6px 0 2px" }}>🎉 All tasks done for today</div>
             )}
           </div>
+
+          {/* Cleaning log — admin oversight of who cleaned which room, when.
+              Same 4cm cap as the tasks card; the list scrolls inside it. */}
+          {curRole === "admin" && (
+            <div className="panel" style={{ margin:0, border:"1px solid var(--border)", borderRadius:12,
+              maxHeight:isMobile ? 220 : "4cm", display:"flex", flexDirection:"column", minHeight:0, minWidth:0, overflow:"hidden" }}>
+              <div className="panel-header" style={{ padding:"11px 14px", flexShrink:0 }}>
+                <div className="panel-title" style={{ fontSize:12, gap:8, alignItems:"center" }}>
+                  <span style={{ width:24, height:24, borderRadius:7, background:"var(--bg3)", display:"inline-flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}><i className="ti ti-spray" style={{ color:"#a6832c", fontSize:14 }} /></span>
+                  <span style={{ fontWeight:600, fontSize:10.5, letterSpacing:.8, textTransform:"uppercase", color:"var(--text2)" }}>Cleaning Log</span>
+                  <span title={awaitingClean ? `${awaitingClean} room${awaitingClean>1?"s":""} still to clean` : "nothing waiting to be cleaned"}
+                    style={{ marginLeft:"auto", flexShrink:0, whiteSpace:"nowrap", fontWeight:600, fontSize:10.5, padding:"1px 8px", borderRadius:20,
+                      background:awaitingClean?"var(--red-bg)":"var(--green-bg)", color:awaitingClean?"var(--red2)":"var(--green)" }}>
+                    {awaitingClean ? `${awaitingClean} waiting` : `${cleanedToday} room${cleanedToday===1?"":"s"} today`}
+                  </span>
+                </div>
+              </div>
+              <div style={{ flex:1, minHeight:0, overflowY:"auto" }}>
+                {(!cleaningLog || cleaningLog.length === 0) ? (
+                  <div style={{ color:"var(--text3)", fontSize:12, textAlign:"center", padding:"12px 0" }}>No cleanings recorded yet</div>
+                ) : [...cleaningLog].slice(-20).reverse().map((c,i) => (
+                  <div key={i} style={{ padding:"7px 14px", borderTop:"1px solid var(--border)", fontSize:11.5, display:"flex", justifyContent:"space-between", gap:10 }}>
+                    <span style={{ fontWeight:600, flexShrink:0 }}>Room {c.room}</span>
+                    <span style={{ color:"var(--text3)", minWidth:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                      {c.at ? new Date(c.at).toLocaleString("en-GB",{ day:"2-digit", month:"short", hour:"2-digit", minute:"2-digit" }) : ""} · {c.by} · {(c.checklist||[]).length}/6
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
         </div>
 
         {/* Below the map: less-used panels in a row (off the main scroll path) */}
-        <div style={{ display:"grid", gridTemplateColumns:isMobile ? "minmax(0,1fr)" : "repeat(3,minmax(0,1fr))", gap:12, marginTop:14, alignItems:"stretch" }}>
+        <div style={{ display:"grid", gridTemplateColumns:isMobile ? "minmax(0,1fr)" : "repeat(2,minmax(0,1fr))", gap:12, marginTop:14, alignItems:"stretch" }}>
 
           {/* Pending Balances */}
           {pendingBal.length > 0 && (
@@ -1985,28 +2072,6 @@ export default function Desk() {
             );
           })()}
 
-          {/* Cleaning log — admin oversight of who cleaned which room, when */}
-          {curRole === "admin" && (
-            <div className="panel" style={{ margin:0, border:"1px solid var(--border)", borderRadius:12 }}>
-              <div className="panel-header" style={{ padding:"12px 14px" }}>
-                <div className="panel-title" style={{ fontSize:12, gap:8, alignItems:"center" }}>
-                  <span style={{ width:24, height:24, borderRadius:7, background:"var(--bg3)", display:"inline-flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}><i className="ti ti-spray" style={{ color:"#a6832c", fontSize:14 }} /></span>
-                  <span style={{ fontWeight:600, fontSize:10.5, letterSpacing:.8, textTransform:"uppercase", color:"var(--text2)" }}>Cleaning Log</span>
-                </div>
-              </div>
-              {(!cleaningLog || cleaningLog.length === 0) ? (
-                <div style={{ color:"var(--text3)", fontSize:12, textAlign:"center", padding:"12px 0" }}>No cleanings recorded yet</div>
-              ) : [...cleaningLog].slice(-6).reverse().map((c,i) => (
-                <div key={i} style={{ padding:"9px 14px", borderTop:"1px solid var(--border)", fontSize:11.5 }}>
-                  <div style={{ display:"flex", justifyContent:"space-between" }}>
-                    <span style={{ fontWeight:600 }}>Room {c.room}</span>
-                    <span style={{ color:"var(--text3)" }}>{c.at ? new Date(c.at).toLocaleString("en-GB",{ day:"2-digit", month:"short", hour:"2-digit", minute:"2-digit" }) : ""}</span>
-                  </div>
-                  <div style={{ color:"var(--text3)", marginTop:2 }}>by {c.by} · {(c.checklist||[]).length}/6 items</div>
-                </div>
-              ))}
-            </div>
-          )}
         </div>
       </div>
 
