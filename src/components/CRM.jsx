@@ -2,6 +2,10 @@ import { useState, useMemo } from "react";
 import { useApp } from "../context/AppContext";
 import { money, todayStr } from "../utils/helpers";
 import GuestFeedback from "./GuestFeedback";
+import {
+  buildGuests, guestStage, guestFacts, crmMetrics, stageBreakdown,
+  actionQueue, logContact, sourceBreakdown, STAGES, STAGE_ORDER,
+} from "../lib/crm";
 
 const PREFS = ["Non-smoking","Quiet room","High floor","Ground floor","Extra pillows",
                "Late check-out","Early check-in","Halal food","Extra towels","Room service"];
@@ -42,8 +46,9 @@ function birthdayMonth(g) {
 
 // ─── Guest Profile Modal ──────────────────────────────────────────────────────
 function GuestModal({ gkey, g, onClose, onSave }) {
-  const seg = getSegment(g);
-  const ss  = SEG[seg] || SEG.new;
+  const seg = guestStage(g, todayStr());
+  const ss  = { pill: STAGES[seg].label, bg: STAGES[seg].bg, border: STAGES[seg].bg, color: STAGES[seg].color,
+                avatar: "linear-gradient(135deg,#4a2ea8,#7c5fd6)" };
   const done = g.stays.filter(x => x.status === "checked-out").sort((a, b) => b.checkin > a.checkin ? 1 : -1);
   const avg  = done.length ? Math.round(g.totalSpent / done.length) : 0;
   const sp   = g.savedProfile || {};
@@ -190,16 +195,22 @@ function GuestModal({ gkey, g, onClose, onSave }) {
 
 // ─── Marketing Hub Modal ──────────────────────────────────────────────────────
 function MarketingModal({ guests, onClose }) {
-  const [audience,  setAudience]  = useState("all");
+  const [audience,  setAudience]  = useState("fresh");
   const [tplIdx,    setTplIdx]    = useState(0);
   const [customMsg, setCustomMsg] = useState("");
 
+  // Audiences follow the same stages as the rest of the screen, so "send to the
+  // 28 first-time guests" is one choice rather than a guess at who "all" means.
+  const today = todayStr();
   const AUDIENCES = [
-    { key: "all",      label: "All Guests",   fn: () => true },
-    { key: "vip",      label: "VIP Only",     fn: g => getSegment(g) === "vip" },
-    { key: "inactive", label: "Inactive",     fn: g => getSegment(g) === "inactive" },
-    { key: "birthday", label: "Birthdays",    fn: g => birthdayMonth(g) },
-    { key: "followup", label: "Follow-up",    fn: g => g.savedProfile?.followUp },
+    { key: "fresh",     label: "First stay — recent",   fn: g => guestStage(g, today) === "fresh" },
+    { key: "cooling",   label: "Cooling — 1–3 months",  fn: g => guestStage(g, today) === "cooling" },
+    { key: "champion",  label: "Champions",             fn: g => guestStage(g, today) === "champion" },
+    { key: "returning", label: "Returning",             fn: g => guestStage(g, today) === "returning" },
+    { key: "lapsed",    label: "Lapsed",                fn: g => guestStage(g, today) === "lapsed" },
+    { key: "birthday",  label: "Birthdays this month",  fn: g => birthdayMonth(g) },
+    { key: "followup",  label: "Marked for follow-up",  fn: g => g.savedProfile?.followUp },
+    { key: "all",       label: "Everyone",              fn: () => true },
   ];
 
   const af       = AUDIENCES.find(a => a.key === audience);
@@ -278,71 +289,75 @@ function MarketingModal({ guests, onClose }) {
   );
 }
 
+// ─── Small pieces of the new screen ──────────────────────────────────────────
+const StagePill = ({ stage }) => {
+  const s = STAGES[stage] || STAGES.lapsed;
+  return <span style={{ fontSize:10.5, fontWeight:800, padding:"3px 10px", borderRadius:20,
+    background:s.bg, color:s.color, whiteSpace:"nowrap" }}>{s.label}</span>;
+};
+
+/** One row of the daily action list: who, why, and the message ready to send. */
+function ActionRow({ a, n, onSend, onSnooze }) {
+  const g = a.guest;
+  const tone = a.priority === 1 ? "#DC2626" : a.priority === 2 ? "#C9983A" : "#4a2ea8";
+  return (
+    <div style={{ display:"flex", alignItems:"flex-start", gap:13, padding:"13px 16px", borderBottom:"1px solid var(--border)" }}>
+      <span style={{ width:24, height:24, borderRadius:7, background:tone, color:"#fff", flexShrink:0,
+        display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:800, marginTop:2 }}>{n}</span>
+      <div style={{ flex:1, minWidth:0 }}>
+        <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
+          <span style={{ fontSize:14, fontWeight:700 }}>{g.name}</span>
+          <StagePill stage={a.stage} />
+        </div>
+        <div style={{ fontSize:12.5, color:"var(--text2)", marginTop:3 }}>{a.reason}</div>
+        <div style={{ fontSize:11.5, color:"var(--text3)", background:"var(--bg4)", border:"1px dashed var(--border)",
+          borderRadius:8, padding:"8px 11px", marginTop:8, lineHeight:1.5, fontStyle:"italic" }}>{a.message}</div>
+      </div>
+      <div style={{ display:"flex", gap:7, flexShrink:0, alignItems:"center" }}>
+        <button onClick={() => onSnooze(a)} title="Not now — hide for two weeks"
+          style={{ background:"#fff", border:"1.5px solid var(--border)", color:"var(--text3)", borderRadius:8,
+            padding:"7px 11px", fontSize:12, cursor:"pointer", fontFamily:"inherit" }}>Later</button>
+        <a href={"https://wa.me/" + waNum(g.phone) + "?text=" + encodeURIComponent(a.message)}
+          target="_blank" rel="noreferrer" onClick={() => onSend(a)} style={{ textDecoration:"none" }}>
+          <button style={{ background:"#25D366", color:"#fff", border:"none", borderRadius:8, padding:"8px 15px",
+            fontSize:12.5, fontWeight:800, cursor:"pointer", fontFamily:"inherit", whiteSpace:"nowrap" }}>WhatsApp</button>
+        </a>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main CRM ─────────────────────────────────────────────────────────────────
 export default function CRM() {
-  const { bookings, guestProfiles, updateGuests } = useApp();
+  const { bookings, guestProfiles, updateGuests, curUser } = useApp();
   const [seg,     setSeg]     = useState("all");
   const [search,  setSearch]  = useState("");
   const [selKey,  setSelKey]  = useState(null);
   const [showMkt, setShowMkt] = useState(false);
+  const [showAllGuests, setShowAllGuests] = useState(false);
+  const today = todayStr();
 
-  // Build guest map from bookings
-  const guestMap = useMemo(() => {
-    const map = {};
-    bookings.filter(b => b.status !== "cancelled" && b.phone).forEach(b => {
-      const key = b.phone.replace(/\D/g, "");
-      if (!map[key]) map[key] = {
-        key, phone: b.phone, name: b.guest, nationality: b.nationality || "",
-        idType: b.idType || "", idNum: b.idNum || "",
-        stays: [], totalSpent: 0, totalNights: 0,
-        savedProfile: (guestProfiles || {})[key] || {} };
-      map[key].stays.push({
-        id: b.id, checkin: b.checkin, checkout: b.checkout,
-        room: b.room, amount: b.invoiceTotal ?? b.amount,
-        nights: b.nights || 0, status: b.status, source: b.source || "" });
-      map[key].totalSpent  += (b.invoiceTotal ?? b.amount) || 0;
-      map[key].totalNights += b.nights || 0;
-      map[key].name = b.guest; // keep latest name
+  const guestMap = useMemo(() => buildGuests(bookings, guestProfiles), [bookings, guestProfiles]);
+  const gList    = useMemo(() => Object.values(guestMap), [guestMap]);
+  const metrics  = useMemo(() => crmMetrics(gList, today), [gList, today]);
+  const stages   = useMemo(() => stageBreakdown(gList, today), [gList, today]);
+  const queue    = useMemo(() => actionQueue(gList, today, 6), [gList, today]);
+  const channels = useMemo(() => sourceBreakdown(bookings), [bookings]);
 
-      // Companions — spouse and group members with their own phone numbers
-      // become CRM guests too (stay recorded, but spend stays on the payer).
-      const companions = [
-        ...(b.spouseName && b.spousePhone ? [{ name: b.spouseName, phone: b.spousePhone }] : []),
-        ...((b.groupMembers || []).map(m => typeof m === "string" ? { name: m, phone: "" } : m)),
-      ].filter(m => m && m.name && m.phone);
-      companions.forEach(m => {
-        const mkey = m.phone.replace(/\D/g, "");
-        if (!mkey || mkey === key) return;
-        if (!map[mkey]) map[mkey] = {
-          key: mkey, phone: m.phone, name: m.name, nationality: "",
-          idType: "", idNum: "",
-          stays: [], totalSpent: 0, totalNights: 0,
-          savedProfile: (guestProfiles || {})[mkey] || {} };
-        map[mkey].stays.push({
-          id: b.id, checkin: b.checkin, checkout: b.checkout,
-          room: b.room, amount: 0,
-          nights: b.nights || 0, status: b.status, source: "Companion of " + b.guest });
-        map[mkey].totalNights += b.nights || 0;
-        map[mkey].name = m.name;
-      });
-    });
-    return map;
-  }, [bookings, guestProfiles]);
-
-  const gList = useMemo(() => Object.values(guestMap), [guestMap]);
-
-  // Counts
-  const vipCount      = gList.filter(g => getSegment(g) === "vip").length;
-  const returningCount = gList.filter(g => getSegment(g) === "regular").length;
-  const inactiveCount = gList.filter(g => getSegment(g) === "inactive").length;
+  // Contacting a guest records it, so the same person is not messaged twice by
+  // two different people on the same morning.
+  function markContacted(a) {
+    const key = a.guest.key;
+    const next = { ...(guestProfiles || {}),
+      [key]: logContact((guestProfiles || {})[key] || {}, a.kind, today, curUser || "") };
+    updateGuests(next);
+  }
 
   const SEGS = [
-    { key: "all",      label: "All Guests" },
-    { key: "vip",      label: "★ VIP" },
-    { key: "regular",  label: "Regular" },
-    { key: "new",      label: "New" },
-    { key: "inactive", label: "Inactive" },
-    { key: "birthday", label: "🎂 Birthday" },
+    { key:"all", label:"All" },
+    ...STAGE_ORDER.map(k => ({ key:k, label:STAGES[k].short })),
+    { key:"owed", label:"Owes money" },
+    { key:"birthday", label:"🎂 Birthday" },
   ];
 
   const filtered = useMemo(() => {
@@ -351,9 +366,12 @@ export default function CRM() {
       if (q && !g.name.toLowerCase().includes(q) && !g.phone.includes(q)) return false;
       if (seg === "all")      return true;
       if (seg === "birthday") return birthdayMonth(g);
-      return getSegment(g) === seg;
-    }).sort((a, b) => b.totalSpent - a.totalSpent);
-  }, [gList, seg, search]);
+      if (seg === "owed")     return (g.due || 0) > 0;
+      return guestStage(g, today) === seg;
+    }).sort((a, b) => (b.totalSpent || 0) - (a.totalSpent || 0));
+  }, [gList, seg, search, today]);
+
+  const shownGuests = showAllGuests ? filtered : filtered.slice(0, 12);
 
   function saveProfile(key, data) {
     const next = { ...(guestProfiles || {}), [key]: { ...((guestProfiles || {})[key] || {}), ...data } };
@@ -361,13 +379,13 @@ export default function CRM() {
   }
 
   function exportCSV() {
-    const rows = [["Name","Phone","Segment","Nationality","Stays","Nights","Total Spent","Last Stay","Birthday","Anniversary","Preferences","Notes","Marketing OK","Follow-up"]];
+    const rows = [["Name","Phone","Stage","Nationality","Stays","Nights","Total Spent","Owed","Last Stay","Birthday","Anniversary","Preferences","Notes","Marketing OK","Follow-up"]];
     gList.forEach(g => {
       const sp   = g.savedProfile || {};
       const last = g.stays.filter(x => x.status === "checked-out").sort((a, b) => b.checkin > a.checkin ? 1 : -1)[0];
       rows.push([
-        g.name, g.phone, getSegment(g), g.nationality,
-        g.stays.length, g.totalNights, g.totalSpent,
+        g.name, g.phone, STAGES[guestStage(g, today)].short, g.nationality,
+        g.stays.length, g.totalNights, g.totalSpent, g.due || 0,
         last?.checkout || "", sp.birthday || "", sp.anniversary || "",
         (sp.preferences || []).join("|"),
         (sp.notes || "").replace(/,/g, " "),
@@ -389,8 +407,11 @@ export default function CRM() {
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18, flexWrap: "wrap", gap: 10 }}>
         <div>
-          <div style={{ fontSize: 20, fontWeight: 800, fontFamily: "'Playfair Display',serif", color: "var(--navy)" }}>Guest CRM</div>
-          <div style={{ fontSize: 12, color: "var(--text3)" }}>{gList.length} unique guests</div>
+          <div style={{ fontSize: 20, fontWeight: 800, fontFamily: "'Playfair Display',serif", color: "var(--navy)" }}>Guests</div>
+          <div style={{ fontSize: 12, color: "var(--text3)" }}>
+            {metrics.guests} guests · {money(metrics.revenue)} lifetime
+            {metrics.owed > 0 && <> · <span style={{ color:"var(--red2)", fontWeight:600 }}>{money(metrics.owed)} owed</span></>}
+          </div>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           <button className="btn sm gold" onClick={() => setShowMkt(true)}>
@@ -402,114 +423,237 @@ export default function CRM() {
         </div>
       </div>
 
-      {/* Metric cards */}
-      {/* auto-fit rather than a fixed 4 columns: at 375px the four cards squeezed
-          to ~80px each and clipped their own labels ("RETURNING", "INACTIVE") */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 12, marginBottom: 18 }}>
+      {/* ── Three numbers that decide a small hotel ────────────────────────── */}
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(210px,1fr))", gap:12, marginBottom:16 }}>
         {[
-          { label: "Total Guests",  value: gList.length,    sub: "Unique guests",         icon: "ti-users",   cls: "metric gold" },
-          { label: "VIP Guests",    value: vipCount,        sub: "৳20k+ or 3+ stays",     icon: "ti-crown",   cls: "metric" },
-          { label: "Returning",     value: returningCount,  sub: "Stayed 2+ times",        icon: "ti-repeat",  cls: "metric blue" },
-          { label: "Inactive",      value: inactiveCount,   sub: "No visit in 6+ months",  icon: "ti-clock",   cls: "metric amber" },
+          { l:"Repeat rate", v:metrics.repeatRate + "%",
+            d:`${metrics.repeat} of ${metrics.guestsWithStay} guests came back`,
+            note:"independent hotels run 20–30%",
+            bar:Math.min(100, metrics.repeatRate * 3.3), tone: metrics.repeatRate >= 20 ? "#166534" : "#DC2626" },
+          { l:"Guest value", v:money(metrics.avgValue),
+            d:`average across ${metrics.guests} guests`,
+            note:`top ${metrics.topN} bring ${metrics.topShare}% of revenue`,
+            bar:metrics.topShare, tone:"#C9983A" },
+          // Deliberately the SHORT list, not everyone who could be messaged.
+          // "47 to contact" is not something a person can act on this morning;
+          // six is. The rest are offered as one campaign, further down.
+          { l:"To contact today", v:queue.actions.length,
+            d: queue.actions.length ? "ranked below, each message written" : "nothing needs you right now",
+            note: queue.remaining.length
+              ? `${queue.remaining.length} more can go as one campaign`
+              : (metrics.owed > 0 ? money(metrics.owed) + " outstanding" : "no money outstanding"),
+            bar: Math.min(100, queue.actions.length * 16), tone:"#4a2ea8" },
         ].map(m => (
-          <div key={m.label} className={m.cls}>
-            <div className="metric-icon"><i className={"ti " + m.icon} /></div>
-            <div className="metric-label">{m.label}</div>
-            <div className="metric-value">{m.value}</div>
-            <div className="metric-sub">{m.sub}</div>
+          <div key={m.l} style={{ background:"var(--bg2)", border:"1px solid var(--border)", borderRadius:12,
+            padding:"15px 17px", position:"relative", overflow:"hidden" }}>
+            <span style={{ position:"absolute", left:0, top:0, bottom:0, width:4, background:m.tone }} />
+            <div style={{ fontSize:10, fontWeight:800, letterSpacing:1, textTransform:"uppercase", color:"var(--text3)" }}>{m.l}</div>
+            <div style={{ fontSize:30, fontWeight:600, lineHeight:1, margin:"8px 0 5px", color:m.tone, fontVariantNumeric:"tabular-nums" }}>{m.v}</div>
+            <div style={{ fontSize:11.5, color:"var(--text2)" }}>{m.d}</div>
+            <div style={{ height:5, borderRadius:3, background:"var(--bg3)", margin:"9px 0 5px", overflow:"hidden" }}>
+              <div style={{ width:m.bar + "%", height:"100%", background:m.tone, borderRadius:3 }} />
+            </div>
+            <div style={{ fontSize:10.5, color:"var(--text3)" }}>{m.note}</div>
           </div>
         ))}
       </div>
 
-      {/* Guest feedback — moved here from the old Insights tab */}
-      <GuestFeedback />
-
-      {/* Filter bar */}
-      <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap", alignItems: "center" }}>
-        {SEGS.map(s => (
-          <button key={s.key} onClick={() => setSeg(s.key)}
-            className={"seg-btn" + (seg === s.key ? " active" : "")}>{s.label}</button>
+      {/* ── Today's actions — the reason to open this tab ──────────────────── */}
+      <div className="panel" style={{ margin:"0 0 16px", border:"1px solid var(--border)", borderRadius:12 }}>
+        <div className="panel-header" style={{ padding:"13px 16px", display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
+          <span style={{ fontSize:11, fontWeight:800, letterSpacing:1, textTransform:"uppercase", color:"var(--text2)" }}>Today's guest actions</span>
+          {queue.actions.length > 0 &&
+            <span style={{ fontSize:11.5, color:"var(--text3)" }}>{queue.actions.length} worth doing</span>}
+          <span style={{ marginLeft:"auto", fontSize:11, color:"var(--text3)" }}>each opens WhatsApp with the message written</span>
+        </div>
+        {queue.actions.length === 0 ? (
+          <div style={{ padding:"30px 16px", textAlign:"center", color:"var(--text3)", fontSize:13 }}>
+            Nothing needs chasing today. Guests appear here when they arrive, check out, owe money or go quiet.
+          </div>
+        ) : queue.actions.map((a, i) => (
+          <ActionRow key={a.key} a={a} n={i + 1} onSend={markContacted} onSnooze={markContacted} />
         ))}
-        <div style={{ position: "relative", flex: 1, maxWidth: 220 }}>
-          <i className="ti ti-search" style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)", color: "var(--text3)", fontSize: 13 }} />
-          <input value={search} onChange={e => setSearch(e.target.value)}
-            placeholder="Search guest..." style={{ paddingLeft: 28, width: "100%", boxSizing: "border-box" }} />
-        </div>
+        {queue.remaining.length > 0 && (
+          <div style={{ padding:"12px 16px", display:"flex", alignItems:"center", gap:11, background:"var(--bg4)", flexWrap:"wrap" }}>
+            <span style={{ fontSize:12.5, color:"var(--text2)" }}>
+              <strong>{queue.remaining.length} more</strong> guests are worth a message — send to them as one group
+            </span>
+            <button className="btn sm gold" style={{ marginLeft:"auto" }} onClick={() => setShowMkt(true)}>
+              <i className="ti ti-speakerphone" /> Open campaign
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* Guest cards */}
-      {filtered.length === 0 && (
-        <div style={{ textAlign: "center", color: "var(--text3)", padding: 48, fontSize: 14 }}>
-          {gList.length === 0 ? "No guests yet — bookings will appear here." : "No guests match this filter."}
+      {/* ── Where the guests are ───────────────────────────────────────────── */}
+      <div className="panel" style={{ margin:"0 0 16px", border:"1px solid var(--border)", borderRadius:12 }}>
+        <div className="panel-header" style={{ padding:"13px 16px", display:"flex", alignItems:"center", gap:10 }}>
+          <span style={{ fontSize:11, fontWeight:800, letterSpacing:1, textTransform:"uppercase", color:"var(--text2)" }}>Guest lifecycle</span>
+          <span style={{ marginLeft:"auto", fontSize:11, color:"var(--text3)" }}>click a band to filter the list below</span>
         </div>
-      )}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 14 }}>
-        {filtered.map(g => {
-          const s    = getSegment(g);
-          const ss   = SEG[s] || SEG.new;
-          const sp   = g.savedProfile || {};
-          const done = g.stays.filter(x => x.status === "checked-out").sort((a, b) => b.checkin > a.checkin ? 1 : -1);
-          const last = done[0];
-          const current = g.stays.find(x => x.status === "checked-in");
-          const days = last ? Math.round((Date.now() - new Date(last.checkin)) / 86400000) : null;
-          const waMsg = encodeURIComponent("Assalamu Alaikum " + g.name + ",\nThank you for staying at Hotel The Grand Alayna!\nWe hope to welcome you back soon.\n\n📞 +8801883352526");
-
-          return (
-            <div key={g.key} className="guest-card" onClick={() => setSelKey(g.key)} style={{ cursor: "pointer" }}>
-              {/* Avatar + name + badges */}
-              <div style={{ display: "flex", alignItems: "flex-start", gap: 11, marginBottom: 11 }}>
-                <div style={{ width: 44, height: 44, borderRadius: "50%", background: ss.avatar, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 17, flexShrink: 0 }}>
-                  {initials(g.name)}
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 700, fontSize: 14, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{g.name}</div>
-                  <div style={{ fontSize: 12, color: "var(--text3)" }}>{g.phone}</div>
-                  <div style={{ marginTop: 4, display: "flex", gap: 4, flexWrap: "wrap" }}>
-                    <span style={{ fontSize: 10, fontWeight: 800, padding: "1px 7px", borderRadius: 20, background: ss.bg, border: "1px solid " + ss.border, color: ss.color }}>{ss.pill}</span>
-                    {birthdayMonth(g) && <span style={{ fontSize: 10, fontWeight: 800, padding: "1px 7px", borderRadius: 20, background: "#fdf2f8", color: "#be185d", border: "1px solid #f9a8d4" }}>🎂</span>}
-                    {current && <span style={{ fontSize: 10, fontWeight: 700, padding: "1px 7px", borderRadius: 20, background: "rgba(22,163,74,.1)", color: "var(--green)", border: "1px solid rgba(22,163,74,.3)" }}>In-house</span>}
-                    {sp.followUp && <span style={{ fontSize: 10, fontWeight: 700, padding: "1px 7px", borderRadius: 20, background: "rgba(245,158,11,.1)", color: "#92400e", border: "1px solid rgba(245,158,11,.3)" }}>Follow-up</span>}
-                  </div>
-                </div>
+        <div style={{ padding:"10px 16px 14px" }}>
+          {stages.map(s => {
+            const pct = metrics.guests ? Math.round(s.count / metrics.guests * 100) : 0;
+            return (
+              <div key={s.key} onClick={() => setSeg(seg === s.key ? "all" : s.key)}
+                style={{ display:"flex", alignItems:"center", gap:11, padding:"6px 0", cursor:"pointer",
+                  opacity: seg === "all" || seg === s.key ? 1 : .45 }}>
+                <span style={{ width:104, fontSize:12.5, fontWeight:700, flexShrink:0 }}>{s.label}</span>
+                <span style={{ flex:1, height:24, borderRadius:6, background:"var(--bg3)", overflow:"hidden", position:"relative" }}>
+                  <span style={{ position:"absolute", left:0, top:0, bottom:0, borderRadius:6,
+                    width: Math.max(s.count ? 6 : 0, pct) + "%", background:s.color, opacity:.9,
+                    display:"flex", alignItems:"center", paddingLeft:9, color:"#fff", fontSize:11.5, fontWeight:800 }}>
+                    {s.count || ""}
+                  </span>
+                </span>
+                <span style={{ width:110, textAlign:"right", fontSize:11.5, color:"var(--text3)", flexShrink:0 }}>
+                  {s.value ? money(s.value) : "—"}
+                </span>
               </div>
-
-              {/* Stats row */}
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, marginBottom: 10 }}>
-                {[["Stays", g.stays.length], ["Nights", g.totalNights], ["Spent", "৳" + (g.totalSpent / 1000).toFixed(0) + "k"]].map(([l, v]) => (
-                  <div key={l} style={{ background: "var(--bg4)", borderRadius: 6, padding: "6px 8px", textAlign: "center" }}>
-                    <div style={{ fontSize: 13, fontWeight: 800, color: "var(--navy)" }}>{v}</div>
-                    <div style={{ fontSize: 9, color: "var(--text3)", textTransform: "uppercase", fontWeight: 600 }}>{l}</div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Notes snippet */}
-              {sp.notes && (
-                <div style={{ fontSize: 11, color: "var(--text3)", background: "var(--bg3)", borderRadius: 5, padding: "5px 7px", marginBottom: 9, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>
-                  {sp.notes}
-                </div>
-              )}
-
-              {/* Footer */}
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <div style={{ fontSize: 11, color: "var(--text3)" }}>
-                  {current ? "Staying now" : last ? days + "d ago" : "No stays yet"}
-                </div>
-                <a href={"https://wa.me/" + waNum(g.phone) + "?text=" + waMsg}
-                  target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} style={{ textDecoration: "none" }}>
-                  <button style={{ padding: "5px 10px", borderRadius: 8, border: "none", background: "#25d366", color: "#fff", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
-                    WhatsApp
-                  </button>
-                </a>
-              </div>
+            );
+          })}
+          {stages.find(s => s.key === "fresh")?.count > 0 && (
+            <div style={{ marginTop:11, paddingTop:11, borderTop:"1px solid var(--border)", fontSize:12.5, color:"var(--text2)", lineHeight:1.6 }}>
+              <strong style={{ color:"var(--navy)" }}>{stages.find(s => s.key === "fresh").count} guests stayed in the last 30 days.</strong>{" "}
+              That is where second stays come from, and the window closes a little every week.
             </div>
-          );
-        })}
+          )}
+        </div>
       </div>
 
-      <div style={{ marginTop: 12, fontSize: 12, color: "var(--text3)" }}>
-        <i className="ti ti-list" /> {filtered.length} of {gList.length} guests
+      {/* ── Where guests come from ─────────────────────────────────────────── */}
+      <div className="panel" style={{ margin:"0 0 16px", border:"1px solid var(--border)", borderRadius:12 }}>
+        <div className="panel-header" style={{ padding:"13px 16px", display:"flex", alignItems:"center", gap:10 }}>
+          <span style={{ fontSize:11, fontWeight:800, letterSpacing:1, textTransform:"uppercase", color:"var(--text2)" }}>Where guests come from</span>
+          <span style={{ marginLeft:"auto", fontSize:11, color:"var(--text3)" }}>{channels.recorded} of {channels.total} bookings recorded</span>
+        </div>
+        {channels.rows.length === 0 ? (
+          <div style={{ padding:"16px", fontSize:12.5, color:"#5c4500", background:"#FFFBEB",
+            borderTop:"1px solid #FCD34D", lineHeight:1.65 }}>
+            <strong>None of your {channels.total} bookings has a source recorded</strong>, so there is no way to tell
+            whether a guest came from Google, a walk-in, an agent or a referral — which makes every marketing
+            decision a guess. The booking form has a Source field; filling it in takes one tap, and within a
+            month this panel will show which channel actually pays.
+          </div>
+        ) : (
+          <div style={{ padding:"10px 16px 14px" }}>
+            {channels.rows.map(r => {
+              const pct = channels.rows[0].value ? Math.round(r.value / channels.rows[0].value * 100) : 0;
+              return (
+                <div key={r.source} style={{ display:"flex", alignItems:"center", gap:11, padding:"5px 0" }}>
+                  <span style={{ width:104, fontSize:12.5, fontWeight:700, flexShrink:0 }}>{r.source}</span>
+                  <span style={{ flex:1, height:20, borderRadius:6, background:"var(--bg3)", overflow:"hidden" }}>
+                    <span style={{ display:"block", width:pct + "%", height:"100%", background:"var(--navy3)", borderRadius:6 }} />
+                  </span>
+                  <span style={{ width:130, textAlign:"right", fontSize:11.5, color:"var(--text3)", flexShrink:0 }}>
+                    {r.count} booking{r.count === 1 ? "" : "s"} · {money(r.value)}
+                  </span>
+                </div>
+              );
+            })}
+            {channels.recorded < channels.total && (
+              <div style={{ marginTop:9, fontSize:11.5, color:"var(--text3)" }}>
+                {channels.total - channels.recorded} booking{channels.total - channels.recorded === 1 ? "" : "s"} still have no source recorded.
+              </div>
+            )}
+          </div>
+        )}
       </div>
+
+      {/* ── The guest book ─────────────────────────────────────────────────── */}
+      <div className="panel" style={{ margin:"0 0 16px", border:"1px solid var(--border)", borderRadius:12 }}>
+        <div style={{ padding:"12px 16px", borderBottom:"1px solid var(--border)", display:"flex", gap:7, flexWrap:"wrap", alignItems:"center" }}>
+          {SEGS.map(s => {
+            const n = s.key === "all" ? gList.length
+              : s.key === "owed" ? gList.filter(g => (g.due || 0) > 0).length
+              : s.key === "birthday" ? gList.filter(birthdayMonth).length
+              : (stages.find(x => x.key === s.key)?.count ?? 0);
+            if (n === 0 && s.key !== "all" && seg !== s.key) return null;
+            return (
+              <button key={s.key} onClick={() => setSeg(s.key)}
+                style={{ padding:"6px 13px", borderRadius:20, cursor:"pointer", fontFamily:"inherit",
+                  fontSize:12, fontWeight:700, border:"1.5px solid " + (seg === s.key ? "var(--navy)" : "var(--border)"),
+                  background: seg === s.key ? "var(--navy)" : "#fff", color: seg === s.key ? "#fff" : "var(--text3)" }}>
+                {s.label} <span style={{ opacity:.65, fontWeight:600 }}>{n}</span>
+              </button>
+            );
+          })}
+          <div style={{ position:"relative", marginLeft:"auto", minWidth:190 }}>
+            <i className="ti ti-search" style={{ position:"absolute", left:11, top:"50%", transform:"translateY(-50%)", color:"var(--text3)", fontSize:13 }} />
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search name or phone…"
+              style={{ paddingLeft:30, width:"100%", boxSizing:"border-box", borderRadius:20, fontSize:12.5 }} />
+          </div>
+        </div>
+
+        {filtered.length === 0 ? (
+          <div style={{ textAlign:"center", color:"var(--text3)", padding:40, fontSize:13.5 }}>
+            {gList.length === 0 ? "No guests yet — bookings will appear here." : "No guests match this filter."}
+          </div>
+        ) : (
+          <div style={{ overflowX:"auto" }}>
+            <table style={{ borderCollapse:"collapse", width:"100%", minWidth:760, fontSize:13.5 }}>
+              <thead><tr>
+                {["Guest","Stage","Stays","Nights","Lifetime value","Owed","Last seen",""].map((h, i) => (
+                  <th key={h + i} style={{ padding:"10px 14px", textAlign: i >= 2 && i <= 5 ? "right" : "left",
+                    fontSize:10, textTransform:"uppercase", letterSpacing:.9, color:"var(--text3)", fontWeight:800,
+                    background:"var(--bg4)", borderBottom:"1px solid var(--border)", whiteSpace:"nowrap" }}>{h}</th>
+                ))}
+              </tr></thead>
+              <tbody>
+                {shownGuests.map(g => {
+                  const f = guestFacts(g, today);
+                  const stage = guestStage(g, today);
+                  const sp = g.savedProfile || {};
+                  const tdS = { padding:"11px 14px", borderBottom:"1px solid var(--border)" };
+                  const tdN = { ...tdS, textAlign:"right", fontVariantNumeric:"tabular-nums" };
+                  return (
+                    <tr key={g.key} onClick={() => setSelKey(g.key)} style={{ cursor:"pointer",
+                      background: f.due > 0 || f.inHouse ? "#fffdf5" : undefined }}>
+                      <td style={tdS}>
+                        <div style={{ fontWeight:700, display:"flex", alignItems:"center", gap:6 }}>
+                          {g.name}
+                          {birthdayMonth(g) && <span title="Birthday this month">🎂</span>}
+                          {sp.followUp && <span title="Marked for follow-up" style={{ color:"#92400e" }}>●</span>}
+                        </div>
+                        <div style={{ fontSize:11.5, color:"var(--text3)" }}>{g.phone}</div>
+                      </td>
+                      <td style={tdS}><StagePill stage={stage} /></td>
+                      <td style={tdN}>{f.completed || "—"}</td>
+                      <td style={tdN}>{g.totalNights || "—"}</td>
+                      <td style={{ ...tdN, fontWeight:700 }}>{money(g.totalSpent)}</td>
+                      <td style={{ ...tdN, color: f.due > 0 ? "var(--red2)" : "var(--text3)", fontWeight: f.due > 0 ? 700 : 400 }}>
+                        {f.due > 0 ? money(f.due) : "—"}
+                      </td>
+                      <td style={{ ...tdS, fontSize:12.5, color:"var(--text2)", whiteSpace:"nowrap" }}>
+                        {f.inHouse ? "Staying now"
+                          : f.arriving !== null ? "Arrives in " + f.arriving + "d"
+                          : f.daysSince !== null ? f.daysSince + "d ago" : "—"}
+                      </td>
+                      <td style={{ ...tdS, textAlign:"right" }}>
+                        <a href={"https://wa.me/" + waNum(g.phone)} target="_blank" rel="noreferrer"
+                          onClick={e => e.stopPropagation()} style={{ textDecoration:"none" }}>
+                          <button style={{ padding:"5px 11px", borderRadius:7, border:"none", background:"#25D366",
+                            color:"#fff", fontSize:11.5, fontWeight:700, cursor:"pointer", fontFamily:"inherit" }}>WhatsApp</button>
+                        </a>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            {filtered.length > shownGuests.length && (
+              <div style={{ padding:"12px 16px", textAlign:"center", borderTop:"1px solid var(--border)" }}>
+                <button className="btn sm" onClick={() => setShowAllGuests(true)}>
+                  Show all {filtered.length} guests
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Guest feedback — kept, but below the work rather than above it */}
+      <GuestFeedback />
 
       {selGuest && (
         <GuestModal gkey={selGuest.key} g={selGuest} onClose={() => setSelKey(null)} onSave={saveProfile} />
