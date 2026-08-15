@@ -8,6 +8,7 @@ import HallCalendar      from "./components/HallCalendar";
 import HallCRM           from "./components/HallCRM";
 import HallCutlery       from "./components/HallCutlery";
 import HallExpenses      from "./components/HallExpenses";
+import HallRestaurant    from "./components/HallRestaurant";
 import HallInsights      from "./components/HallInsights";
 import HallAdmin         from "./components/HallAdmin";
 import "../styles/hall.css";
@@ -39,6 +40,9 @@ function HallInner({ onSwitchApp }) {
         </div>
         <div style={{ display: activeTab === "expenses" ? "block" : "none" }}>
           <ErrorBoundary><HallExpenses /></ErrorBoundary>
+        </div>
+        <div style={{ display: activeTab === "restaurant" ? "block" : "none" }}>
+          <ErrorBoundary><HallRestaurant /></ErrorBoundary>
         </div>
         <div style={{ display: activeTab === "insights" ? "block" : "none" }}>
           <ErrorBoundary><HallInsights /></ErrorBoundary>

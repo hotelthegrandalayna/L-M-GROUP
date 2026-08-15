@@ -7,6 +7,7 @@ import { onRemoteChange } from "../utils/realtimeSync";
 import { syncNtfyConfigFromSupabase } from "../utils/ntfy";
 import { runDailyBackup } from "../utils/dailyBackup";
 import { supabase } from "../lib/supabaseClient";
+import { emptyRestaurant, normalise as normaliseRestaurant } from "./lib/restaurantMoney";
 
 const Ctx = createContext(null);
 
@@ -141,6 +142,9 @@ export function HallProvider({ children }) {
   const [revenues, setRevenuesRaw] = useState(() => loadLS("a_hall_rev", []));
   const [leads,    setLeadsRaw]    = useState(() => loadLS("a_crm_leads", []));
   const [expTypes, setExpTypesRaw] = useState(() => loadLS("a_exp_types_v2", {}));
+  // Coffee house books. One JSON document in app_config, so it reaches every
+  // device without needing its own tables. localStorage is the offline cache.
+  const [restaurant, setRestaurantRaw] = useState(() => loadLS("a_restaurant", null) || emptyRestaurant());
   const [activeTab, setActiveTab] = useState("invoice");
   const [notification, setNotification] = useState(null);
   const [invoiceJumpSignal, setInvoiceJumpSignal] = useState(0);
@@ -208,12 +212,20 @@ export function HallProvider({ children }) {
     // Sync hall config items from app_config
     try {
       const { loadConfig } = await import("../utils/supabaseSync");
-      const [cutlery, renames, smsConfig, expTypesCfg] = await Promise.all([
+      const [cutlery, renames, smsConfig, expTypesCfg, restaurantCfg] = await Promise.all([
         loadConfig("hall_cutlery"),
         loadConfig("hall_staff_renames"),
         loadConfig("hall_sms_config"),
         loadConfig("hall_exp_types"),
+        loadConfig("hall_restaurant"),
       ]);
+      // The cloud is the truth for the coffee house books, exactly as it is for
+      // hall money. A device that has been offline shows the cloud's version.
+      if (restaurantCfg && typeof restaurantCfg === "object") {
+        const v = normaliseRestaurant(restaurantCfg);
+        localStorage.setItem("a_restaurant", JSON.stringify(v));
+        setRestaurantRaw(v);
+      }
       if (cutlery?.c1 && cutlery?.c2) localStorage.setItem("ameliaCutData", JSON.stringify(cutlery));
       if (renames && typeof renames === 'object') localStorage.setItem("a_renames", JSON.stringify(renames));
       if (smsConfig && typeof smsConfig === 'object') localStorage.setItem("ga_sms_config", JSON.stringify(smsConfig));
@@ -395,6 +407,20 @@ export function HallProvider({ children }) {
     });
   }, []);
 
+  // ── Coffee house books — source of truth is Supabase app_config ────────────
+  // Saved as one document so a day's sales, its purchases and the drawer count
+  // can never reach the cloud half-written and disagree with each other.
+  const setRestaurant = useCallback(next => {
+    setRestaurantRaw(prev => {
+      const v = normaliseRestaurant(typeof next === "function" ? next(prev) : next);
+      localStorage.setItem("a_restaurant", JSON.stringify(v));
+      if (hasSupabase()) {
+        import("../utils/supabaseSync").then(({ saveConfig }) => saveConfig("hall_restaurant", v)).catch(() => {});
+      }
+      return v;
+    });
+  }, []);
+
   const setRevenues = useCallback(next => {
     const v = typeof next === "function" ? next(revenues) : next;
     setRevenuesRaw(v); localStorage.setItem("a_hall_rev", JSON.stringify(v));
@@ -429,7 +455,7 @@ export function HallProvider({ children }) {
   }, []);
 
   return (
-    <Ctx.Provider value={{ curUser, curRole, login, logout, invoices, setInvoices, expenses, setExpenses, deleteExpense, expTypes, setExpenseType, removeExpenseType, revenues, setRevenues, leads, setLeads, activeTab, setActiveTab, notification, notify, invoiceJumpSignal, bumpInvoiceJump }}>
+    <Ctx.Provider value={{ curUser, curRole, login, logout, invoices, setInvoices, expenses, setExpenses, deleteExpense, expTypes, setExpenseType, removeExpenseType, revenues, setRevenues, leads, setLeads, restaurant, setRestaurant, activeTab, setActiveTab, notification, notify, invoiceJumpSignal, bumpInvoiceJump }}>
       {children}
     </Ctx.Provider>
   );

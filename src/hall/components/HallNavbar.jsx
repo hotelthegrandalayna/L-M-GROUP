@@ -8,6 +8,8 @@ const TABS = [
   { id:"crm",      icon:"🤝", label:"CRM"      },
   { id:"cutlery",  icon:"🍽", label:"Cutlery"  },
   { id:"expenses", icon:"💸", label:"Expenses & Cash" },
+  // Coffee house books — separate money from the hall's, visible to everyone.
+  { id:"restaurant", icon:"☕", label:"Restaurant" },
   { id:"insights", icon:"📊", label:"Insights" },
   { id:"admin",    icon:"⚙️",  label:"Admin"    },
 ];
