@@ -1,290 +1,376 @@
-// Coffee house books. Deliberately small: five sections, no product catalogue,
+// Coffee house books. Deliberately small: four sections, no product catalogue,
 // no stock quantities. The manager counts the shelf and types one number.
 //
 // Every figure shown here comes from lib/restaurantMoney.js — nothing is
 // computed in this file, so the screen and the tests can never disagree.
-import { useState, useMemo } from "react";
+//
+// EVERY COMPONENT IN THIS FILE IS DECLARED AT MODULE SCOPE. Declared inside a
+// parent, a component is a new type on every render, so React throws the input
+// away and builds a fresh one after each keystroke — the field loses focus and
+// appears to freeze after one character. That bug shipped once.
+import { useState, useMemo, useRef } from "react";
 import { useHall } from "../HallContext";
 import useIsMobile from "../useIsMobile";
 import {
-  monthSummary, dailyCloses, monthsWithData, prevMonth, nextMonth, emptyRestaurant,
+  monthSummary, dailyCloses, monthsWithData, prevMonth, nextMonth, emptyRestaurant, normalise,
 } from "../lib/restaurantMoney";
+import { compressImage, saveReceipt, loadReceipt, newReceiptId, MAX_STORED_BYTES } from "../lib/receiptStore";
 
-const C = { maroon:"#7B1212", gold:"#c9a84c", dim:"#666", border:"#e0d0b0", green:"#1a7040", red:"#c0392b", blue:"#1a56cb" };
+const C = { maroon:"#7B1212", gold:"#c9a84c", dim:"#666", border:"#e0d0b0", green:"#1a7040", red:"#c0392b", blue:"#3a6ea5" };
 
 const MONTHS_LABEL = ["January","February","March","April","May","June","July","August","September","October","November","December"];
-const EXP_CATS = ["Rent","Electricity","Water","Internet","Salary","Delivery","Repairs","Cleaning","Marketing","Card & bank fees","Tax","Other"];
-const PAY_METHODS = ["Cash","Card","Bank"];
 
-const money = n => "৳" + Math.round(n || 0).toLocaleString();
+/**
+ * The one gate for editing and deleting. It says yes today, on purpose — the
+ * owner is still testing. When the password goes on, it goes on HERE and every
+ * edit and delete in the tab is behind it at once. Nothing else has to change.
+ */
+export function canEdit() { return true; }
+
+const money  = n => "৳" + Math.round(n || 0).toLocaleString();
 const signed = n => (n > 0 ? "+" : n < 0 ? "−" : "") + "৳" + Math.abs(Math.round(n || 0)).toLocaleString();
 const todayStr = () => { const d = new Date(); return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0"); };
-const monthLabel = m => { const [y,mo] = m.split("-"); return MONTHS_LABEL[parseInt(mo,10)-1] + " " + y; };
-const fmtDate = iso => { if (!iso) return "—"; const [y,m,d] = iso.split("-");
+const monthLabel = m => { const [y,mo] = String(m).split("-"); return MONTHS_LABEL[parseInt(mo,10)-1] + " " + y; };
+const fmtDate = iso => { if (!iso) return "—"; const [y,m,d] = String(iso).split("-");
   return parseInt(d,10) + " " + ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][parseInt(m,10)-1]; };
 const nid = () => Date.now() + "_" + Math.random().toString(36).slice(2, 7);
 
-const card   = { background:"#fff", border:"1px solid "+C.border, borderRadius:11, overflow:"hidden" };
-const chead  = { padding:"11px 14px", borderBottom:"1px solid "+C.border, fontSize:11, fontWeight:800, letterSpacing:.9, textTransform:"uppercase", color:C.maroon, display:"flex", alignItems:"center", gap:8 };
-const inp    = { border:"1.5px solid "+C.border, borderRadius:8, padding:"7px 10px", fontSize:12.5, background:"#fff", fontFamily:"inherit", color:"#2b2b2b", width:"100%" };
-const lbl    = { fontSize:9.5, fontWeight:800, letterSpacing:.7, textTransform:"uppercase", color:C.dim, display:"block", marginBottom:4 };
-const btn    = { background:C.maroon, color:"#fff", border:"none", borderRadius:8, padding:"9px 16px", fontWeight:800, fontSize:12.5, cursor:"pointer", fontFamily:"inherit", whiteSpace:"nowrap" };
-const th     = { padding:"9px 13px", textAlign:"left", fontSize:9.5, textTransform:"uppercase", letterSpacing:.8, color:C.dim, fontWeight:800, background:"#fbf8f1", borderBottom:"1px solid "+C.border };
-const td     = { padding:"9px 13px", borderBottom:"1px solid #efe6d4", fontSize:12.5 };
-const tdN    = { ...td, textAlign:"right", fontVariantNumeric:"tabular-nums" };
-const numF   = { fontFamily:"'Playfair Display',serif", fontWeight:800, fontVariantNumeric:"tabular-nums" };
-const formWrap = { display:"grid", gap:10, padding:"13px 14px", background:"#fbf8f1", borderBottom:"1px solid "+C.border };
+// ── shared styles — sized to be read across a counter, not squinted at ───────
+const card  = { background:"#fff", border:"1px solid "+C.border, borderRadius:12, overflow:"hidden" };
+const chead = { padding:"13px 16px", borderBottom:"1px solid "+C.border, fontSize:12, fontWeight:800, letterSpacing:.9, textTransform:"uppercase", color:C.maroon, display:"flex", alignItems:"center", gap:8 };
+const cheadR= { marginLeft:"auto", fontSize:11.5, fontWeight:700, letterSpacing:0, textTransform:"none", color:C.dim };
+const inp   = { border:"1.5px solid "+C.border, borderRadius:8, padding:"9px 11px", fontSize:13.5, background:"#fff", fontFamily:"inherit", color:"#2b2b2b", width:"100%" };
+const lbl   = { fontSize:10.5, fontWeight:800, letterSpacing:.7, textTransform:"uppercase", color:C.dim, display:"block", marginBottom:5 };
+const btn   = { background:C.maroon, color:"#fff", border:"none", borderRadius:8, padding:"10px 17px", fontWeight:800, fontSize:13, cursor:"pointer", fontFamily:"inherit", whiteSpace:"nowrap" };
+const btnO  = { ...btn, background:"#fff", color:C.maroon, border:"1.5px solid "+C.border };
+const btnSm = { padding:"5px 11px", fontSize:12, borderRadius:7 };
+const th    = { padding:"11px 16px", textAlign:"left", fontSize:10.5, textTransform:"uppercase", letterSpacing:.8, color:C.dim, fontWeight:800, background:"#fbf8f1", borderBottom:"1px solid "+C.border };
+const td    = { padding:"13px 16px", borderBottom:"1px solid #efe6d4", fontSize:14 };
+const tdN   = { ...td, textAlign:"right", fontVariantNumeric:"tabular-nums" };
+const numF  = { fontFamily:"'Playfair Display',serif", fontWeight:800, fontVariantNumeric:"tabular-nums" };
+const formWrap = { display:"grid", gap:11, padding:"15px 16px", background:"#fbf8f1", borderBottom:"1px solid "+C.border };
 
-function PayPicker({ value, onChange }) {
+const Pill = ({ children, bg, color }) => (
+  <span style={{ fontSize:11, fontWeight:700, padding:"3px 10px", borderRadius:20, background:bg, color, whiteSpace:"nowrap" }}>{children}</span>
+);
+const Empty = ({ children }) => (
+  <div style={{ padding:"26px 16px", textAlign:"center", color:C.dim, fontSize:13.5 }}>{children}</div>
+);
+
+function OpeningEditor({ value, setValue, onSave, label, onDone }) {
   return (
-    <div style={{ display:"flex", gap:5 }}>
-      {PAY_METHODS.map(m => (
-        <button key={m} type="button" onClick={() => onChange(m)}
-          style={{ flex:1, padding:"7px 6px", border:"1.5px solid "+(value===m?C.maroon:C.border), borderRadius:8,
-            fontSize:11.5, fontWeight:700, cursor:"pointer", fontFamily:"inherit",
-            background:value===m?C.maroon:"#fff", color:value===m?"#fff":C.dim }}>{m}</button>
-      ))}
+    <div style={{ display:"flex", gap:8, marginBottom:4 }}>
+      <input type="number" min="0" style={inp} placeholder={label} value={value}
+        onChange={e=>setValue(e.target.value)} onWheel={e=>e.target.blur()} />
+      <button style={btnO} onClick={() => { if (value !== "") { onSave(parseFloat(value)||0); setValue(""); onDone && onDone(); } }}>Set</button>
     </div>
   );
 }
 
-const Pill = ({ children, bg, color }) => (
-  <span style={{ fontSize:10, fontWeight:700, padding:"2px 8px", borderRadius:20, background:bg, color, whiteSpace:"nowrap" }}>{children}</span>
-);
-const methodPill = m => m === "Card" ? <Pill bg="#e8f1fd" color={C.blue}>Card</Pill>
-  : m === "Bank" ? <Pill bg="#eef2f7" color="#3a6ea5">Bank</Pill>
-  : <Pill bg="#e8f5ec" color={C.green}>Cash</Pill>;
+// ── Receipt: attach button, thumbnail, full-size viewer ──────────────────────
+function ReceiptButton({ onPicked, name, busy }) {
+  const ref = useRef(null);
+  return (
+    <>
+      <input ref={ref} type="file" accept="image/*,application/pdf" capture="environment" style={{ display:"none" }}
+        onChange={e => { const f = e.target.files && e.target.files[0]; if (f) onPicked(f); e.target.value = ""; }} />
+      <button type="button" style={{ ...btnO, width:"100%", overflow:"hidden", textOverflow:"ellipsis" }}
+        onClick={() => ref.current && ref.current.click()} disabled={busy}>
+        {busy ? "…" : name ? "🧾 " + (name.length > 14 ? name.slice(0,13) + "…" : name) : "📎 Attach"}
+      </button>
+    </>
+  );
+}
 
-const Empty = ({ children }) => (
-  <div style={{ padding:"22px 14px", textAlign:"center", color:C.dim, fontSize:12.5 }}>{children}</div>
-);
+function ReceiptViewer({ receipt, onClose }) {
+  if (!receipt) return null;
+  const isPdf = /^data:application\/pdf/.test(receipt.data || "");
+  return (
+    <div onClick={onClose} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.75)", zIndex:9999,
+      display:"flex", alignItems:"center", justifyContent:"center", padding:20 }}>
+      <div onClick={e=>e.stopPropagation()} style={{ background:"#fff", borderRadius:12, maxWidth:"92vw", maxHeight:"92vh", overflow:"hidden", display:"flex", flexDirection:"column" }}>
+        <div style={{ ...chead, justifyContent:"space-between" }}>
+          <span>🧾 {receipt.name || "Invoice"}</span>
+          <button style={{ ...btnO, ...btnSm }} onClick={onClose}>Close</button>
+        </div>
+        <div style={{ overflow:"auto", padding:10, background:"#f4efe2" }}>
+          {isPdf
+            ? <object data={receipt.data} type="application/pdf" style={{ width:"80vw", height:"75vh" }}>
+                <a href={receipt.data} download={receipt.name || "invoice.pdf"}>Open the PDF</a>
+              </object>
+            : <img src={receipt.data} alt={receipt.name || "Invoice"} style={{ maxWidth:"88vw", maxHeight:"78vh", display:"block" }} />}
+        </div>
+      </div>
+    </div>
+  );
+}
 
+// ═════════════════════════════════════════════════════════════════════════════
 export default function HallRestaurant() {
   const { restaurant, setRestaurant, curUser, notify } = useHall();
   const isMobile = useIsMobile();
-  const data = restaurant || emptyRestaurant();
+  const data = useMemo(() => normalise(restaurant || emptyRestaurant()), [restaurant]);
 
   const today = todayStr();
   const [month, setMonth] = useState(() => today.slice(0, 7));
   const [tab, setTab] = useState("dash");
+  const [viewing, setViewing] = useState(null);
 
-  const sum = useMemo(() => monthSummary(data, month), [data, month]);
+  const sum    = useMemo(() => monthSummary(data, month), [data, month]);
   const closes = useMemo(() => dailyCloses(data, month), [data, month]);
-  const known = useMemo(() => monthsWithData(data), [data]);
+  const known  = useMemo(() => monthsWithData(data), [data]);
 
   const inMonth = rows => (rows || []).filter(r => String(r.date).slice(0,7) === month)
     .slice().sort((a,b) => String(b.date).localeCompare(String(a.date)));
 
   // ── writers ───────────────────────────────────────────────────────────────
-  const addRow = (key, row) => setRestaurant(p => ({ ...p, [key]: [...(p[key]||[]), { id:nid(), by:curUser||"", ...row }] }));
-  const delRow = (key, id) => setRestaurant(p => ({ ...p, [key]: (p[key]||[]).filter(r => String(r.id) !== String(id)) }));
-  const setMonthField = (field, value) => setRestaurant(p => ({
-    ...p, months: { ...(p.months||{}), [month]: { ...((p.months||{})[month]||{}), [field]: value } },
-  }));
-  const saveCount = (date, counted) => setRestaurant(p => ({
-    ...p, counts: [...(p.counts||[]).filter(c => c.date !== date), { date, counted, by:curUser||"" }],
-  }));
+  const addRow = (key, row) => setRestaurant(p => ({ ...normalise(p), [key]: [...normalise(p)[key], { id:nid(), by:curUser||"", ...row }] }));
+  const editRow = (key, id, patch) => {
+    if (!canEdit()) { notify("Editing is locked", "error"); return; }
+    setRestaurant(p => ({ ...normalise(p), [key]: normalise(p)[key].map(r => String(r.id) === String(id) ? { ...r, ...patch } : r) }));
+  };
+  const delRow = (key, id) => {
+    if (!canEdit()) { notify("Deleting is locked", "error"); return; }
+    setRestaurant(p => ({ ...normalise(p), [key]: normalise(p)[key].filter(r => String(r.id) !== String(id)) }));
+  };
+  const setMonthField = (field, value) => setRestaurant(p => {
+    const n = normalise(p);
+    return { ...n, months: { ...n.months, [month]: { ...(n.months[month]||{}), [field]: value } } };
+  });
+  const setMonthFields = patch => setRestaurant(p => {
+    const n = normalise(p);
+    return { ...n, months: { ...n.months, [month]: { ...(n.months[month]||{}), ...patch } } };
+  });
+  const saveCount = (date, counted) => setRestaurant(p => {
+    const n = normalise(p);
+    return { ...n, counts: [...n.counts.filter(c => c.date !== date), { date, counted, by:curUser||"" }] };
+  });
+
+  const openReceipt = async id => {
+    const r = await loadReceipt(id);
+    if (r) setViewing(r); else notify("That invoice photo is not on this device yet", "error");
+  };
 
   const SUBS = [
     { id:"dash",  icon:"📊", label:"Dashboard" },
     { id:"sales", icon:"💰", label:"Sales" },
-    { id:"buy",   icon:"🛒", label:"Purchases" },
-    { id:"exp",   icon:"💸", label:"Expenses" },
+    { id:"spend", icon:"💸", label:"Expenses" },
     { id:"close", icon:"📦", label:"Close Month" },
   ];
 
   return (
-    <div style={{ padding: isMobile ? "12px 12px 30px" : "16px 20px 34px", maxWidth:1400, margin:"0 auto" }}>
+    <div style={{ padding: isMobile ? "12px 12px 30px" : "18px 22px 36px", maxWidth:1500, margin:"0 auto" }}>
 
-      {/* Section switcher */}
-      <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginBottom:13 }}>
+      <div style={{ display:"flex", gap:7, flexWrap:"wrap", marginBottom:14 }}>
         {SUBS.map(s => (
           <button key={s.id} onClick={() => setTab(s.id)}
-            style={{ padding:"8px 15px", borderRadius:9, border:"1.5px solid "+(tab===s.id?C.maroon:C.border),
+            style={{ padding:"10px 18px", borderRadius:9, border:"1.5px solid "+(tab===s.id?C.maroon:C.border),
               background:tab===s.id?C.maroon:"#fff", color:tab===s.id?"#fff":C.dim,
-              fontSize:12.5, fontWeight:700, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", gap:6 }}>
+              fontSize:13.5, fontWeight:700, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", gap:7 }}>
             <span>{s.icon}</span>{s.label}
           </button>
         ))}
       </div>
 
-      {/* Month picker — every section shows the same month */}
-      <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12, flexWrap:"wrap" }}>
-        <button onClick={() => setMonth(prevMonth(month))} style={{ ...btn, background:"#fff", color:C.maroon, border:"1.5px solid "+C.border, padding:"6px 11px" }}>◀</button>
-        <span style={{ ...numF, fontSize:17, color:C.maroon, minWidth:150, textAlign:"center" }}>{monthLabel(month)}</span>
-        <button onClick={() => setMonth(nextMonth(month))} style={{ ...btn, background:"#fff", color:C.maroon, border:"1.5px solid "+C.border, padding:"6px 11px" }}>▶</button>
+      <div style={{ display:"flex", alignItems:"center", gap:11, marginBottom:14, flexWrap:"wrap" }}>
+        <button onClick={() => setMonth(prevMonth(month))} style={{ ...btnO, padding:"7px 13px" }}>◀</button>
+        <span style={{ ...numF, fontSize:20, color:C.maroon, minWidth:170, textAlign:"center" }}>{monthLabel(month)}</span>
+        <button onClick={() => setMonth(nextMonth(month))} style={{ ...btnO, padding:"7px 13px" }}>▶</button>
         {month !== today.slice(0,7) && (
-          <button onClick={() => setMonth(today.slice(0,7))} style={{ ...btn, background:"#fff", color:C.dim, border:"1.5px solid "+C.border, padding:"6px 11px", fontSize:11.5 }}>This month</button>
+          <button onClick={() => setMonth(today.slice(0,7))} style={{ ...btnO, padding:"7px 13px", color:C.dim }}>This month</button>
         )}
-        <span style={{ marginLeft:"auto", fontSize:11, color:C.dim }}>
+        {sum.closed && <Pill bg="#eaf6ee" color={C.green}>✓ CLOSED · owner took {money(sum.ownerTook)}</Pill>}
+        <span style={{ marginLeft:"auto", fontSize:12, color:C.dim }}>
           {sum.daysEntered} day{sum.daysEntered===1?"":"s"} of sales entered
-          {known.length ? ` · records from ${monthLabel(known[0])}` : ""}
         </span>
       </div>
 
       {tab === "dash"  && <Dashboard sum={sum} isMobile={isMobile} onGo={setTab} />}
       {tab === "sales" && <Sales rows={inMonth(data.sales)} sum={sum} today={today} month={month} isMobile={isMobile}
-        onAdd={r => { addRow("sales", r); notify("Day saved ✓"); }} onDel={id => delRow("sales", id)} />}
-      {tab === "buy"   && <Purchases rows={inMonth(data.purchases)} sum={sum} today={today} month={month} isMobile={isMobile}
-        onAdd={r => { addRow("purchases", r); notify("Purchase added ✓"); }} onDel={id => delRow("purchases", id)} />}
-      {tab === "exp"   && <Expenses rows={inMonth(data.expenses)} sum={sum} today={today} month={month} isMobile={isMobile}
-        onAdd={r => { addRow("expenses", r); notify("Expense added ✓"); }} onDel={id => delRow("expenses", id)} />}
+        onAdd={r => { addRow("sales", r); notify("Day saved ✓"); }}
+        onEdit={(id,patch) => { editRow("sales", id, patch); notify("Day updated ✓"); }}
+        onDel={id => delRow("sales", id)} />}
+      {tab === "spend" && <Spend rows={inMonth(data.spend)} sum={sum} today={today} month={month} isMobile={isMobile}
+        notify={notify} onView={openReceipt}
+        onAdd={r => { addRow("spend", r); notify("Saved ✓"); }}
+        onEdit={(id,patch) => { editRow("spend", id, patch); notify("Updated ✓"); }}
+        onDel={id => delRow("spend", id)} />}
       {tab === "close" && <CloseMonth sum={sum} closes={closes} owner={inMonth(data.ownerMoves)} today={today} month={month} isMobile={isMobile}
         isFirstMonth={known.length === 0 || month <= known[0]}
-        onMonthField={setMonthField} onCount={(d,v) => { saveCount(d,v); notify("Cash count saved ✓"); }}
-        onOwner={r => { addRow("ownerMoves", r); notify("Owner money recorded ✓"); }} onDelOwner={id => delRow("ownerMoves", id)} />}
+        onMonthField={setMonthField} onMonthFields={setMonthFields}
+        onCount={(d,v) => { saveCount(d,v); notify("Cash count saved ✓"); }}
+        onOwner={r => { addRow("ownerMoves", r); notify("Owner money recorded ✓"); }}
+        onDelOwner={id => delRow("ownerMoves", id)} notify={notify} />}
+
+      <ReceiptViewer receipt={viewing} onClose={() => setViewing(null)} />
     </div>
   );
 }
 
 // ── Dashboard ────────────────────────────────────────────────────────────────
+function Kpi({ label, value, color, sub, accent, tint }) {
+  return (
+    <div style={{ background:tint||"#fff", border:"1px solid "+C.border, borderLeft:"5px solid "+(accent||C.border), borderRadius:13, padding:"17px 19px" }}>
+      <div style={{ fontSize:11.5, fontWeight:800, letterSpacing:1, textTransform:"uppercase", color:C.dim }}>{label}</div>
+      <div style={{ ...numF, fontSize:33, marginTop:7, lineHeight:1, color }}>{value}</div>
+      <div style={{ fontSize:12, color:C.dim, marginTop:6 }}>{sub}</div>
+    </div>
+  );
+}
+const RowMain  = ({ label, value, color }) => (
+  <tr><td style={td}>{label}</td><td style={{ ...tdN, fontWeight:600, color }}>{value}</td></tr>
+);
+const RowInset = ({ label, value }) => (
+  <tr><td style={{ ...td, background:"#fbf8f1", fontSize:13, color:"#6b6b6b", padding:"9px 18px 9px 34px", borderBottom:"1px solid #f4eddd" }}>{label}</td>
+      <td style={{ ...tdN, background:"#fbf8f1", fontSize:13, color:"#6b6b6b", fontWeight:500, padding:"9px 18px", borderBottom:"1px solid #f4eddd" }}>{value}</td></tr>
+);
+const RowTotal = ({ label, value, color }) => (
+  <tr><td style={{ ...td, background:"#f4efe2", fontWeight:800, fontSize:16, borderTop:"2px solid "+C.border, borderBottom:"none" }}>{label}</td>
+      <td style={{ ...tdN, background:"#f4efe2", ...numF, fontSize:16, borderTop:"2px solid "+C.border, borderBottom:"none", color }}>{value}</td></tr>
+);
+const CashTile = ({ label, value, color, tone }) => (
+  <div style={{ border:"1.5px solid "+(tone==="good"?"#9ccfae":tone==="bad"?"#e8a49c":C.border), borderRadius:11, padding:14,
+    textAlign:"center", background:tone==="good"?"#f1f9f4":tone==="bad"?"#fdf1f0":"#fbf8f1" }}>
+    <div style={{ fontSize:11, fontWeight:800, letterSpacing:.8, textTransform:"uppercase", color:C.dim }}>{label}</div>
+    <div style={{ ...numF, fontSize:26, marginTop:6, color }}>{value}</div>
+  </div>
+);
+
 function Dashboard({ sum, isMobile, onGo }) {
-  const kpi = (l, v, color, s) => (
-    <div style={{ background:"#fff", border:"1px solid "+C.border, borderRadius:11, padding:"12px 14px" }}>
-      <div style={{ fontSize:9.5, fontWeight:800, letterSpacing:.9, textTransform:"uppercase", color:C.dim }}>{l}</div>
-      <div style={{ ...numF, fontSize:21, marginTop:5, color }}>{money(v)}</div>
-      <div style={{ fontSize:10, color:C.dim, marginTop:3 }}>{s}</div>
-    </div>
-  );
-  const row = (label, val, opts = {}) => (
-    <tr style={opts.strong ? { background:"#fbf8f1" } : undefined}>
-      <td style={{ ...td, paddingLeft: opts.indent ? 30 : 13, fontWeight: opts.strong ? 800 : 400,
-        fontSize: opts.indent ? 11 : 12.5, color: opts.indent ? C.dim : undefined }}>{label}</td>
-      <td style={{ ...tdN, fontWeight: opts.strong ? 800 : 400, fontSize: opts.indent ? 11 : 12.5,
-        color: opts.color, ...(opts.strong ? numF : {}) }}>{money(val)}</td>
-    </tr>
-  );
-
   return (<>
-    <div style={{ display:"grid", gridTemplateColumns:isMobile?"repeat(2,1fr)":"repeat(4,1fr)", gap:10, marginBottom:12 }}>
-      {kpi("Revenue", sum.revenue, C.green, "cash · card · mobile")}
-      {kpi("Cost of goods used", sum.cogs, C.red, sum.closeStockSet ? "what you consumed" : "not counted yet")}
-      {kpi("Other expenses", sum.otherExpenses, C.red, "rent, salary, bills")}
-      {kpi("Net profit", sum.net, sum.net >= 0 ? C.green : C.red, "after everything")}
+    <div style={{ display:"grid", gridTemplateColumns:isMobile?"repeat(2,1fr)":"repeat(4,1fr)", gap:12, marginBottom:14 }}>
+      <Kpi label="Revenue" value={money(sum.revenue)} color={C.green} accent={C.green}
+        sub={`${sum.daysEntered} day${sum.daysEntered===1?"":"s"} entered`} />
+      <Kpi label="Goods used" value={money(sum.cogs)} color={C.red} accent={C.red}
+        sub={sum.closeStockSet ? "what you consumed" : "shelf not counted yet"} />
+      <Kpi label="Expenses" value={money(sum.otherExpenses)} color={C.red} accent={C.red} sub="rent, salary, bills" />
+      <Kpi label="Net profit" value={money(sum.net)} color={sum.net>=0?C.green:C.red}
+        accent={sum.net>=0?C.green:C.red} tint={sum.net>=0?"#f6fbf7":"#fdf1f0"} sub="after everything" />
     </div>
 
-    <div style={{ display:"grid", gridTemplateColumns:isMobile?"1fr":"1.35fr 1fr", gap:12 }}>
+    <div style={{ display:"grid", gridTemplateColumns:isMobile?"1fr":"1.3fr 1fr", gap:12 }}>
       <div style={card}>
         <div style={chead}>📈 Profit for the month</div>
-        <table style={{ borderCollapse:"collapse", width:"100%" }}><tbody>
-          {row("Revenue", sum.revenue, { color:C.green })}
-          {row("Opening stock", sum.openStock, { indent:true })}
-          {row("+ Purchases (stock)", sum.stockPurchases, { indent:true })}
-          {row("− Closing stock", sum.closeStock, { indent:true })}
-          {row("− Cost of goods used", sum.cogs, { strong:true, color:C.red })}
-          {row("= Gross profit", sum.gross, { strong:true, color:C.green })}
-          {row("− Other expenses", sum.otherExpenses, { color:C.red })}
-          {sum.nonStockPurchases > 0 && row("includes non-stock purchases", sum.nonStockPurchases, { indent:true })}
-          <tr style={{ background:"#f4efe2" }}>
-            <td style={{ ...td, fontSize:14, fontWeight:800, borderTop:"2px solid "+C.border }}>= Net profit</td>
-            <td style={{ ...tdN, ...numF, fontSize:15, borderTop:"2px solid "+C.border, color:sum.net>=0?C.green:C.red }}>{money(sum.net)}</td>
+        <table style={{ borderCollapse:"collapse", width:"100%", fontSize:15 }}><tbody>
+          <RowMain  label="Revenue" value={money(sum.revenue)} color={C.green} />
+          <RowInset label="Opening stock" value={money(sum.openStock)} />
+          <RowInset label="+ Bought for the shelf" value={money(sum.stockPurchases)} />
+          <RowInset label="− Closing stock" value={money(sum.closeStock)} />
+          <RowTotal label="− Cost of goods used" value={money(sum.cogs)} color={C.red} />
+          <RowTotal label="= Gross profit" value={money(sum.gross)} color={C.green} />
+          <RowMain  label="− Other expenses" value={money(sum.otherExpenses)} color={C.red} />
+          <tr>
+            <td style={{ ...td, background:"linear-gradient(90deg,#eef8f1,#f6fbf7)", fontWeight:800, fontSize:19,
+              borderTop:"3px solid #9ccfae", padding:18, borderBottom:"none" }}>Net profit</td>
+            <td style={{ ...tdN, background:"linear-gradient(90deg,#eef8f1,#f6fbf7)", ...numF, fontSize:22,
+              borderTop:"3px solid #9ccfae", padding:18, borderBottom:"none", color:sum.net>=0?C.green:C.red }}>{money(sum.net)}</td>
           </tr>
         </tbody></table>
         {!sum.closeStockSet && (
-          <div style={{ padding:"10px 13px", fontSize:11.5, background:"#fff8e6", borderTop:"1px solid "+C.gold, color:"#5c4500" }}>
-            The shelf has not been counted for this month yet, so nothing is treated as consumed and the
-            profit above is too high. <button onClick={() => onGo("close")} style={{ background:"none", border:"none", padding:0, color:C.maroon, fontWeight:800, cursor:"pointer", fontFamily:"inherit", fontSize:11.5, textDecoration:"underline" }}>Count it now →</button>
+          <div style={{ padding:"12px 16px", fontSize:12.5, background:"#fff8e6", borderTop:"1px solid "+C.gold, color:"#5c4500", lineHeight:1.6 }}>
+            The shelf has not been counted for this month yet, so nothing counts as consumed and the profit
+            above is too high.{" "}
+            <button onClick={() => onGo("close")} style={{ background:"none", border:"none", padding:0, color:C.maroon, fontWeight:800, cursor:"pointer", fontFamily:"inherit", fontSize:12.5, textDecoration:"underline" }}>Count it now →</button>
           </div>
         )}
       </div>
 
       <div style={card}>
         <div style={chead}>💵 Cash check</div>
-        <table style={{ borderCollapse:"collapse", width:"100%" }}><tbody>
-          {row("Opening cash", sum.openCash)}
-          {row("+ Cash sales", sum.cashSales, { color:C.green })}
-          {sum.refunds > 0 && row("− Refunds given", sum.refunds, { color:C.red })}
-          {row("− Cash purchases", sum.cashPurchases, { color:C.red })}
-          {row("− Cash expenses", sum.cashExpenses, { color:C.red })}
-          {sum.ownerIn  > 0 && row("+ Owner put in", sum.ownerIn, { color:C.green })}
-          {sum.ownerOut > 0 && row("− Owner took out", sum.ownerOut, { color:C.red })}
-          {row("Expected in the drawer", sum.expectedCash, { strong:true })}
-          {sum.countedCash === null ? (
-            <tr><td style={{ ...td, color:C.dim, fontSize:11.5 }} colSpan={2}>Drawer not counted this month yet.</td></tr>
-          ) : (<>
-            {row("Actually counted", sum.countedCash)}
-            <tr style={{ background:"#f4efe2" }}>
-              <td style={{ ...td, fontSize:14, fontWeight:800, borderTop:"2px solid "+C.border }}>
-                {sum.cashDiff === 0 ? "Matches" : sum.cashDiff > 0 ? "Over" : "Short"}
-              </td>
-              <td style={{ ...tdN, ...numF, fontSize:15, borderTop:"2px solid "+C.border, color:sum.cashDiff===0?C.green:C.red }}>
-                {sum.cashDiff === 0 ? "৳0" : signed(sum.cashDiff)}
-              </td>
-            </tr>
-          </>)}
-        </tbody></table>
-        <div style={{ padding:"10px 13px", fontSize:11, color:C.dim, borderTop:"1px solid "+C.border }}>
-          Card ({money(sum.cardSales)}) and mobile ({money(sum.mobileSales)}) are revenue but never reach the drawer,
-          so they are not counted here.
+        <div style={{ display:"grid", gridTemplateColumns:isMobile?"1fr":"repeat(3,1fr)", gap:10, padding:16 }}>
+          <CashTile label="Expected" value={money(sum.expectedCash)} />
+          <CashTile label="Counted" value={sum.countedCash === null ? "—" : money(sum.countedCash)} />
+          <CashTile label={sum.cashDiff === null ? "Difference" : sum.cashDiff === 0 ? "Matches" : sum.cashDiff > 0 ? "Over by" : "Short by"}
+            value={sum.cashDiff === null ? "—" : sum.cashDiff === 0 ? "৳0" : signed(sum.cashDiff)}
+            color={sum.cashDiff ? C.red : C.green}
+            tone={sum.cashDiff === null ? "" : sum.cashDiff === 0 ? "good" : "bad"} />
         </div>
+        <table style={{ borderCollapse:"collapse", width:"100%", borderTop:"1px solid "+C.border }}><tbody>
+          <RowInset label="Opening cash" value={money(sum.openCash)} />
+          <RowInset label="+ Cash taken" value={money(sum.cashSales)} />
+          {sum.refunds > 0 && <RowInset label="− Refunds given" value={money(sum.refunds)} />}
+          <RowInset label="− Bought & paid out" value={money(sum.cashSpend)} />
+          {sum.ownerIn  > 0 && <RowInset label="+ Owner put in" value={money(sum.ownerIn)} />}
+          {sum.ownerOut > 0 && <RowInset label="− Owner took out" value={money(sum.ownerOut)} />}
+        </tbody></table>
+        {sum.countedCash === null && (
+          <div style={{ padding:"12px 16px", fontSize:12.5, color:C.dim, borderTop:"1px solid "+C.border }}>
+            The drawer has not been counted this month.{" "}
+            <button onClick={() => onGo("close")} style={{ background:"none", border:"none", padding:0, color:C.maroon, fontWeight:800, cursor:"pointer", fontFamily:"inherit", fontSize:12.5, textDecoration:"underline" }}>Count it →</button>
+          </div>
+        )}
       </div>
     </div>
   </>);
 }
 
 // ── Sales ────────────────────────────────────────────────────────────────────
-function Sales({ rows, sum, today, month, isMobile, onAdd, onDel }) {
-  const blank = { date: month === today.slice(0,7) ? today : month + "-01", cash:"", card:"", mobile:"", refunds:"", note:"" };
+function Sales({ rows, sum, today, month, isMobile, onAdd, onEdit, onDel }) {
+  const blank = { date: month === today.slice(0,7) ? today : month + "-01", cash:"", refunds:"", note:"" };
   const [f, setF] = useState(blank);
+  const [editId, setEditId] = useState(null);
+  const [e, setE] = useState({});
   const n = v => parseFloat(v) || 0;
-  const total = n(f.cash) + n(f.card) + n(f.mobile) - n(f.refunds);
   const set = (k,v) => setF(p => ({ ...p, [k]:v }));
 
   const submit = () => {
-    if (!f.date) return;
-    if (!n(f.cash) && !n(f.card) && !n(f.mobile)) return;
-    onAdd({ date:f.date, cash:n(f.cash), card:n(f.card), mobile:n(f.mobile), refunds:n(f.refunds), note:f.note.trim() });
-    setF(blank);
+    if (!f.date || !n(f.cash)) return;
+    onAdd({ date:f.date, cash:n(f.cash), refunds:n(f.refunds), note:f.note.trim() });
+    setF({ ...blank, date:f.date });
   };
+  const startEdit = r => { setEditId(r.id); setE({ date:r.date, cash:r.cash ?? "", refunds:r.refunds ?? "", note:r.note || "" }); };
+  const saveEdit = () => { onEdit(editId, { date:e.date, cash:n(e.cash), refunds:n(e.refunds), note:(e.note||"").trim() }); setEditId(null); };
 
   return (
     <div style={card}>
-      <div style={chead}>💰 Daily sales <span style={{ marginLeft:"auto", fontSize:10.5, fontWeight:700, letterSpacing:0, textTransform:"none", color:C.dim }}>{monthLabel(month)} · {money(sum.revenue)}</span></div>
-      <div style={{ ...formWrap, gridTemplateColumns:isMobile?"1fr 1fr":"1.1fr .8fr .8fr .8fr .8fr 1.3fr auto" }}>
-        <div><label style={lbl}>Date</label><input type="date" style={inp} value={f.date} onChange={e=>set("date",e.target.value)} /></div>
-        <div><label style={lbl}>Cash ৳</label><input type="number" min="0" style={inp} value={f.cash} onChange={e=>set("cash",e.target.value)} onWheel={e=>e.target.blur()} /></div>
-        <div><label style={lbl}>Card ৳</label><input type="number" min="0" style={inp} value={f.card} onChange={e=>set("card",e.target.value)} onWheel={e=>e.target.blur()} /></div>
-        <div><label style={lbl}>Mobile ৳</label><input type="number" min="0" style={inp} value={f.mobile} onChange={e=>set("mobile",e.target.value)} onWheel={e=>e.target.blur()} /></div>
-        <div><label style={lbl}>Refunds ৳</label><input type="number" min="0" style={inp} value={f.refunds} onChange={e=>set("refunds",e.target.value)} onWheel={e=>e.target.blur()} /></div>
-        <div><label style={lbl}>Note (optional)</label><input style={inp} value={f.note} onChange={e=>set("note",e.target.value)} placeholder="rainy, slow morning" /></div>
-        <div style={{ display:"flex", alignItems:"flex-end", gap:8 }}>
-          <button style={btn} onClick={submit}>+ Save day</button>
-        </div>
-        {total !== 0 && <div style={{ gridColumn:"1/-1", fontSize:12, color:C.dim }}>Day total: <b style={{ ...numF, color:C.green, fontSize:14 }}>{money(total)}</b></div>}
+      <div style={chead}>💰 Daily sales <span style={cheadR}>{monthLabel(month)} · {money(sum.revenue)}</span></div>
+      <div style={{ ...formWrap, gridTemplateColumns:isMobile?"1fr 1fr":"1.1fr 1fr 1fr 1.8fr auto" }}>
+        <div><label style={lbl}>Date</label><input type="date" style={inp} value={f.date} onChange={ev=>set("date",ev.target.value)} /></div>
+        <div><label style={lbl}>Cash taken ৳</label><input type="number" min="0" style={inp} value={f.cash} onChange={ev=>set("cash",ev.target.value)} onWheel={ev=>ev.target.blur()} /></div>
+        <div><label style={lbl}>Refunds ৳</label><input type="number" min="0" style={inp} value={f.refunds} onChange={ev=>set("refunds",ev.target.value)} onWheel={ev=>ev.target.blur()} /></div>
+        <div><label style={lbl}>Note (optional)</label><input style={inp} value={f.note} onChange={ev=>set("note",ev.target.value)} placeholder="rainy, slow morning" /></div>
+        <div style={{ display:"flex", alignItems:"flex-end" }}><button style={btn} onClick={submit}>+ Save day</button></div>
+        {(n(f.cash) - n(f.refunds)) !== 0 && (
+          <div style={{ gridColumn:"1/-1", fontSize:13 }}>Day total: <b style={{ ...numF, color:C.green, fontSize:16 }}>{money(n(f.cash)-n(f.refunds))}</b></div>
+        )}
       </div>
       {rows.length === 0 ? <Empty>No sales entered for {monthLabel(month)} yet.</Empty> : (
         <div style={{ overflowX:"auto" }}>
-        <table style={{ borderCollapse:"collapse", width:"100%", minWidth:640 }}>
+        <table style={{ borderCollapse:"collapse", width:"100%", minWidth:600 }}>
           <thead><tr>
-            <th style={th}>Date</th><th style={{...th,textAlign:"right"}}>Cash</th><th style={{...th,textAlign:"right"}}>Card</th>
-            <th style={{...th,textAlign:"right"}}>Mobile</th><th style={{...th,textAlign:"right"}}>Refunds</th>
-            <th style={{...th,textAlign:"right"}}>Total</th><th style={th}>Note</th><th style={th}></th>
+            <th style={th}>Date</th><th style={{...th,textAlign:"right"}}>Cash taken</th>
+            <th style={{...th,textAlign:"right"}}>Refunds</th><th style={{...th,textAlign:"right"}}>Total</th>
+            <th style={th}>Note</th><th style={th}></th>
           </tr></thead>
           <tbody>
-            {rows.map(r => {
-              const t = (r.cash||0)+(r.card||0)+(r.mobile||0)-(r.refunds||0);
-              return (
-                <tr key={r.id}>
-                  <td style={td}>{fmtDate(r.date)}</td>
-                  <td style={tdN}>{r.cash ? money(r.cash) : "—"}</td>
-                  <td style={tdN}>{r.card ? money(r.card) : "—"}</td>
-                  <td style={tdN}>{r.mobile ? money(r.mobile) : "—"}</td>
-                  <td style={{ ...tdN, color:r.refunds?C.red:undefined }}>{r.refunds ? "−"+money(r.refunds) : "—"}</td>
-                  <td style={{ ...tdN, ...numF }}>{money(t)}</td>
-                  <td style={{ ...td, color:C.dim, fontSize:11 }}>{r.note || "—"}</td>
-                  <td style={{ ...td, textAlign:"right" }}>
-                    <button onClick={()=>onDel(r.id)} title="Delete" style={{ background:"none", border:"none", color:C.dim, cursor:"pointer", fontSize:13 }}>✕</button>
-                  </td>
-                </tr>
-              );
-            })}
+            {rows.map(r => editId === r.id ? (
+              <tr key={r.id} style={{ background:"#fff8e6" }}>
+                <td style={td}><input type="date" style={inp} value={e.date} onChange={ev=>setE(p=>({...p,date:ev.target.value}))} /></td>
+                <td style={td}><input type="number" style={{...inp,textAlign:"right"}} value={e.cash} onChange={ev=>setE(p=>({...p,cash:ev.target.value}))} onWheel={ev=>ev.target.blur()} /></td>
+                <td style={td}><input type="number" style={{...inp,textAlign:"right"}} value={e.refunds} onChange={ev=>setE(p=>({...p,refunds:ev.target.value}))} onWheel={ev=>ev.target.blur()} /></td>
+                <td style={tdN}>—</td>
+                <td style={td}><input style={inp} value={e.note} onChange={ev=>setE(p=>({...p,note:ev.target.value}))} /></td>
+                <td style={{ ...td, textAlign:"right", whiteSpace:"nowrap" }}>
+                  <button style={{ ...btn, ...btnSm, background:C.green }} onClick={saveEdit}>Save</button>{" "}
+                  <button style={{ ...btnO, ...btnSm }} onClick={()=>setEditId(null)}>Cancel</button>{" "}
+                  <button style={{ ...btnO, ...btnSm, color:C.red, borderColor:"#e8a49c" }} onClick={()=>{ onDel(r.id); setEditId(null); }}>Delete</button>
+                </td>
+              </tr>
+            ) : (
+              <tr key={r.id}>
+                <td style={td}>{fmtDate(r.date)}</td>
+                <td style={{ ...tdN, ...numF }}>{money(r.cash)}</td>
+                <td style={{ ...tdN, color:r.refunds?C.red:undefined }}>{r.refunds ? "−"+money(r.refunds) : "—"}</td>
+                <td style={{ ...tdN, ...numF }}>{money((r.cash||0)+(r.card||0)+(r.mobile||0)-(r.refunds||0))}</td>
+                <td style={{ ...td, color:C.dim, fontSize:12.5 }}>{r.note || "—"}</td>
+                <td style={{ ...td, textAlign:"right" }}><button style={{ ...btnO, ...btnSm }} onClick={()=>startEdit(r)}>✏️ Edit</button></td>
+              </tr>
+            ))}
             <tr style={{ background:"#f4efe2" }}>
               <td style={{ ...td, fontWeight:800 }}>Month total</td>
               <td style={{ ...tdN, ...numF }}>{money(sum.cashSales)}</td>
-              <td style={{ ...tdN, ...numF }}>{money(sum.cardSales)}</td>
-              <td style={{ ...tdN, ...numF }}>{money(sum.mobileSales)}</td>
               <td style={{ ...tdN, ...numF, color:C.red }}>{sum.refunds ? "−"+money(sum.refunds) : "৳0"}</td>
-              <td style={{ ...tdN, ...numF, fontSize:14, color:C.green }}>{money(sum.revenue)}</td>
+              <td style={{ ...tdN, ...numF, fontSize:16, color:C.green }}>{money(sum.revenue)}</td>
               <td style={td} colSpan={2}></td>
             </tr>
           </tbody>
@@ -295,176 +381,165 @@ function Sales({ rows, sum, today, month, isMobile, onAdd, onDel }) {
   );
 }
 
-// ── Purchases ────────────────────────────────────────────────────────────────
-function Purchases({ rows, sum, today, month, isMobile, onAdd, onDel }) {
-  const blank = { date: month === today.slice(0,7) ? today : month + "-01", what:"", supplier:"", amount:"", method:"Cash", isStock:true };
+// ── Expenses (everything the shop spends money on) ───────────────────────────
+function Spend({ rows, sum, today, month, isMobile, onAdd, onEdit, onDel, onView, notify }) {
+  const blank = { date: month === today.slice(0,7) ? today : month + "-01", what:"", amount:"", isStock:true, receiptId:"", receiptName:"" };
   const [f, setF] = useState(blank);
+  const [busy, setBusy] = useState(false);
+  const [editId, setEditId] = useState(null);
+  const [e, setE] = useState({});
   const set = (k,v) => setF(p => ({ ...p, [k]:v }));
+
+  const attach = async (file, apply) => {
+    setBusy(true);
+    try {
+      const dataUrl = await compressImage(file);
+      if (dataUrl.length > MAX_STORED_BYTES) {
+        notify("That file is too big even after shrinking — try a photo instead of a scan", "error");
+        return;
+      }
+      const id = newReceiptId();
+      await saveReceipt(id, dataUrl, file.name);
+      apply(id, file.name);
+    } catch {
+      notify("Could not read that file", "error");
+    } finally { setBusy(false); }
+  };
+
   const submit = () => {
     const amt = parseFloat(f.amount) || 0;
     if (!f.date || !f.what.trim() || amt <= 0) return;
-    onAdd({ date:f.date, what:f.what.trim(), supplier:f.supplier.trim(), amount:amt, method:f.method, isStock:!!f.isStock });
-    setF({ ...blank, date:f.date, method:f.method });
+    onAdd({ date:f.date, what:f.what.trim(), amount:amt, isStock:!!f.isStock, receiptId:f.receiptId, receiptName:f.receiptName });
+    setF({ ...blank, date:f.date, isStock:f.isStock });
+  };
+  const startEdit = r => { setEditId(r.id); setE({ date:r.date, what:r.what||"", amount:r.amount ?? "", isStock:r.isStock !== false, receiptId:r.receiptId||"", receiptName:r.receiptName||"" }); };
+  const saveEdit = () => {
+    onEdit(editId, { date:e.date, what:(e.what||"").trim(), amount:parseFloat(e.amount)||0, isStock:!!e.isStock, receiptId:e.receiptId, receiptName:e.receiptName });
+    setEditId(null);
   };
 
   return (<>
     <div style={card}>
-      <div style={chead}>🛒 Purchases <span style={{ marginLeft:"auto", fontSize:10.5, fontWeight:700, letterSpacing:0, textTransform:"none", color:C.dim }}>{monthLabel(month)} · {money(sum.purchasesTotal)}</span></div>
-      <div style={{ ...formWrap, gridTemplateColumns:isMobile?"1fr 1fr":"1fr 1.3fr 1.1fr .9fr 1.3fr auto" }}>
-        <div><label style={lbl}>Date</label><input type="date" style={inp} value={f.date} onChange={e=>set("date",e.target.value)} /></div>
-        <div><label style={lbl}>What</label><input style={inp} value={f.what} onChange={e=>set("what",e.target.value)} placeholder="Coffee beans" /></div>
-        <div><label style={lbl}>Supplier (optional)</label><input style={inp} value={f.supplier} onChange={e=>set("supplier",e.target.value)} /></div>
-        <div><label style={lbl}>Amount ৳</label><input type="number" min="0" style={inp} value={f.amount} onChange={e=>set("amount",e.target.value)} onWheel={e=>e.target.blur()} /></div>
-        <div><label style={lbl}>Paid by</label><PayPicker value={f.method} onChange={v=>set("method",v)} /></div>
+      <div style={chead}>💸 Expenses <span style={cheadR}>{monthLabel(month)} · {money(sum.spendTotal)}</span></div>
+      <div style={{ ...formWrap, gridTemplateColumns:isMobile?"1fr 1fr":"1.1fr 1.8fr 1fr 1.2fr auto" }}>
+        <div><label style={lbl}>Date</label><input type="date" style={inp} value={f.date} onChange={ev=>set("date",ev.target.value)} /></div>
+        <div><label style={lbl}>What</label><input style={inp} value={f.what} onChange={ev=>set("what",ev.target.value)} placeholder="Coffee beans / Rent — August" /></div>
+        <div><label style={lbl}>Amount ৳</label><input type="number" min="0" style={inp} value={f.amount} onChange={ev=>set("amount",ev.target.value)} onWheel={ev=>ev.target.blur()} /></div>
+        <div><label style={lbl}>Invoice photo</label>
+          <ReceiptButton busy={busy} name={f.receiptName}
+            onPicked={file => attach(file, (id,name) => setF(p => ({ ...p, receiptId:id, receiptName:name })))} /></div>
         <div style={{ display:"flex", alignItems:"flex-end" }}><button style={btn} onClick={submit}>+ Add</button></div>
-        <label style={{ gridColumn:"1/-1", display:"flex", alignItems:"center", gap:9, fontSize:12.5, cursor:"pointer", color:"#2b2b2b" }}>
-          <input type="checkbox" checked={f.isStock} onChange={e=>set("isStock",e.target.checked)} style={{ width:16, height:16, accentColor:C.maroon }} />
-          <span><b>Counts as stock</b> — it sits on the shelf and will be in the month-end count
-            <span style={{ color:C.dim }}> (beans, milk, cups, syrup). Untick for things used up like cleaning liquid.</span></span>
+        <label style={{ gridColumn:"1/-1", display:"flex", alignItems:"center", gap:9, fontSize:13.5, cursor:"pointer" }}>
+          <input type="checkbox" checked={f.isStock} onChange={ev=>set("isStock",ev.target.checked)} style={{ width:17, height:17, accentColor:C.maroon }} />
+          <span><b>Goes on the shelf</b> <span style={{ color:C.dim }}>— beans, milk, cups. Untick for rent, salary, electricity, cleaning.</span></span>
         </label>
       </div>
-      {rows.length === 0 ? <Empty>No purchases for {monthLabel(month)} yet.</Empty> : (
+      {rows.length === 0 ? <Empty>Nothing spent in {monthLabel(month)} yet.</Empty> : (
         <div style={{ overflowX:"auto" }}>
-        <table style={{ borderCollapse:"collapse", width:"100%", minWidth:640 }}>
-          <thead><tr><th style={th}>Date</th><th style={th}>What</th><th style={th}>Supplier</th><th style={th}>Paid by</th><th style={th}></th><th style={{...th,textAlign:"right"}}>Amount</th><th style={th}></th></tr></thead>
+        <table style={{ borderCollapse:"collapse", width:"100%", minWidth:680 }}>
+          <thead><tr>
+            <th style={th}>Date</th><th style={th}>What</th><th style={th}>Type</th><th style={th}>Invoice</th>
+            <th style={{...th,textAlign:"right"}}>Amount</th><th style={th}></th>
+          </tr></thead>
           <tbody>
-            {rows.map(r => (
+            {rows.map(r => editId === r.id ? (
+              <tr key={r.id} style={{ background:"#fff8e6" }}>
+                <td style={td}><input type="date" style={inp} value={e.date} onChange={ev=>setE(p=>({...p,date:ev.target.value}))} /></td>
+                <td style={td}><input style={inp} value={e.what} onChange={ev=>setE(p=>({...p,what:ev.target.value}))} /></td>
+                <td style={td}>
+                  <label style={{ display:"flex", alignItems:"center", gap:6, fontSize:12.5, whiteSpace:"nowrap" }}>
+                    <input type="checkbox" checked={!!e.isStock} onChange={ev=>setE(p=>({...p,isStock:ev.target.checked}))} style={{ accentColor:C.maroon }} />shelf
+                  </label>
+                </td>
+                <td style={td}><ReceiptButton busy={busy} name={e.receiptName}
+                  onPicked={file => attach(file, (id,name) => setE(p => ({ ...p, receiptId:id, receiptName:name })))} /></td>
+                <td style={td}><input type="number" style={{...inp,textAlign:"right"}} value={e.amount} onChange={ev=>setE(p=>({...p,amount:ev.target.value}))} onWheel={ev=>ev.target.blur()} /></td>
+                <td style={{ ...td, textAlign:"right", whiteSpace:"nowrap" }}>
+                  <button style={{ ...btn, ...btnSm, background:C.green }} onClick={saveEdit}>Save</button>{" "}
+                  <button style={{ ...btnO, ...btnSm }} onClick={()=>setEditId(null)}>Cancel</button>{" "}
+                  <button style={{ ...btnO, ...btnSm, color:C.red, borderColor:"#e8a49c" }} onClick={()=>{ onDel(r.id); setEditId(null); }}>Delete</button>
+                </td>
+              </tr>
+            ) : (
               <tr key={r.id}>
                 <td style={td}>{fmtDate(r.date)}</td>
                 <td style={{ ...td, fontWeight:600 }}>{r.what}</td>
-                <td style={{ ...td, color:C.dim, fontSize:11 }}>{r.supplier || "—"}</td>
-                <td style={td}>{methodPill(r.method)}</td>
                 <td style={td}>{r.isStock === false
-                  ? <span style={{ fontSize:10.5, color:C.dim }}>not stock</span>
-                  : <Pill bg="#fff3d9" color="#7a5c00">counts as stock</Pill>}</td>
+                  ? <Pill bg="#eef2f7" color={C.blue}>running cost</Pill>
+                  : <Pill bg="#fff3d9" color="#7a5c00">shelf</Pill>}</td>
+                <td style={td}>{r.receiptId
+                  ? <button title={r.receiptName || "View invoice"} onClick={()=>onView(r.receiptId)}
+                      style={{ width:36, height:36, borderRadius:7, background:"#f4efe2", border:"1.5px solid "+C.border, cursor:"pointer", fontSize:16 }}>🧾</button>
+                  : <span style={{ color:C.dim, fontSize:12.5 }}>—</span>}</td>
                 <td style={{ ...tdN, ...numF }}>{money(r.amount)}</td>
-                <td style={{ ...td, textAlign:"right" }}>
-                  <button onClick={()=>onDel(r.id)} title="Delete" style={{ background:"none", border:"none", color:C.dim, cursor:"pointer", fontSize:13 }}>✕</button>
-                </td>
+                <td style={{ ...td, textAlign:"right" }}><button style={{ ...btnO, ...btnSm }} onClick={()=>startEdit(r)}>✏️ Edit</button></td>
               </tr>
             ))}
             <tr style={{ background:"#f4efe2" }}>
-              <td style={{ ...td, fontWeight:800 }} colSpan={5}>Total purchases</td>
-              <td style={{ ...tdN, ...numF, fontSize:14 }}>{money(sum.purchasesTotal)}</td><td style={td}></td>
+              <td style={{ ...td, fontWeight:800 }} colSpan={4}>Total spent
+                <span style={{ fontWeight:400, fontSize:12.5, color:C.dim }}> · shelf {money(sum.stockPurchases)} · running {money(sum.otherExpenses)}</span>
+              </td>
+              <td style={{ ...tdN, ...numF, fontSize:16 }}>{money(sum.spendTotal)}</td><td style={td}></td>
             </tr>
           </tbody>
         </table>
         </div>
       )}
     </div>
-    <div style={{ background:"#fff8e6", border:"1px solid "+C.gold, borderRadius:9, padding:"10px 13px", fontSize:12, color:"#5c4500", lineHeight:1.55, marginTop:10 }}>
-      <b>Why the tick matters.</b> Anything marked <b>counts as stock</b> must also be included when the manager
-      counts the shelf at month end — otherwise the app treats it as consumed and the profit comes out too low.
-      Things that get used up and never sit on the shelf as sellable stock are safest left unticked; they are
-      then counted as a running cost, so no money is ever lost either way.
+    <div style={{ background:"#fff8e6", border:"1px solid "+C.gold, borderRadius:9, padding:"12px 15px", fontSize:12.5, color:"#5c4500", lineHeight:1.6, marginTop:11 }}>
+      <b>Why the tick matters.</b> Ticked means it sits on the shelf and must be included when the manager
+      counts at month end — otherwise the app treats it as consumed and profit comes out too low. Things that
+      get used up and never sit on the shelf as sellable stock are safest left unticked; they are then a
+      running cost. Either way the money reaches net profit exactly once.
     </div>
   </>);
 }
 
-// ── Expenses ─────────────────────────────────────────────────────────────────
-function Expenses({ rows, sum, today, month, isMobile, onAdd, onDel }) {
-  const blank = { date: month === today.slice(0,7) ? today : month + "-01", cat:"Rent", desc:"", amount:"", method:"Cash" };
-  const [f, setF] = useState(blank);
-  const set = (k,v) => setF(p => ({ ...p, [k]:v }));
-  const submit = () => {
-    const amt = parseFloat(f.amount) || 0;
-    if (!f.date || !f.cat || amt <= 0) return;
-    onAdd({ date:f.date, cat:f.cat, desc:f.desc.trim(), amount:amt, method:f.method });
-    setF({ ...blank, date:f.date, cat:f.cat, method:f.method });
-  };
-  const logged = rows.reduce((s,r) => s + (r.amount||0), 0);
-
-  return (
-    <div style={card}>
-      <div style={chead}>💸 Other expenses <span style={{ marginLeft:"auto", fontSize:10.5, fontWeight:700, letterSpacing:0, textTransform:"none", color:C.dim }}>{monthLabel(month)} · {money(logged)}</span></div>
-      <div style={{ ...formWrap, gridTemplateColumns:isMobile?"1fr 1fr":"1fr 1.1fr 1.5fr .9fr 1.3fr auto" }}>
-        <div><label style={lbl}>Date</label><input type="date" style={inp} value={f.date} onChange={e=>set("date",e.target.value)} /></div>
-        <div><label style={lbl}>Category</label>
-          <select style={inp} value={f.cat} onChange={e=>set("cat",e.target.value)}>
-            {EXP_CATS.map(c => <option key={c} value={c}>{c}</option>)}
-          </select>
-        </div>
-        <div><label style={lbl}>Description</label><input style={inp} value={f.desc} onChange={e=>set("desc",e.target.value)} placeholder="July bill" /></div>
-        <div><label style={lbl}>Amount ৳</label><input type="number" min="0" style={inp} value={f.amount} onChange={e=>set("amount",e.target.value)} onWheel={e=>e.target.blur()} /></div>
-        <div><label style={lbl}>Paid by</label><PayPicker value={f.method} onChange={v=>set("method",v)} /></div>
-        <div style={{ display:"flex", alignItems:"flex-end" }}><button style={btn} onClick={submit}>+ Add</button></div>
-      </div>
-      {rows.length === 0 ? <Empty>No expenses for {monthLabel(month)} yet.</Empty> : (
-        <div style={{ overflowX:"auto" }}>
-        <table style={{ borderCollapse:"collapse", width:"100%", minWidth:560 }}>
-          <thead><tr><th style={th}>Date</th><th style={th}>Category</th><th style={th}>Description</th><th style={th}>Paid by</th><th style={{...th,textAlign:"right"}}>Amount</th><th style={th}></th></tr></thead>
-          <tbody>
-            {rows.map(r => (
-              <tr key={r.id}>
-                <td style={td}>{fmtDate(r.date)}</td>
-                <td style={{ ...td, fontWeight:600 }}>{r.cat}</td>
-                <td style={{ ...td, color:C.dim, fontSize:11 }}>{r.desc || "—"}</td>
-                <td style={td}>{methodPill(r.method)}</td>
-                <td style={{ ...tdN, ...numF }}>{money(r.amount)}</td>
-                <td style={{ ...td, textAlign:"right" }}>
-                  <button onClick={()=>onDel(r.id)} title="Delete" style={{ background:"none", border:"none", color:C.dim, cursor:"pointer", fontSize:13 }}>✕</button>
-                </td>
-              </tr>
-            ))}
-            <tr style={{ background:"#f4efe2" }}>
-              <td style={{ ...td, fontWeight:800 }} colSpan={4}>Total logged here</td>
-              <td style={{ ...tdN, ...numF, fontSize:14 }}>{money(logged)}</td><td style={td}></td>
-            </tr>
-          </tbody>
-        </table>
-        </div>
-      )}
-      {sum.nonStockPurchases > 0 && (
-        <div style={{ padding:"10px 13px", fontSize:11.5, color:C.dim, borderTop:"1px solid "+C.border }}>
-          Plus {money(sum.nonStockPurchases)} of non-stock purchases from the Purchases screen —
-          the dashboard counts {money(sum.otherExpenses)} of other expenses in total.
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ── Close Month ──────────────────────────────────────────────────────────────
-function CloseMonth({ sum, closes, owner, today, month, isMobile, onMonthField, onCount, onOwner, onDelOwner, isFirstMonth }) {
+function CloseMonth({ sum, closes, owner, today, month, isMobile, onMonthField, onMonthFields, onCount, onOwner, onDelOwner, isFirstMonth, notify }) {
   const [stock, setStock] = useState("");
   const [cash, setCash] = useState("");
   const [countDate, setCountDate] = useState(month === today.slice(0,7) ? today : month + "-01");
   const [ow, setOw] = useState({ date: month === today.slice(0,7) ? today : month + "-01", dir:"out", amount:"", note:"" });
-  // On the very first month there is no previous count to carry, so the owner
-  // has to be able to type what was on the shelf and in the drawer on day one.
   const [editOpen, setEditOpen] = useState(false);
   const [oStock, setOStock] = useState("");
   const [oCash, setOCash] = useState("");
+  const [took, setTook] = useState("");
+
   const showOpeningEditor = editOpen || (isFirstMonth && sum.openStockAuto && sum.openCashAuto && sum.openStock === 0 && sum.openCash === 0);
+  const tookNum = parseFloat(took);
+  const takeAmount = Number.isFinite(tookNum) ? tookNum : 0;
+  const leaves = sum.inDrawer - takeAmount;
 
-  const OpeningEditor = ({ field, value, setValue, onSave, label }) => (
-    <div style={{ display:"flex", gap:8, marginBottom:4 }}>
-      <input type="number" min="0" style={inp} placeholder={label} value={value}
-        onChange={e=>setValue(e.target.value)} onWheel={e=>e.target.blur()} />
-      <button style={{ ...btn, background:"#fff", color:C.maroon, border:"1.5px solid "+C.border }}
-        onClick={() => { if (value !== "") { onSave(parseFloat(value)||0); setValue(""); setEditOpen(false); } }}>Set</button>
-    </div>
-  );
-
-  const expectedThatDay = closes.find(c => c.date === countDate);
+  const doClose = () => {
+    if (takeAmount < 0 || takeAmount > sum.inDrawer) { notify("The owner cannot take more than is in the drawer", "error"); return; }
+    onMonthFields({ closed:true, ownerTook:takeAmount, closedAt:new Date().toISOString() });
+    setTook("");
+    notify(`${monthLabel(month)} closed · ${money(leaves)} carries into ${monthLabel(nextMonth(month))} ✓`);
+  };
+  const reopen = () => {
+    if (!canEdit()) { notify("Reopening is locked", "error"); return; }
+    onMonthFields({ closed:false, ownerTook:0, closedAt:"" });
+    notify(`${monthLabel(month)} reopened`);
+  };
 
   return (<>
     <div style={{ display:"grid", gridTemplateColumns:isMobile?"1fr":"1fr 1fr", gap:12 }}>
 
       <div style={card}>
         <div style={chead}>📦 Inventory value</div>
-        <div style={{ padding:"13px 14px" }}>
+        <div style={{ padding:"15px 16px" }}>
           <label style={lbl}>Opening — start of {monthLabel(month)}</label>
           {showOpeningEditor
             ? <OpeningEditor value={oStock} setValue={setOStock} label="value on the shelf on day one"
-                onSave={v => onMonthField("openStock", v)} />
-            : <div style={{ ...inp, background:"#f4efe2", ...numF, fontSize:15 }}>{money(sum.openStock)}</div>}
-          <div style={{ fontSize:11, color:C.dim, margin:"4px 0 14px" }}>
+                onSave={v => onMonthField("openStock", v)} onDone={() => setEditOpen(false)} />
+            : <div style={{ ...inp, background:"#f4efe2", ...numF, fontSize:17 }}>{money(sum.openStock)}</div>}
+          <div style={{ fontSize:12, color:C.dim, margin:"5px 0 15px" }}>
             {showOpeningEditor ? "First month — type what was already on the shelf when you started. After this it carries over on its own."
-              : sum.openStockAuto ? "Carried over automatically from the previous month's count. Never typed twice."
+              : sum.openStockAuto ? "Carried over automatically from last month's count. Never typed twice."
               : "Set by hand for this month."}
             {!showOpeningEditor && (
-              <button onClick={()=>setEditOpen(true)} style={{ background:"none", border:"none", padding:"0 0 0 5px", color:C.maroon, fontWeight:700, cursor:"pointer", fontFamily:"inherit", fontSize:11, textDecoration:"underline" }}>change</button>
+              <button onClick={()=>setEditOpen(true)} style={{ background:"none", border:"none", padding:"0 0 0 5px", color:C.maroon, fontWeight:700, cursor:"pointer", fontFamily:"inherit", fontSize:12, textDecoration:"underline" }}>change</button>
             )}
           </div>
           <label style={lbl}>Closing — the manager counts the shelf</label>
@@ -473,11 +548,9 @@ function CloseMonth({ sum, closes, owner, today, month, isMobile, onMonthField, 
               value={stock} onChange={e=>setStock(e.target.value)} onWheel={e=>e.target.blur()} />
             <button style={btn} onClick={() => { if (stock !== "") { onMonthField("closeStock", parseFloat(stock)||0); setStock(""); } }}>Save</button>
           </div>
-          <div style={{ fontSize:11, color:C.dim, marginTop:5 }}>
-            One number — the total value of everything on the shelf. No product list, no quantities.
-          </div>
+          <div style={{ fontSize:12, color:C.dim, marginTop:6 }}>One number — the total value of everything on the shelf.</div>
           {sum.closeStockSet && (
-            <div style={{ marginTop:11, paddingTop:10, borderTop:"1px solid "+C.border, fontSize:12.5, display:"flex", justifyContent:"space-between" }}>
+            <div style={{ marginTop:13, paddingTop:12, borderTop:"1px solid "+C.border, fontSize:13.5, display:"flex", justifyContent:"space-between" }}>
               <span>Counted <b style={numF}>{money(sum.closeStock)}</b></span>
               <span>Goods used <b style={{ ...numF, color:C.red }}>{money(sum.cogs)}</b></span>
             </div>
@@ -487,44 +560,81 @@ function CloseMonth({ sum, closes, owner, today, month, isMobile, onMonthField, 
 
       <div style={card}>
         <div style={chead}>💵 Cash count</div>
-        <div style={{ padding:"13px 14px" }}>
+        <div style={{ padding:"15px 16px" }}>
           <label style={lbl}>Opening cash — start of {monthLabel(month)}</label>
           {showOpeningEditor
             ? <OpeningEditor value={oCash} setValue={setOCash} label="cash in the drawer on day one"
-                onSave={v => onMonthField("openCash", v)} />
-            : <div style={{ ...inp, background:"#f4efe2", ...numF, fontSize:15 }}>{money(sum.openCash)}</div>}
-          <div style={{ fontSize:11, color:C.dim, margin:"4px 0 14px" }}>
+                onSave={v => onMonthField("openCash", v)} onDone={() => setEditOpen(false)} />
+            : <div style={{ ...inp, background:"#f4efe2", ...numF, fontSize:17 }}>{money(sum.openCash)}</div>}
+          <div style={{ fontSize:12, color:C.dim, margin:"5px 0 15px" }}>
             {showOpeningEditor ? "First month — type the cash you started with."
-              : sum.openCashAuto ? "Carried over from the previous month's counted drawer." : "Set by hand for this month."}
-            {!showOpeningEditor && (
-              <button onClick={()=>setEditOpen(true)} style={{ background:"none", border:"none", padding:"0 0 0 5px", color:C.maroon, fontWeight:700, cursor:"pointer", fontFamily:"inherit", fontSize:11, textDecoration:"underline" }}>change</button>
-            )}
+              : sum.openCashAuto ? "What last month left behind after the owner took their money." : "Set by hand for this month."}
           </div>
           <label style={lbl}>Count the drawer</label>
-          <div style={{ display:"flex", gap:8, marginBottom:8 }}>
-            <input type="date" style={{ ...inp, maxWidth:150 }} value={countDate} onChange={e=>setCountDate(e.target.value)} />
+          <div style={{ display:"flex", gap:8, marginBottom:10 }}>
+            <input type="date" style={{ ...inp, maxWidth:160 }} value={countDate} onChange={e=>setCountDate(e.target.value)} />
             <input type="number" min="0" style={inp} placeholder="counted" value={cash} onChange={e=>setCash(e.target.value)} onWheel={e=>e.target.blur()} />
             <button style={{ ...btn, background:C.green }} onClick={() => { if (cash !== "") { onCount(countDate, parseFloat(cash)||0); setCash(""); } }}>Save</button>
           </div>
-          <div style={{ paddingTop:10, borderTop:"1px solid "+C.border, display:"flex", justifyContent:"space-between", fontSize:12.5, flexWrap:"wrap", gap:8 }}>
+          <div style={{ paddingTop:12, borderTop:"1px solid "+C.border, display:"flex", justifyContent:"space-between", fontSize:13.5, flexWrap:"wrap", gap:8 }}>
             <span>Expected <b style={numF}>{money(sum.expectedCash)}</b></span>
             <span>Counted <b style={numF}>{sum.countedCash === null ? "—" : money(sum.countedCash)}</b></span>
-            <span style={{ color:sum.cashDiff ? C.red : C.green }}>
+            <span style={{ color:sum.cashDiff ? C.red : C.green, fontWeight:700 }}>
               {sum.cashDiff === null ? "not counted" : sum.cashDiff === 0 ? "matches ✓" : (sum.cashDiff > 0 ? "over " : "short ") + money(Math.abs(sum.cashDiff))}
             </span>
           </div>
-          {expectedThatDay && (
-            <div style={{ fontSize:11, color:C.dim, marginTop:6 }}>
-              On {fmtDate(countDate)} the drawer should hold {money(expectedThatDay.expected)}.
-            </div>
-          )}
         </div>
       </div>
     </div>
 
+    {/* Finish the month */}
+    <div style={{ ...card, marginTop:12, borderColor: sum.closed ? "#9ccfae" : C.border }}>
+      <div style={chead}>🏁 Finish {monthLabel(month)}
+        {sum.closed && <span style={cheadR}><Pill bg="#eaf6ee" color={C.green}>✓ CLOSED</Pill></span>}
+      </div>
+      {sum.closed ? (
+        <div style={{ padding:"15px 16px" }}>
+          <table style={{ borderCollapse:"collapse", width:"100%" }}><tbody>
+            <RowMain label="Cash in the drawer at the end" value={money(sum.inDrawer)} />
+            <RowMain label="Owner took" value={money(sum.ownerTook)} color={C.red} />
+            <RowTotal label={`Opened ${monthLabel(nextMonth(month))} with`} value={money(sum.carriesForward)} color={C.green} />
+          </tbody></table>
+          <div style={{ marginTop:13, display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
+            <button style={btnO} onClick={reopen}>Reopen the month</button>
+            <span style={{ fontSize:12, color:C.dim }}>Use this if the month was closed too early.</span>
+          </div>
+        </div>
+      ) : (
+        <div style={{ padding:"15px 16px" }}>
+          <table style={{ borderCollapse:"collapse", width:"100%" }}><tbody>
+            <RowMain label={sum.countedCash === null ? "Expected in the drawer (not counted yet)" : "Cash counted in the drawer"} value={money(sum.inDrawer)} />
+            <tr>
+              <td style={td}>Owner takes</td>
+              <td style={{ ...tdN, paddingTop:8, paddingBottom:8 }}>
+                <input type="number" min="0" max={sum.inDrawer} style={{ ...inp, maxWidth:170, textAlign:"right", display:"inline-block" }}
+                  placeholder="0" value={took} onChange={e=>setTook(e.target.value)} onWheel={e=>e.target.blur()} />
+              </td>
+            </tr>
+            <RowTotal label={`Stays in the shop → opening cash for ${monthLabel(nextMonth(month))}`}
+              value={money(leaves)} color={leaves >= 0 ? C.green : C.red} />
+          </tbody></table>
+          <div style={{ marginTop:13, display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
+            <button style={{ ...btn, background:C.green }} onClick={doClose}>✓ Close {monthLabel(month)} — month complete</button>
+            <span style={{ fontSize:12, color:C.dim }}>Records what the owner took and carries the rest forward on its own.</span>
+          </div>
+          {sum.countedCash === null && (
+            <div style={{ marginTop:11, fontSize:12.5, color:"#5c4500", background:"#fff8e6", border:"1px solid "+C.gold, borderRadius:8, padding:"10px 13px", lineHeight:1.6 }}>
+              Count the drawer first. Without a count this uses the expected figure, and any cash that went
+              missing during the month would be carried into next month as if it were still there.
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+
     {/* Daily closes */}
     <div style={{ ...card, marginTop:12 }}>
-      <div style={chead}>🌙 Daily close <span style={{ marginLeft:"auto", fontSize:10.5, fontWeight:700, letterSpacing:0, textTransform:"none", color:C.dim }}>which day the money went missing</span></div>
+      <div style={chead}>🌙 Daily close <span style={cheadR}>which day the money went missing</span></div>
       {closes.length === 0 ? <Empty>No drawer counts yet for {monthLabel(month)}. Counting every evening takes ten seconds and shows exactly which day is short.</Empty> : (
         <table style={{ borderCollapse:"collapse", width:"100%" }}>
           <thead><tr><th style={th}>Date</th><th style={{...th,textAlign:"right"}}>Expected</th><th style={{...th,textAlign:"right"}}>Counted</th><th style={{...th,textAlign:"right"}}>Difference</th><th style={th}></th></tr></thead>
@@ -535,7 +645,7 @@ function CloseMonth({ sum, closes, owner, today, month, isMobile, onMonthField, 
                 <td style={{ ...tdN, ...numF }}>{money(c.expected)}</td>
                 <td style={{ ...tdN, ...numF }}>{money(c.counted)}</td>
                 <td style={{ ...tdN, ...numF, color:c.diff===0?C.green:C.red }}>{c.diff===0?"৳0":signed(c.diff)}</td>
-                <td style={{ ...td, fontSize:11, color:c.diff===0?C.green:C.red }}>{c.diff===0?"✓ matched":c.diff>0?"⚠ over":"⚠ short"}</td>
+                <td style={{ ...td, fontSize:12.5, color:c.diff===0?C.green:C.red }}>{c.diff===0?"✓ matched":c.diff>0?"⚠ over":"⚠ short"}</td>
               </tr>
             ))}
           </tbody>
@@ -545,8 +655,8 @@ function CloseMonth({ sum, closes, owner, today, month, isMobile, onMonthField, 
 
     {/* Owner money */}
     <div style={{ ...card, marginTop:12 }}>
-      <div style={chead}>🤝 Owner money <span style={{ marginLeft:"auto", fontSize:10.5, fontWeight:700, letterSpacing:0, textTransform:"none", color:C.dim }}>moves cash, never touches profit</span></div>
-      <div style={{ ...formWrap, gridTemplateColumns:isMobile?"1fr 1fr":"1fr 1.2fr .9fr 1.5fr auto" }}>
+      <div style={chead}>🤝 Owner money <span style={cheadR}>moves cash, never touches profit</span></div>
+      <div style={{ ...formWrap, gridTemplateColumns:isMobile?"1fr 1fr":"1.1fr 1.3fr 1fr 1.7fr auto" }}>
         <div><label style={lbl}>Date</label><input type="date" style={inp} value={ow.date} onChange={e=>setOw(p=>({...p,date:e.target.value}))} /></div>
         <div><label style={lbl}>Direction</label>
           <select style={inp} value={ow.dir} onChange={e=>setOw(p=>({...p,dir:e.target.value}))}>
@@ -574,19 +684,19 @@ function CloseMonth({ sum, closes, owner, today, month, isMobile, onMonthField, 
                 <td style={td}>{r.dir === "in"
                   ? <Pill bg="#e8f5ec" color={C.green}>Owner put in</Pill>
                   : <Pill bg="#fdecea" color={C.red}>Owner took out</Pill>}</td>
-                <td style={{ ...td, color:C.dim, fontSize:11 }}>{r.note || "—"}</td>
+                <td style={{ ...td, color:C.dim, fontSize:12.5 }}>{r.note || "—"}</td>
                 <td style={{ ...tdN, ...numF, color:r.dir==="in"?C.green:C.red }}>{r.dir==="in" ? "+" : "−"}{money(r.amount)}</td>
                 <td style={{ ...td, textAlign:"right" }}>
-                  <button onClick={()=>onDelOwner(r.id)} title="Delete" style={{ background:"none", border:"none", color:C.dim, cursor:"pointer", fontSize:13 }}>✕</button>
+                  <button style={{ ...btnO, ...btnSm, color:C.red, borderColor:"#e8a49c" }} onClick={()=>onDelOwner(r.id)}>Delete</button>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       )}
-      <div style={{ padding:"10px 13px", fontSize:11.5, color:C.dim, borderTop:"1px solid "+C.border }}>
-        Owner money changes what is in the drawer but is not a business cost — counting a withdrawal as an
-        expense would make a profitable shop look like it is losing money.
+      <div style={{ padding:"12px 16px", fontSize:12.5, color:C.dim, borderTop:"1px solid "+C.border, lineHeight:1.6 }}>
+        Money taken during the month goes here. What the owner takes when the month is finished goes in the
+        box above — that is what sets next month's opening cash.
       </div>
     </div>
   </>);

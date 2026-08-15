@@ -60,6 +60,11 @@
   scrollbar-width: none;
   gap: 2px;
   padding: 8px 4px;
+  /* app.css caps the shared .nav-tabs class at 620px. With the Restaurant tab
+     added, eight tabs need 674px, so the first and last were clipped — and with
+     the scrollbar hidden there was nothing to show they could be scrolled to.
+     The hotel nav already lifts this cap; the hall never did. */
+  max-width: none;
 }
 #hallApp .nav-tabs::-webkit-scrollbar { display:none; }
 

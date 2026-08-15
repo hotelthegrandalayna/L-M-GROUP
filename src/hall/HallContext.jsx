@@ -7,7 +7,7 @@ import { onRemoteChange } from "../utils/realtimeSync";
 import { syncNtfyConfigFromSupabase } from "../utils/ntfy";
 import { runDailyBackup } from "../utils/dailyBackup";
 import { supabase } from "../lib/supabaseClient";
-import { emptyRestaurant, normalise as normaliseRestaurant } from "./lib/restaurantMoney";
+import { emptyRestaurant, normalise as normaliseRestaurant, mergeRestaurant } from "./lib/restaurantMoney";
 
 const Ctx = createContext(null);
 
@@ -219,12 +219,17 @@ export function HallProvider({ children }) {
         loadConfig("hall_exp_types"),
         loadConfig("hall_restaurant"),
       ]);
-      // The cloud is the truth for the coffee house books, exactly as it is for
-      // hall money. A device that has been offline shows the cloud's version.
+      // The cloud is the truth for the coffee house books — but a row typed
+      // seconds ago may not have reached it yet, and replacing local state
+      // outright would make that row vanish in front of whoever just typed it.
+      // mergeRestaurant keeps anything this device has that the cloud has not
+      // seen; everything else comes from the cloud.
       if (restaurantCfg && typeof restaurantCfg === "object") {
-        const v = normaliseRestaurant(restaurantCfg);
-        localStorage.setItem("a_restaurant", JSON.stringify(v));
-        setRestaurantRaw(v);
+        setRestaurantRaw(prev => {
+          const v = mergeRestaurant(restaurantCfg, prev);
+          localStorage.setItem("a_restaurant", JSON.stringify(v));
+          return v;
+        });
       }
       if (cutlery?.c1 && cutlery?.c2) localStorage.setItem("ameliaCutData", JSON.stringify(cutlery));
       if (renames && typeof renames === 'object') localStorage.setItem("a_renames", JSON.stringify(renames));
