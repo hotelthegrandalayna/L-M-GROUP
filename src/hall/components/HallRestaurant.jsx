@@ -13,6 +13,7 @@ import { useHall } from "../HallContext";
 import useIsMobile from "../useIsMobile";
 import {
   monthSummary, dailyCloses, monthsWithData, prevMonth, nextMonth, emptyRestaurant, normalise,
+  monthReport, reportExtremes, recordCounts, receiptIdsIn, clearMonth, monthsAffectedBy,
 } from "../lib/restaurantMoney";
 import { compressImage, saveReceipt, loadReceipt, newReceiptId, forgetReceiptLocally, MAX_STORED_BYTES } from "../lib/receiptStore";
 
@@ -142,13 +143,15 @@ export default function HallRestaurant() {
     if (!isAdmin) { notify("Only an admin can delete a row", "error"); return; }
     setRestaurant(p => ({ ...normalise(p), [key]: normalise(p)[key].filter(r => String(r.id) !== String(id)) }));
   };
-  /** Wipe every Restaurant record. The hall's own books are untouched. */
-  const resetAll = () => {
+  /**
+   * Clear one month's records, or the whole ledger when `scopeMonth` is null.
+   * The hall's own invoices, expenses and CRM are never touched.
+   */
+  const clearRecords = scopeMonth => {
     if (!isAdmin) { notify("Only an admin can clear the records", "error"); return; }
-    const ids = data.spend.map(r => r.receiptId).filter(Boolean);
-    ids.forEach(forgetReceiptLocally);
-    setRestaurant(emptyRestaurant());
-    notify("All Restaurant records cleared — starting fresh ✓");
+    receiptIdsIn(data, scopeMonth).forEach(forgetReceiptLocally);
+    setRestaurant(p => clearMonth(normalise(p), scopeMonth));
+    notify(scopeMonth ? `${monthLabel(scopeMonth)} cleared ✓` : "All Restaurant records cleared ✓");
   };
   const setMonthField = (field, value) => setRestaurant(p => {
     const n = normalise(p);
@@ -173,6 +176,7 @@ export default function HallRestaurant() {
     { id:"sales", icon:"💰", label:"Sales" },
     { id:"spend", icon:"💸", label:"Expenses" },
     { id:"close", icon:"📦", label:"Close Month" },
+    { id:"cmp",   icon:"📈", label:"Compare" },
   ];
 
   return (
@@ -217,7 +221,8 @@ export default function HallRestaurant() {
         onMonthField={setMonthField} onMonthFields={setMonthFields}
         onCount={(d,v) => { saveCount(d,v); notify("Cash count saved ✓"); }}
         onOwner={r => { addRow("ownerMoves", r); notify("Owner money recorded ✓"); }}
-        onDelOwner={id => delRow("ownerMoves", id)} onReset={resetAll} notify={notify} />}
+        onDelOwner={id => delRow("ownerMoves", id)} onClear={clearRecords} notify={notify} />}
+      {tab === "cmp"   && <Compare data={data} isMobile={isMobile} onGo={setTab} />}
 
       <ReceiptViewer receipt={viewing} onClose={() => setViewing(null)} />
     </div>
@@ -516,6 +521,101 @@ function Spend({ rows, sum, today, month, isMobile, isAdmin, onAdd, onEdit, onDe
   </>);
 }
 
+// ── Compare ──────────────────────────────────────────────────────────────────
+// Taka totals alone hide the thing worth knowing: a bigger month is bigger on
+// every figure. The ratio — product used per ৳100 of sales — is what makes two
+// months of different size comparable.
+function Compare({ data, isMobile, onGo }) {
+  const rows = useMemo(() => monthReport(data), [data]);
+  const { best, worst, gap } = useMemo(() => reportExtremes(rows), [rows]);
+  const scale = Math.max(60, ...rows.filter(r => r.scorable).map(r => r.productPer100));
+
+  if (rows.length === 0) return (
+    <div style={card}><div style={chead}>📈 Compare</div>
+      <Empty>Nothing to compare yet. Once a month has sales and a shelf count, it appears here.</Empty></div>
+  );
+
+  return (<>
+    {best && (
+      <div style={{ display:"grid", gridTemplateColumns:isMobile?"1fr":"repeat(3,1fr)", gap:12, marginBottom:13 }}>
+        <Kpi label="Leanest month" value={monthLabel(best.month).split(" ")[0]} color={C.green} accent={C.green}
+          sub={`৳${Math.round(best.productPer100)} of product per ৳100 of sales`} />
+        <Kpi label="Heaviest month" value={monthLabel(worst.month).split(" ")[0]} color={C.red} accent={C.red}
+          sub={`৳${Math.round(worst.productPer100)} of product per ৳100 of sales`} />
+        <Kpi label="The gap" value={"৳" + Math.round(gap)} color={C.maroon} accent={C.gold}
+          sub={`more product per ৳100 · ${monthLabel(worst.month).split(" ")[0]} vs ${monthLabel(best.month).split(" ")[0]}`} />
+      </div>
+    )}
+
+    <div style={card}>
+      <div style={chead}>📈 Every month side by side <span style={cheadR}>product cost is the column to watch</span></div>
+      <div style={{ overflowX:"auto" }}>
+      <table style={{ borderCollapse:"collapse", width:"100%", minWidth:820 }}>
+        <thead><tr>
+          <th style={th}>Month</th>
+          <th style={{...th,textAlign:"right"}}>Revenue</th>
+          <th style={{...th,textAlign:"right"}}>Product used</th>
+          <th style={{...th, minWidth:200}}>Product per ৳100 of sales</th>
+          <th style={{...th,textAlign:"right"}}>Gross profit</th>
+          <th style={{...th,textAlign:"right"}}>Expenses</th>
+          <th style={{...th,textAlign:"right"}}>Net profit</th>
+        </tr></thead>
+        <tbody>
+          {rows.map(r => (
+            <tr key={r.month} style={r.scorable ? undefined : { background:"#fbf8f1" }}>
+              <td style={{ ...td, fontWeight:700, color:r.scorable?undefined:C.dim }}>{monthLabel(r.month)}</td>
+              <td style={{ ...tdN, ...numF }}>{money(r.revenue)}</td>
+              {r.scorable ? (<>
+                <td style={{ ...tdN, ...numF }}>{money(r.cogs)}</td>
+                <td style={td}>
+                  <div style={{ display:"flex", alignItems:"center", gap:9 }}>
+                    <div style={{ flex:1, height:9, borderRadius:5, background:"#efe6d4", overflow:"hidden", minWidth:70 }}>
+                      <div style={{ width:Math.min(100, (r.productPer100/scale)*100)+"%", height:"100%", borderRadius:5,
+                        background: best && r.month===best.month ? C.green : worst && r.month===worst.month ? C.red : C.gold }} />
+                    </div>
+                    <b style={{ ...numF, fontSize:14, minWidth:44, textAlign:"right" }}>৳{Math.round(r.productPer100)}</b>
+                    {best && r.month===best.month && <Pill bg="#eaf6ee" color={C.green}>leanest</Pill>}
+                    {worst && r.month===worst.month && <Pill bg="#fdf1f0" color={C.red}>heaviest</Pill>}
+                  </div>
+                </td>
+                <td style={{ ...tdN, ...numF, color:C.green }}>{money(r.gross)}</td>
+                <td style={{ ...tdN, ...numF }}>{money(r.otherExpenses)}</td>
+                <td style={{ ...tdN, ...numF, color:r.net>=0?C.green:C.red }}>{money(r.net)}</td>
+              </>) : (
+                <td style={{ ...td, color:C.dim, fontSize:12.5 }} colSpan={5}>
+                  shelf not counted{r.revenue<=0 ? " and no sales" : ""} — no product figure, so this month cannot be compared.{" "}
+                  <button onClick={() => onGo("close")} style={{ background:"none", border:"none", padding:0, color:C.maroon, fontWeight:800, cursor:"pointer", fontFamily:"inherit", fontSize:12.5, textDecoration:"underline" }}>Count it →</button>
+                </td>
+              )}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      </div>
+    </div>
+
+    {best && worst && best.month !== worst.month && (
+      <div style={{ ...card, marginTop:12 }}>
+        <div style={chead}>💡 What this is telling you</div>
+        <div style={{ padding:"14px 16px", fontSize:13.5, lineHeight:1.7 }}>
+          {monthLabel(best.month)} turned <b>{money(best.cogs)}</b> of product into <b>{money(best.gross)}</b> gross
+          profit — every ৳1 of product returned <b>৳{best.grossPerProduct.toFixed(2)}</b>.
+          {" "}{monthLabel(worst.month)} turned <b>{money(worst.cogs)}</b> into <b>{money(worst.gross)}</b>, or
+          <b> ৳{worst.grossPerProduct.toFixed(2)}</b> per ৳1.
+          {worst.net > best.net && (
+            <> {monthLabel(worst.month)} made <b>more money overall</b>, which is exactly why the taka figures
+            alone hide this.</>
+          )}
+          <br /><br />
+          <b>{monthLabel(worst.month)} spent ৳{Math.round(gap)} more product for every ৳100 taken.</b> Same shop,
+          worse ratio — usually waste, heavier portions, something walking out of the door, or a supplier
+          quietly putting prices up.
+        </div>
+      </div>
+    )}
+  </>);
+}
+
 // ── Close Month ──────────────────────────────────────────────────────────────
 function StartingPoint({ sum, month, isMobile, isAdmin, isFirstMonth, onMonthField }) {
   const [open, setOpen] = useState(false);
@@ -576,17 +676,33 @@ function StartingPoint({ sum, month, isMobile, isAdmin, isFirstMonth, onMonthFie
   );
 }
 
-function DangerZone({ data, isMobile, onReset }) {
+function ScopeOption({ on, title, detail, onPick }) {
+  return (
+    <div onClick={onPick} style={{ border:"2px solid "+(on?C.maroon:C.border), borderRadius:11, padding:"13px 15px",
+      cursor:"pointer", background:on?"#fdf8f8":"#fff" }}>
+      <div style={{ fontWeight:800, fontSize:13.5, display:"flex", alignItems:"center", gap:8 }}>
+        <span style={{ width:15, height:15, borderRadius:"50%", flexShrink:0, border:"2px solid "+(on?C.maroon:C.border),
+          background:on?"radial-gradient(circle, "+C.maroon+" 45%, transparent 47%)":"transparent" }} />
+        {title}
+      </div>
+      <div style={{ fontSize:12, color:C.dim, marginTop:5, lineHeight:1.5 }}>{detail}</div>
+    </div>
+  );
+}
+
+function DangerZone({ data, month, isMobile, onClear }) {
+  const known = monthsWithData(data);
+  const [scope, setScope] = useState("month");        // the safe choice, always
+  const [pick, setPick] = useState(() => (known.includes(month) ? month : known[known.length-1] || month));
   const [typed, setTyped] = useState("");
-  const counts = {
-    "Days of sales": data.sales.length,
-    "Things bought and spent": data.spend.length,
-    "Owner money records": data.ownerMoves.length,
-    "Drawer counts": data.counts.length,
-    "Invoice photos": data.spend.filter(r => r.receiptId).length,
-  };
-  const total = data.sales.length + data.spend.length + data.ownerMoves.length + data.counts.length + Object.keys(data.months).length;
-  const armed = typed.trim().toUpperCase() === "DELETE" && total > 0;
+
+  const target = scope === "month" ? pick : null;
+  const { parts, total } = recordCounts(data, target);
+  // The phrase changes with the choice, so words typed for one intention can
+  // never be left in the box and used for another.
+  const phrase = scope === "month" ? "DELETE " + MONTHS_LABEL[parseInt(String(pick).split("-")[1],10)-1].toUpperCase() : "DELETE EVERYTHING";
+  const armed = typed.trim().toUpperCase() === phrase && total > 0;
+  const affected = scope === "month" ? monthsAffectedBy(data, pick) : [];
 
   return (
     <div style={{ border:"1.5px solid #e8a49c", borderRadius:12, overflow:"hidden", background:"#fff", marginTop:12 }}>
@@ -594,38 +710,69 @@ function DangerZone({ data, isMobile, onReset }) {
         ⚠ Start fresh
       </div>
       <div style={{ padding:16 }}>
-        <div style={{ fontSize:13.5, lineHeight:1.6, marginBottom:14 }}>
-          Deletes <b>every</b> Restaurant record — all sales, everything spent, owner money, drawer counts,
-          shelf counts and closed months. The hall's own invoices, expenses and CRM are not touched.
-        </div>
-        <table style={{ borderCollapse:"collapse", width:"100%", border:"1px solid "+C.border, borderRadius:8, marginBottom:14 }}><tbody>
-          {Object.entries(counts).map(([k,v]) => (
-            <tr key={k}><td style={{ ...td, fontSize:13 }}>{k}</td><td style={{ ...tdN, ...numF, fontSize:13 }}>{v}</td></tr>
-          ))}
-          <tr style={{ background:"#fdf1f0" }}>
-            <td style={{ ...td, fontWeight:800, borderBottom:"none" }}>Will be deleted</td>
-            <td style={{ ...tdN, ...numF, fontWeight:800, color:C.red, borderBottom:"none" }}>{total} record{total===1?"":"s"}</td>
-          </tr>
-        </tbody></table>
-        {total === 0 ? (
-          <div style={{ fontSize:13, color:C.dim }}>There is nothing to clear — the books are already empty.</div>
+        {known.length === 0 ? (
+          <div style={{ fontSize:13.5, color:C.dim }}>There is nothing to clear — the books are already empty.</div>
         ) : (<>
-          <div style={{ fontSize:13, marginBottom:7 }}>Type <b>DELETE</b> to confirm.</div>
-          <div style={{ display:"flex", gap:10, alignItems:"center", flexWrap:"wrap" }}>
-            <input style={{ ...inp, maxWidth:220 }} placeholder="type DELETE" value={typed} onChange={e=>setTyped(e.target.value)} />
-            <button disabled={!armed} onClick={() => { onReset(); setTyped(""); }}
-              style={{ ...btn, background:C.red, opacity:armed?1:.4, cursor:armed?"pointer":"not-allowed" }}>
-              Delete all Restaurant records
-            </button>
-            <span style={{ fontSize:12, color:C.dim }}>Cannot be undone.</span>
+          <div style={{ display:"grid", gridTemplateColumns:isMobile?"1fr":"1fr 1fr", gap:10, marginBottom:14 }}>
+            <ScopeOption on={scope==="month"} onPick={()=>{ setScope("month"); setTyped(""); }}
+              title="This month only"
+              detail={<>Deletes only <b>{monthLabel(pick)}</b>. Every other month is left exactly as it is.</>} />
+            <ScopeOption on={scope==="all"} onPick={()=>{ setScope("all"); setTyped(""); }}
+              title="Everything, all months"
+              detail="Wipes the whole coffee house ledger from the very first month." />
           </div>
+
+          {scope === "month" && (
+            <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:14, flexWrap:"wrap" }}>
+              <span style={{ fontSize:12.5, fontWeight:800, color:C.dim, letterSpacing:.7 }}>MONTH</span>
+              <select style={{ ...inp, maxWidth:220 }} value={pick} onChange={e=>{ setPick(e.target.value); setTyped(""); }}>
+                {known.map(m => <option key={m} value={m}>{monthLabel(m)}</option>)}
+              </select>
+              <span style={{ fontSize:12, color:C.dim }}>only months that have records are listed</span>
+            </div>
+          )}
+
+          <table style={{ borderCollapse:"collapse", width:"100%", border:"1px solid "+C.border, borderRadius:8, marginBottom:14 }}><tbody>
+            {Object.entries(parts).map(([k,v]) => (
+              <tr key={k}><td style={{ ...td, fontSize:13 }}>{k}</td><td style={{ ...tdN, ...numF, fontSize:13 }}>{v}</td></tr>
+            ))}
+            <tr style={{ background:"#fdf1f0" }}>
+              <td style={{ ...td, fontWeight:800, borderBottom:"none" }}>
+                Will be deleted{scope === "month" ? ` from ${monthLabel(pick)}` : " — every month"}
+              </td>
+              <td style={{ ...tdN, ...numF, fontWeight:800, color:C.red, borderBottom:"none" }}>{total} record{total===1?"":"s"}</td>
+            </tr>
+          </tbody></table>
+
+          {affected.length > 0 && (
+            <div style={{ background:"#fff8e6", border:"1px solid "+C.gold, borderRadius:8, padding:"11px 14px", fontSize:12.5, color:"#5c4500", lineHeight:1.6, marginBottom:14 }}>
+              <b>This breaks the chain.</b> {affected.map(monthLabel).join(", ")}{" "}
+              {affected.length === 1 ? "opens" : "open"} with whatever {monthLabel(pick)} left behind, so
+              {affected.length === 1 ? " its" : " their"} opening cash and opening shelf will change. You can
+              set {affected.length === 1 ? "it" : "them"} by hand afterwards.
+            </div>
+          )}
+
+          {total === 0 ? (
+            <div style={{ fontSize:13, color:C.dim }}>Nothing to delete for {monthLabel(pick)}.</div>
+          ) : (<>
+            <div style={{ fontSize:13, marginBottom:7 }}>Type <b>{phrase}</b> to confirm.</div>
+            <div style={{ display:"flex", gap:10, alignItems:"center", flexWrap:"wrap" }}>
+              <input style={{ ...inp, maxWidth:260 }} placeholder={"type " + phrase} value={typed} onChange={e=>setTyped(e.target.value)} />
+              <button disabled={!armed} onClick={() => { onClear(target); setTyped(""); }}
+                style={{ ...btn, background:C.red, opacity:armed?1:.4, cursor:armed?"pointer":"not-allowed" }}>
+                {scope === "month" ? "Delete " + monthLabel(pick) : "Delete every month"}
+              </button>
+              <span style={{ fontSize:12, color:C.dim }}>Cannot be undone.</span>
+            </div>
+          </>)}
         </>)}
       </div>
     </div>
   );
 }
 
-function CloseMonth({ sum, closes, owner, today, month, isMobile, isAdmin, counts, onMonthField, onMonthFields, onCount, onOwner, onDelOwner, onReset, isFirstMonth, notify }) {
+function CloseMonth({ sum, closes, owner, today, month, isMobile, isAdmin, counts, onMonthField, onMonthFields, onCount, onOwner, onDelOwner, onClear, isFirstMonth, notify }) {
   const [stock, setStock] = useState("");
   const [cash, setCash] = useState("");
   const [countDate, setCountDate] = useState(month === today.slice(0,7) ? today : month + "-01");
@@ -819,6 +966,6 @@ function CloseMonth({ sum, closes, owner, today, month, isMobile, isAdmin, count
     </div>
 
     {/* Kept last on the page, well away from anything pressed daily. */}
-    {isAdmin && <DangerZone data={counts} isMobile={isMobile} onReset={onReset} />}
+    {isAdmin && <DangerZone data={counts} month={month} isMobile={isMobile} onClear={onClear} />}
   </>);
 }

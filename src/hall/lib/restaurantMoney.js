@@ -277,6 +277,108 @@ export function expectedCashOn(data, date) {
     - own.filter(r => r.dir === "out").reduce((s, r) => s + num(r.amount), 0);
 }
 
+// ── Comparing months ─────────────────────────────────────────────────────────
+// Taka totals alone hide the thing worth knowing. A bigger month is bigger on
+// every figure, so two months of different size cannot be told apart by them.
+// What makes them comparable is the RATIO: how much product it took to earn
+// ৳100 of sales. Same shop, worse ratio, means waste, theft, heavier portions
+// or a supplier putting prices up.
+//
+// A month whose shelf was never counted has no real product figure. It is
+// reported, but deliberately NOT scored — a missing count would otherwise read
+// as ৳0 of product and rank as the best month the shop ever had.
+
+/** ৳ of product consumed per ৳100 of sales, or null when it cannot be known. */
+export function productPer100(s) {
+  if (!s || !s.closeStockSet || s.revenue <= 0) return null;
+  return (s.cogs / s.revenue) * 100;
+}
+
+/** One row per month with records, oldest first, with the ratios worked out. */
+export function monthReport(data) {
+  const d = normalise(data);
+  return monthsWithData(d).map(m => {
+    const s = monthSummary(d, m);
+    const per100 = productPer100(s);
+    return {
+      month: m,
+      revenue: s.revenue,
+      cogs: s.cogs,
+      gross: s.gross,
+      otherExpenses: s.otherExpenses,
+      net: s.net,
+      closeStockSet: s.closeStockSet,
+      // Scorable months are the ones that can honestly be ranked.
+      scorable: per100 !== null,
+      productPer100: per100,
+      // "Every ৳1 of product returned this much gross profit."
+      grossPerProduct: per100 !== null && s.cogs > 0 ? s.gross / s.cogs : null,
+      netMargin: s.revenue > 0 ? (s.net / s.revenue) * 100 : null,
+    };
+  });
+}
+
+/** Best and worst months by product ratio — lower is better. Nulls ignored. */
+export function reportExtremes(rows) {
+  const scored = (rows || []).filter(r => r.scorable);
+  if (scored.length < 2) return { best: null, worst: null, gap: null };
+  const sorted = [...scored].sort((a, b) => a.productPer100 - b.productPer100);
+  const best = sorted[0], worst = sorted[sorted.length - 1];
+  return { best, worst, gap: worst.productPer100 - best.productPer100 };
+}
+
+// ── Clearing records ─────────────────────────────────────────────────────────
+
+/** What a delete would remove, so it can be counted back before it happens. */
+export function recordCounts(data, month) {
+  const d = normalise(data);
+  const only = rows => (month ? rows.filter(r => String(r.date).slice(0, 7) === month) : rows);
+  const spend = only(d.spend);
+  const months = month ? (d.months[month] ? 1 : 0) : Object.keys(d.months).length;
+  const parts = {
+    "Days of sales": only(d.sales).length,
+    "Things bought and spent": spend.length,
+    "Owner money records": only(d.ownerMoves).length,
+    "Drawer counts": only(d.counts).length,
+    "Invoice photos": spend.filter(r => r.receiptId).length,
+    "Month settings": months,
+  };
+  // The total counts exactly the rows listed above it, and nothing else — a
+  // total that did not match its own breakdown shipped once.
+  const total = parts["Days of sales"] + parts["Things bought and spent"]
+    + parts["Owner money records"] + parts["Drawer counts"] + parts["Month settings"];
+  return { parts, total };
+}
+
+/** Receipt ids that a delete would orphan, so their local copies can be dropped. */
+export function receiptIdsIn(data, month) {
+  const d = normalise(data);
+  const rows = month ? d.spend.filter(r => String(r.date).slice(0, 7) === month) : d.spend;
+  return rows.map(r => r.receiptId).filter(Boolean);
+}
+
+/**
+ * Remove one month's records. Everything else is left exactly as it was.
+ * Pass no month to clear the lot.
+ */
+export function clearMonth(data, month) {
+  if (!month) return emptyRestaurant();
+  const d = normalise(data);
+  const keep = rows => rows.filter(r => String(r.date).slice(0, 7) !== month);
+  const months = { ...d.months };
+  delete months[month];
+  return { sales: keep(d.sales), spend: keep(d.spend), ownerMoves: keep(d.ownerMoves), counts: keep(d.counts), months };
+}
+
+/**
+ * Months that come AFTER the one being deleted. Their opening cash and opening
+ * shelf were whatever this month left behind, so deleting it changes them.
+ */
+export function monthsAffectedBy(data, month) {
+  if (!month) return [];
+  return monthsWithData(data).filter(m => m > month);
+}
+
 /** Every day of a month that has a count, with what was expected against it. */
 export function dailyCloses(data, month) {
   const d = normalise(data);

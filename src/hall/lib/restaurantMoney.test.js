@@ -5,6 +5,8 @@ import { describe, it, expect } from "vitest";
 import {
   monthSummary, expectedCashOn, dailyCloses, monthsWithData, ownerTookIn,
   prevMonth, nextMonth, emptyRestaurant, normalise, mergeRestaurant,
+  monthReport, reportExtremes, productPer100, recordCounts, receiptIdsIn,
+  clearMonth, monthsAffectedBy,
 } from "./restaurantMoney";
 
 const sale  = (date, cash, refunds = 0) => ({ id: date, date, cash, refunds });
@@ -308,6 +310,130 @@ describe("a sync must not swallow a row typed seconds ago", () => {
   it("survives an empty or missing cloud copy", () => {
     expect(mergeRestaurant(null, local).sales).toHaveLength(2);
     expect(mergeRestaurant(cloud, null).sales).toHaveLength(1);
+  });
+});
+
+describe("comparing months", () => {
+  // The owner's own example: July turned 3,000 of product into 7,000 gross.
+  // August turned 8,000 into 10,000. August is bigger on every taka figure and
+  // yet ran the worse kitchen — only the ratio shows it.
+  const data = {
+    ...emptyRestaurant(),
+    sales: [sale("2026-07-05", 10000), sale("2026-08-05", 18000)],
+    spend: [shelf("2026-07-06", 3000), cost("2026-07-07", 1500),
+            shelf("2026-08-06", 8000), cost("2026-08-07", 2000)],
+    months: {
+      "2026-07": { openStock: 0, openCash: 0, closeStock: 0 },
+      "2026-08": { openStock: 0, closeStock: 0 },
+    },
+  };
+  const rows = monthReport(data);
+  const jul = rows.find(r => r.month === "2026-07");
+  const aug = rows.find(r => r.month === "2026-08");
+
+  it("reproduces the owner's figures", () => {
+    expect(jul.cogs).toBe(3000);  expect(jul.gross).toBe(7000);
+    expect(aug.cogs).toBe(8000);  expect(aug.gross).toBe(10000);
+  });
+
+  it("scores product used per ৳100 of sales", () => {
+    expect(Math.round(jul.productPer100)).toBe(30);
+    expect(Math.round(aug.productPer100)).toBe(44);
+  });
+
+  it("names the worse kitchen even though it made more money", () => {
+    expect(aug.net).toBeGreaterThan(jul.net);          // August looks better...
+    const { best, worst, gap } = reportExtremes(rows);
+    expect(best.month).toBe("2026-07");                // ...but July ran leaner
+    expect(worst.month).toBe("2026-08");
+    expect(Math.round(gap)).toBe(14);
+  });
+
+  it("says how much gross profit each taka of product returned", () => {
+    expect(jul.grossPerProduct).toBeCloseTo(7000/3000, 5);
+    expect(aug.grossPerProduct).toBeCloseTo(10000/8000, 5);
+  });
+
+  it("refuses to score a month whose shelf was never counted", () => {
+    const d2 = { ...data, sales: [...data.sales, sale("2026-09-01", 4200)] };
+    const sep = monthReport(d2).find(r => r.month === "2026-09");
+    expect(sep.closeStockSet).toBe(false);
+    expect(sep.scorable).toBe(false);
+    expect(sep.productPer100).toBeNull();
+    // and it must never be crowned the best month by having no figure at all
+    expect(reportExtremes(monthReport(d2)).best.month).toBe("2026-07");
+  });
+
+  it("does not score a month with no sales", () => {
+    const d2 = { ...emptyRestaurant(), spend: [shelf("2026-05-01", 100)], months: { "2026-05": { closeStock: 0 } } };
+    expect(monthReport(d2)[0].scorable).toBe(false);
+  });
+
+  it("gives no ranking until two months can be scored", () => {
+    const one = { ...emptyRestaurant(), sales: [sale("2026-07-05", 100)], months: { "2026-07": { closeStock: 0 } } };
+    expect(reportExtremes(monthReport(one)).best).toBeNull();
+  });
+});
+
+describe("deleting records", () => {
+  const data = {
+    ...emptyRestaurant(),
+    sales: [sale("2026-07-05", 100), sale("2026-08-05", 200)],
+    spend: [{ ...shelf("2026-07-06", 10), receiptId: "r1" }, shelf("2026-08-06", 20)],
+    ownerMoves: [{ id: "o1", date: "2026-08-10", dir: "out", amount: 5 }],
+    counts: [{ date: "2026-07-31", counted: 90 }, { date: "2026-08-31", counted: 180 }],
+    months: { "2026-07": { closeStock: 0 }, "2026-08": { closeStock: 0 } },
+  };
+
+  it("removes one month and leaves the others untouched", () => {
+    const after = clearMonth(data, "2026-07");
+    expect(after.sales.map(r => r.date)).toEqual(["2026-08-05"]);
+    expect(after.spend).toHaveLength(1);
+    expect(after.counts.map(c => c.date)).toEqual(["2026-08-31"]);
+    expect(Object.keys(after.months)).toEqual(["2026-08"]);
+    expect(after.ownerMoves).toHaveLength(1);
+  });
+
+  it("clears everything when no month is named", () => {
+    const after = clearMonth(data, null);
+    expect(after.sales).toHaveLength(0);
+    expect(after.spend).toHaveLength(0);
+    expect(Object.keys(after.months)).toHaveLength(0);
+  });
+
+  it("counts back exactly what it will remove, and the total matches its own rows", () => {
+    const { parts, total } = recordCounts(data, "2026-07");
+    expect(parts["Days of sales"]).toBe(1);
+    expect(parts["Things bought and spent"]).toBe(1);
+    expect(parts["Drawer counts"]).toBe(1);
+    expect(parts["Invoice photos"]).toBe(1);
+    expect(parts["Month settings"]).toBe(1);
+    expect(parts["Owner money records"]).toBe(0);
+    // The bug this guards: the total once counted months without listing them,
+    // so an empty ledger read "0, 0, 0, 0, 0 — will be deleted: 1 record".
+    const listed = parts["Days of sales"] + parts["Things bought and spent"]
+      + parts["Owner money records"] + parts["Drawer counts"] + parts["Month settings"];
+    expect(total).toBe(listed);
+  });
+
+  it("counts the whole ledger when no month is named", () => {
+    expect(recordCounts(data, null).total).toBe(2 + 2 + 1 + 2 + 2);
+  });
+
+  it("reports nothing to delete for an empty ledger", () => {
+    expect(recordCounts(emptyRestaurant(), null).total).toBe(0);
+    expect(recordCounts(emptyRestaurant(), "2026-08").total).toBe(0);
+  });
+
+  it("hands back the receipts it is about to orphan", () => {
+    expect(receiptIdsIn(data, "2026-07")).toEqual(["r1"]);
+    expect(receiptIdsIn(data, "2026-08")).toEqual([]);
+    expect(receiptIdsIn(data, null)).toEqual(["r1"]);
+  });
+
+  it("warns which later months lose their carried-forward opening", () => {
+    expect(monthsAffectedBy(data, "2026-07")).toEqual(["2026-08"]);
+    expect(monthsAffectedBy(data, "2026-08")).toEqual([]);
   });
 });
 
