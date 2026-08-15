@@ -79,6 +79,20 @@ const ROOM_MAP_CSS = `
    dimmed and narrow so the six real rooms get the width. */
 .rm-card.rm-ovf { opacity:.62; }
 .rm-card.rm-ovf:hover { opacity:1; }
+/* Overdue checkout. This replaced a full-width red banner at the top of the
+   Desk: the room that is actually late is the thing that should shout, and on a
+   multi-room booking every late room shouts equally. */
+@keyframes rmOverdue {
+  0%,100% { box-shadow:0 4px 14px rgba(0,0,0,.09), 0 0 0 0 rgba(220,38,38,.55); border-color:#e0716b; }
+  50%     { box-shadow:0 4px 14px rgba(0,0,0,.09), 0 0 0 9px rgba(220,38,38,0);  border-color:#c0392b; }
+}
+.rm-card.rm-od { border:2px solid #c0392b; animation:rmOverdue 1.9s ease-in-out infinite; }
+.rm-card.rm-od:hover { animation-play-state:paused; }
+/* Respect the OS "reduce motion" setting — still clearly red, just still. */
+@media (prefers-reduced-motion: reduce) {
+  .rm-card.rm-od { animation:none; border-color:#c0392b; box-shadow:0 0 0 4px rgba(220,38,38,.28); }
+  .rm-ahead { animation:none; }
+}
 `;
 
 // Quiet outlined action button, matching the front-desk card system. `tint` is an
@@ -1269,12 +1283,14 @@ export default function Desk() {
     return bstHour >= 12;
   })();
 
-  // Guests whose checkout date has arrived but are still checked-in (overdue checkouts)
-  const overdueCheckouts = bookings.filter(b =>
-    b.status === "checked-in" &&
-    b.checkout <= today &&
-    isPast12pmBST
-  );
+  // Is THIS room overdue? Judged per room, not per booking: a multi-room booking
+  // where only one room was extended must flag only the room that is actually
+  // late. The old full-width alert banner tested the booking-level b.checkout,
+  // so it flagged both rooms or neither, and could only name the primary room
+  // ("Also Rm 106" in grey). The room map is the alert now — see .rm-od.
+  const isRoomOverdue = (b, roomNumber) =>
+    isPast12pmBST && !!b && b.status === "checked-in" &&
+    roomBookingWindow(b, roomNumber).checkout <= today;
 
   // Money received, from the ONE shared builder in lib/accounts.js. The Desk and
   // the Accounts daily chart used to derive this separately and disagreed about
@@ -1645,55 +1661,6 @@ export default function Desk() {
   return (
     <div style={{ padding:"14px 20px 18px", boxSizing:"border-box" }}>
 
-      {/* ── Overdue Checkout Alert ── */}
-      {overdueCheckouts.length > 0 && (
-        <div style={{
-          background:"#c0392b", borderRadius:12, padding:"14px 18px",
-          marginBottom:14, border:"3px solid #922b21",
-          boxShadow:"0 4px 20px rgba(192,57,43,.4)",
-        }}>
-          <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}>
-            <span style={{ fontSize:22 }}>🚨</span>
-            <div>
-              <div style={{ color:"#fff", fontWeight:800, fontSize:15 }}>
-                CHECKOUT OVERDUE — {overdueCheckouts.length} guest{overdueCheckouts.length>1?"s":""} must check out now!
-              </div>
-              <div style={{ color:"rgba(255,255,255,.8)", fontSize:12, marginTop:2 }}>
-                It is past 12:00 PM Bangladesh time. The following guest{overdueCheckouts.length>1?"s have":""} has not been checked out.
-              </div>
-            </div>
-          </div>
-          <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-            {overdueCheckouts.map(b => (
-              <div key={b.id} style={{
-                background:"rgba(0,0,0,.25)", borderRadius:8,
-                padding:"10px 14px", display:"flex", alignItems:"center", gap:12,
-              }}>
-                <div style={{ background:"#fff", borderRadius:6, width:36, height:36, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-                  <span style={{ fontWeight:900, fontSize:13, color:"#c0392b" }}>{b.room}</span>
-                </div>
-                <div style={{ flex:1 }}>
-                  <div style={{ color:"#fff", fontWeight:700, fontSize:13 }}>{b.guest}</div>
-                  <div style={{ color:"rgba(255,255,255,.7)", fontSize:11 }}>
-                    📅 Checkout: {formatDate(b.checkout)} · {b.phone}
-                    {b.extraRooms?.length > 0 && ` · Also Rm ${b.extraRooms.map(r=>r.number).join(", ")}`}
-                  </div>
-                </div>
-                <button
-                  onClick={() => chkOut(b.id)}
-                  style={{
-                    background:"#fff", color:"#c0392b", border:"none", borderRadius:8,
-                    padding:"8px 16px", fontWeight:800, fontSize:13, cursor:"pointer",
-                    fontFamily:"inherit", flexShrink:0,
-                  }}>
-                  ✓ Check Out Now
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* ── Stat bar ── */}
       <div style={{ display:"grid", gridTemplateColumns:isMobile ? "repeat(2,1fr)" : (curRole==="admin" ? "repeat(6,1fr)" : "repeat(4,1fr)"), gap:6, marginBottom:14 }}>
         {[
@@ -1841,9 +1808,11 @@ export default function Desk() {
               const bRes = bookings.find(b => { if (b.status !== "confirmed" || !bookingCoversRoom(b, r.number)) return false; const w = roomBookingWindow(b, r.number); return w.checkin <= today && w.checkout > today; });
               const bk = bIn || bRes;
               const statusIcon = ds === "occupied" ? "ti-user" : ds === "reserved" ? "ti-calendar" : ds === "cleaning" ? "ti-spray" : "ti-bed";
+              const overdue = isRoomOverdue(bIn, r.number);
               // Ribbon note: checkout for active rooms, "N ahead" heads-up for a free room with future reservations
               let ribbonNote = "";
               if (ds === "cleaning") ribbonNote = "tap to start";
+              else if (overdue) ribbonNote = "since 12:00";
               else if (bk) ribbonNote = "out " + shortDate(roomBookingWindow(bk, r.number).checkout);
               else if (fc > 0) ribbonNote = fc + " ahead";
               // This room's own share of the booking (never the whole-booking total)
@@ -1866,31 +1835,46 @@ export default function Desk() {
                 isExtended = !!(bk.extensions && bk.extensions.length) || (bk.paymentHistory || []).some(p => /extend/i.test(p.note || ""));
               }
               return (
-                <div key={r.id} className={"rm-card" + (isOvf && !bk && ds !== "cleaning" ? " rm-ovf" : "")} onClick={() => ds === "cleaning" ? setCleanTarget(r) : setSel(r)}>
-                  {/* Soft tinted status strip */}
-                  <div style={{ background:st.tint, color:st.stripTx, fontSize:11, padding:"6px 12px", display:"flex", justifyContent:"space-between", alignItems:"center", gap:6 }}>
+                <div key={r.id} className={"rm-card" + (isOvf && !bk && ds !== "cleaning" ? " rm-ovf" : "") + (overdue ? " rm-od" : "")} onClick={() => ds === "cleaning" ? setCleanTarget(r) : setSel(r)}>
+                  {/* Soft tinted status strip — solid red when the room is overdue */}
+                  <div style={{ background:overdue?"#c0392b":st.tint, color:overdue?"#fff":st.stripTx, fontWeight:overdue?700:400, fontSize:11, padding:"6px 12px", display:"flex", justifyContent:"space-between", alignItems:"center", gap:6 }}>
                     <span style={{ whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
-                      <span style={{ display:"inline-block", width:7, height:7, borderRadius:"50%", background:st.dot, marginRight:6, verticalAlign:"1px" }} />{st.label}
+                      {overdue ? "⚠ OVERDUE" : <>
+                        <span style={{ display:"inline-block", width:7, height:7, borderRadius:"50%", background:st.dot, marginRight:6, verticalAlign:"1px" }} />{st.label}
+                      </>}
                     </span>
                     {ribbonNote && <span className={(!bk && fc>0) ? "rm-ahead" : ""} style={{ whiteSpace:"nowrap" }}>{ribbonNote}</span>}
                   </div>
                   {/* Body */}
                   <div style={{ padding:isOvf ? "9px 10px 10px" : "12px 13px 13px" }}>
                     <div style={{ display:"flex", alignItems:"baseline", justifyContent:"space-between", gap:6 }}>
-                      <span style={{ fontSize:isOvf?18:26, fontWeight:500, color:"var(--text)", letterSpacing:-.5, lineHeight:1 }}>{r.number}</span>
+                      <span style={{ fontSize:isOvf?18:26, fontWeight:overdue?600:500, color:overdue?"#8f2323":"var(--text)", letterSpacing:-.5, lineHeight:1 }}>{r.number}</span>
                       <span style={{ fontSize:isOvf?10:11, color:"var(--text3)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", maxWidth:"60%" }}>{r.name || r.type}</span>
                     </div>
                     {ds === "cleaning" ? (
                       <div style={{ fontSize:14, color:"var(--text2)", marginTop:6 }}>Needs cleaning</div>
                     ) : bk ? (<>
                       <div style={{ fontSize:14, color:"var(--text)", marginTop:6, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{bk.guest}</div>
-                      <div style={{ fontSize:12, color:"var(--text3)", marginTop:3 }}>{rn} night{rn>1?"s":""}</div>
+                      {/* An overdue room shows the number to ring instead of the
+                          night count — that is what the desk reaches for next. */}
+                      <div style={{ fontSize:12, color:"var(--text3)", marginTop:3, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
+                        {overdue ? (bk.phone || "no phone on file") : `${rn} night${rn>1?"s":""}`}
+                      </div>
                       <div style={{ marginTop:9, display:"flex", gap:6, flexWrap:"wrap" }}>
                         {due > 0
                           ? <span style={{ fontSize:11, background:"#FBD3D3", color:"#8f2323", padding:"2px 9px", borderRadius:20 }}>due {money(due)}</span>
                           : <span style={{ fontSize:11, background:"#D6EEC6", color:"#356010", padding:"2px 9px", borderRadius:20 }}>paid <i className="ti ti-check" style={{ fontSize:11 }} /></span>}
                         {isExtended && <span style={{ fontSize:11, background:"#DAD4F8", color:"#332b7a", padding:"2px 9px", borderRadius:20 }}><i className="ti ti-arrow-up-right" style={{ fontSize:11 }} /> extended</span>}
                       </div>
+                      {/* Same one-click checkout the old banner offered. stopPropagation
+                          so it does not also open the room modal behind it. */}
+                      {overdue && (
+                        <button type="button" onClick={e => { e.stopPropagation(); chkOut(bk.id); }}
+                          style={{ marginTop:9, width:"100%", padding:"7px 10px", borderRadius:8, border:"none", cursor:"pointer",
+                            background:"#c0392b", color:"#fff", fontWeight:800, fontSize:12, fontFamily:"inherit" }}>
+                          ✓ Check out now
+                        </button>
+                      )}
                     </>) : isOvf ? (
                       // Idle overflow room: one quiet line instead of the full
                       // "Available now / tap to book" block. Still opens on click.
