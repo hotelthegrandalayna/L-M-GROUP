@@ -14,18 +14,26 @@ import useIsMobile from "../useIsMobile";
 import {
   monthSummary, dailyCloses, monthsWithData, prevMonth, nextMonth, emptyRestaurant, normalise,
 } from "../lib/restaurantMoney";
-import { compressImage, saveReceipt, loadReceipt, newReceiptId, MAX_STORED_BYTES } from "../lib/receiptStore";
+import { compressImage, saveReceipt, loadReceipt, newReceiptId, forgetReceiptLocally, MAX_STORED_BYTES } from "../lib/receiptStore";
 
 const C = { maroon:"#7B1212", gold:"#c9a84c", dim:"#666", border:"#e0d0b0", green:"#1a7040", red:"#c0392b", blue:"#3a6ea5" };
 
 const MONTHS_LABEL = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 
 /**
- * The one gate for editing and deleting. It says yes today, on purpose — the
- * owner is still testing. When the password goes on, it goes on HERE and every
- * edit and delete in the tab is behind it at once. Nothing else has to change.
+ * The ONE gate for changing anything already recorded.
+ *
+ * The manager enters the day's work — sales, what was bought, the drawer count,
+ * the shelf count — and none of that goes through here. Correcting or removing
+ * something already saved, changing the starting figures, closing the month
+ * (which is the owner taking the money out) and clearing the books all do.
+ *
+ * If a password is ever wanted on top of the role, it goes HERE and every one of
+ * those actions is behind it at once. Nothing else has to change.
  */
-export function canEdit() { return true; }
+export function canEdit(role) { return role === "admin"; }
+
+const LockPill = () => <Pill bg="#eef2f7" color={C.blue}>🔒 admin only</Pill>;
 
 const money  = n => "৳" + Math.round(n || 0).toLocaleString();
 const signed = n => (n > 0 ? "+" : n < 0 ? "−" : "") + "৳" + Math.abs(Math.round(n || 0)).toLocaleString();
@@ -107,8 +115,9 @@ function ReceiptViewer({ receipt, onClose }) {
 
 // ═════════════════════════════════════════════════════════════════════════════
 export default function HallRestaurant() {
-  const { restaurant, setRestaurant, curUser, notify } = useHall();
+  const { restaurant, setRestaurant, curUser, curRole, notify } = useHall();
   const isMobile = useIsMobile();
+  const isAdmin = canEdit(curRole);
   const data = useMemo(() => normalise(restaurant || emptyRestaurant()), [restaurant]);
 
   const today = todayStr();
@@ -126,12 +135,20 @@ export default function HallRestaurant() {
   // ── writers ───────────────────────────────────────────────────────────────
   const addRow = (key, row) => setRestaurant(p => ({ ...normalise(p), [key]: [...normalise(p)[key], { id:nid(), by:curUser||"", ...row }] }));
   const editRow = (key, id, patch) => {
-    if (!canEdit()) { notify("Editing is locked", "error"); return; }
+    if (!isAdmin) { notify("Only an admin can change a saved row", "error"); return; }
     setRestaurant(p => ({ ...normalise(p), [key]: normalise(p)[key].map(r => String(r.id) === String(id) ? { ...r, ...patch } : r) }));
   };
   const delRow = (key, id) => {
-    if (!canEdit()) { notify("Deleting is locked", "error"); return; }
+    if (!isAdmin) { notify("Only an admin can delete a row", "error"); return; }
     setRestaurant(p => ({ ...normalise(p), [key]: normalise(p)[key].filter(r => String(r.id) !== String(id)) }));
+  };
+  /** Wipe every Restaurant record. The hall's own books are untouched. */
+  const resetAll = () => {
+    if (!isAdmin) { notify("Only an admin can clear the records", "error"); return; }
+    const ids = data.spend.map(r => r.receiptId).filter(Boolean);
+    ids.forEach(forgetReceiptLocally);
+    setRestaurant(emptyRestaurant());
+    notify("All Restaurant records cleared — starting fresh ✓");
   };
   const setMonthField = (field, value) => setRestaurant(p => {
     const n = normalise(p);
@@ -186,21 +203,21 @@ export default function HallRestaurant() {
       </div>
 
       {tab === "dash"  && <Dashboard sum={sum} isMobile={isMobile} onGo={setTab} />}
-      {tab === "sales" && <Sales rows={inMonth(data.sales)} sum={sum} today={today} month={month} isMobile={isMobile}
+      {tab === "sales" && <Sales rows={inMonth(data.sales)} sum={sum} today={today} month={month} isMobile={isMobile} isAdmin={isAdmin}
         onAdd={r => { addRow("sales", r); notify("Day saved ✓"); }}
         onEdit={(id,patch) => { editRow("sales", id, patch); notify("Day updated ✓"); }}
         onDel={id => delRow("sales", id)} />}
-      {tab === "spend" && <Spend rows={inMonth(data.spend)} sum={sum} today={today} month={month} isMobile={isMobile}
+      {tab === "spend" && <Spend rows={inMonth(data.spend)} sum={sum} today={today} month={month} isMobile={isMobile} isAdmin={isAdmin}
         notify={notify} onView={openReceipt}
         onAdd={r => { addRow("spend", r); notify("Saved ✓"); }}
         onEdit={(id,patch) => { editRow("spend", id, patch); notify("Updated ✓"); }}
         onDel={id => delRow("spend", id)} />}
       {tab === "close" && <CloseMonth sum={sum} closes={closes} owner={inMonth(data.ownerMoves)} today={today} month={month} isMobile={isMobile}
-        isFirstMonth={known.length === 0 || month <= known[0]}
+        isAdmin={isAdmin} counts={data} isFirstMonth={known.length === 0 || month <= known[0]}
         onMonthField={setMonthField} onMonthFields={setMonthFields}
         onCount={(d,v) => { saveCount(d,v); notify("Cash count saved ✓"); }}
         onOwner={r => { addRow("ownerMoves", r); notify("Owner money recorded ✓"); }}
-        onDelOwner={id => delRow("ownerMoves", id)} notify={notify} />}
+        onDelOwner={id => delRow("ownerMoves", id)} onReset={resetAll} notify={notify} />}
 
       <ReceiptViewer receipt={viewing} onClose={() => setViewing(null)} />
     </div>
@@ -305,7 +322,7 @@ function Dashboard({ sum, isMobile, onGo }) {
 }
 
 // ── Sales ────────────────────────────────────────────────────────────────────
-function Sales({ rows, sum, today, month, isMobile, onAdd, onEdit, onDel }) {
+function Sales({ rows, sum, today, month, isMobile, isAdmin, onAdd, onEdit, onDel }) {
   const blank = { date: month === today.slice(0,7) ? today : month + "-01", cash:"", refunds:"", note:"" };
   const [f, setF] = useState(blank);
   const [editId, setEditId] = useState(null);
@@ -363,7 +380,9 @@ function Sales({ rows, sum, today, month, isMobile, onAdd, onEdit, onDel }) {
                 <td style={{ ...tdN, color:r.refunds?C.red:undefined }}>{r.refunds ? "−"+money(r.refunds) : "—"}</td>
                 <td style={{ ...tdN, ...numF }}>{money((r.cash||0)+(r.card||0)+(r.mobile||0)-(r.refunds||0))}</td>
                 <td style={{ ...td, color:C.dim, fontSize:12.5 }}>{r.note || "—"}</td>
-                <td style={{ ...td, textAlign:"right" }}><button style={{ ...btnO, ...btnSm }} onClick={()=>startEdit(r)}>✏️ Edit</button></td>
+                <td style={{ ...td, textAlign:"right" }}>
+                  {isAdmin ? <button style={{ ...btnO, ...btnSm }} onClick={()=>startEdit(r)}>✏️ Edit</button> : <LockPill />}
+                </td>
               </tr>
             ))}
             <tr style={{ background:"#f4efe2" }}>
@@ -382,7 +401,7 @@ function Sales({ rows, sum, today, month, isMobile, onAdd, onEdit, onDel }) {
 }
 
 // ── Expenses (everything the shop spends money on) ───────────────────────────
-function Spend({ rows, sum, today, month, isMobile, onAdd, onEdit, onDel, onView, notify }) {
+function Spend({ rows, sum, today, month, isMobile, isAdmin, onAdd, onEdit, onDel, onView, notify }) {
   const blank = { date: month === today.slice(0,7) ? today : month + "-01", what:"", amount:"", isStock:true, receiptId:"", receiptName:"" };
   const [f, setF] = useState(blank);
   const [busy, setBusy] = useState(false);
@@ -472,7 +491,9 @@ function Spend({ rows, sum, today, month, isMobile, onAdd, onEdit, onDel, onView
                       style={{ width:36, height:36, borderRadius:7, background:"#f4efe2", border:"1.5px solid "+C.border, cursor:"pointer", fontSize:16 }}>🧾</button>
                   : <span style={{ color:C.dim, fontSize:12.5 }}>—</span>}</td>
                 <td style={{ ...tdN, ...numF }}>{money(r.amount)}</td>
-                <td style={{ ...td, textAlign:"right" }}><button style={{ ...btnO, ...btnSm }} onClick={()=>startEdit(r)}>✏️ Edit</button></td>
+                <td style={{ ...td, textAlign:"right" }}>
+                  {isAdmin ? <button style={{ ...btnO, ...btnSm }} onClick={()=>startEdit(r)}>✏️ Edit</button> : <LockPill />}
+                </td>
               </tr>
             ))}
             <tr style={{ background:"#f4efe2" }}>
@@ -496,59 +517,155 @@ function Spend({ rows, sum, today, month, isMobile, onAdd, onEdit, onDel, onView
 }
 
 // ── Close Month ──────────────────────────────────────────────────────────────
-function CloseMonth({ sum, closes, owner, today, month, isMobile, onMonthField, onMonthFields, onCount, onOwner, onDelOwner, isFirstMonth, notify }) {
+function StartingPoint({ sum, month, isMobile, isAdmin, isFirstMonth, onMonthField }) {
+  const [open, setOpen] = useState(false);
+  const [oStock, setOStock] = useState("");
+  const [oCash, setOCash] = useState("");
+  const firstRun = isFirstMonth && sum.openStockAuto && sum.openCashAuto && sum.openStock === 0 && sum.openCash === 0;
+  const editing = firstRun || open;
+
+  const half = { padding:"18px 20px" };
+  const lab  = { fontSize:11, fontWeight:800, letterSpacing:.9, textTransform:"uppercase", color:C.dim };
+  const val  = { ...numF, fontSize:30, marginTop:8, lineHeight:1 };
+  const src  = { fontSize:12, color:C.dim, marginTop:8 };
+
+  return (
+    <div style={{ ...card, marginBottom:12 }}>
+      <div style={chead}>🚩 What {monthLabel(month)} started with</div>
+      {firstRun && (
+        <div style={{ background:"#fff8e6", borderBottom:"1px solid "+C.gold, padding:"12px 20px", fontSize:12.5, color:"#5c4500", lineHeight:1.55 }}>
+          This is your first month, so there is nothing to carry over. Tell the app what the shop already had
+          on day one — then you never type these again.
+        </div>
+      )}
+      <div style={{ display:"grid", gridTemplateColumns:isMobile?"1fr":"1fr 1fr" }}>
+        <div style={{ ...half, borderRight:isMobile?"none":"1px solid "+C.border, borderBottom:isMobile?"1px solid "+C.border:"none" }}>
+          <div style={lab}>Cash in the drawer</div>
+          {editing
+            ? <div style={{ marginTop:8 }}><OpeningEditor value={oCash} setValue={setOCash} label="cash on day one"
+                onSave={v => onMonthField("openCash", v)} onDone={() => setOpen(false)} /></div>
+            : <>
+                <div style={val}>{money(sum.openCash)}</div>
+                <div style={src}>{sum.openCashAuto
+                  ? <><span style={{ color:C.gold, fontWeight:800 }}>←</span> what {monthLabel(prevMonth(month))} left behind after the owner took their money</>
+                  : "set by hand"}</div>
+              </>}
+        </div>
+        <div style={half}>
+          <div style={lab}>Value on the shelf</div>
+          {editing
+            ? <div style={{ marginTop:8 }}><OpeningEditor value={oStock} setValue={setOStock} label="shelf value on day one"
+                onSave={v => onMonthField("openStock", v)} onDone={() => setOpen(false)} /></div>
+            : <>
+                <div style={val}>{money(sum.openStock)}</div>
+                <div style={src}>{sum.openStockAuto
+                  ? <><span style={{ color:C.gold, fontWeight:800 }}>←</span> the shelf count from the end of {monthLabel(prevMonth(month))}</>
+                  : "set by hand"}</div>
+              </>}
+        </div>
+      </div>
+      {!firstRun && (
+        <div style={{ padding:"11px 20px", borderTop:"1px solid "+C.border, fontSize:12.5, color:C.dim, display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
+          Both carry over on their own — you never type them.
+          {isAdmin
+            ? <button style={{ ...btnO, ...btnSm, marginLeft:"auto" }} onClick={()=>setOpen(o=>!o)}>{open ? "Done" : "✏️ Set by hand"}</button>
+            : <span style={{ marginLeft:"auto" }}><LockPill /></span>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DangerZone({ data, isMobile, onReset }) {
+  const [typed, setTyped] = useState("");
+  const counts = {
+    "Days of sales": data.sales.length,
+    "Things bought and spent": data.spend.length,
+    "Owner money records": data.ownerMoves.length,
+    "Drawer counts": data.counts.length,
+    "Invoice photos": data.spend.filter(r => r.receiptId).length,
+  };
+  const total = data.sales.length + data.spend.length + data.ownerMoves.length + data.counts.length + Object.keys(data.months).length;
+  const armed = typed.trim().toUpperCase() === "DELETE" && total > 0;
+
+  return (
+    <div style={{ border:"1.5px solid #e8a49c", borderRadius:12, overflow:"hidden", background:"#fff", marginTop:12 }}>
+      <div style={{ background:"#fdf1f0", padding:"13px 16px", borderBottom:"1px solid #e8a49c", fontSize:12, fontWeight:800, letterSpacing:.9, textTransform:"uppercase", color:C.red }}>
+        ⚠ Start fresh
+      </div>
+      <div style={{ padding:16 }}>
+        <div style={{ fontSize:13.5, lineHeight:1.6, marginBottom:14 }}>
+          Deletes <b>every</b> Restaurant record — all sales, everything spent, owner money, drawer counts,
+          shelf counts and closed months. The hall's own invoices, expenses and CRM are not touched.
+        </div>
+        <table style={{ borderCollapse:"collapse", width:"100%", border:"1px solid "+C.border, borderRadius:8, marginBottom:14 }}><tbody>
+          {Object.entries(counts).map(([k,v]) => (
+            <tr key={k}><td style={{ ...td, fontSize:13 }}>{k}</td><td style={{ ...tdN, ...numF, fontSize:13 }}>{v}</td></tr>
+          ))}
+          <tr style={{ background:"#fdf1f0" }}>
+            <td style={{ ...td, fontWeight:800, borderBottom:"none" }}>Will be deleted</td>
+            <td style={{ ...tdN, ...numF, fontWeight:800, color:C.red, borderBottom:"none" }}>{total} record{total===1?"":"s"}</td>
+          </tr>
+        </tbody></table>
+        {total === 0 ? (
+          <div style={{ fontSize:13, color:C.dim }}>There is nothing to clear — the books are already empty.</div>
+        ) : (<>
+          <div style={{ fontSize:13, marginBottom:7 }}>Type <b>DELETE</b> to confirm.</div>
+          <div style={{ display:"flex", gap:10, alignItems:"center", flexWrap:"wrap" }}>
+            <input style={{ ...inp, maxWidth:220 }} placeholder="type DELETE" value={typed} onChange={e=>setTyped(e.target.value)} />
+            <button disabled={!armed} onClick={() => { onReset(); setTyped(""); }}
+              style={{ ...btn, background:C.red, opacity:armed?1:.4, cursor:armed?"pointer":"not-allowed" }}>
+              Delete all Restaurant records
+            </button>
+            <span style={{ fontSize:12, color:C.dim }}>Cannot be undone.</span>
+          </div>
+        </>)}
+      </div>
+    </div>
+  );
+}
+
+function CloseMonth({ sum, closes, owner, today, month, isMobile, isAdmin, counts, onMonthField, onMonthFields, onCount, onOwner, onDelOwner, onReset, isFirstMonth, notify }) {
   const [stock, setStock] = useState("");
   const [cash, setCash] = useState("");
   const [countDate, setCountDate] = useState(month === today.slice(0,7) ? today : month + "-01");
   const [ow, setOw] = useState({ date: month === today.slice(0,7) ? today : month + "-01", dir:"out", amount:"", note:"" });
-  const [editOpen, setEditOpen] = useState(false);
-  const [oStock, setOStock] = useState("");
-  const [oCash, setOCash] = useState("");
   const [took, setTook] = useState("");
 
-  const showOpeningEditor = editOpen || (isFirstMonth && sum.openStockAuto && sum.openCashAuto && sum.openStock === 0 && sum.openCash === 0);
   const tookNum = parseFloat(took);
   const takeAmount = Number.isFinite(tookNum) ? tookNum : 0;
   const leaves = sum.inDrawer - takeAmount;
 
   const doClose = () => {
+    // Closing is the owner taking the month's money out, so it is theirs alone.
+    if (!isAdmin) { notify("Only an admin can close the month", "error"); return; }
     if (takeAmount < 0 || takeAmount > sum.inDrawer) { notify("The owner cannot take more than is in the drawer", "error"); return; }
     onMonthFields({ closed:true, ownerTook:takeAmount, closedAt:new Date().toISOString() });
     setTook("");
     notify(`${monthLabel(month)} closed · ${money(leaves)} carries into ${monthLabel(nextMonth(month))} ✓`);
   };
   const reopen = () => {
-    if (!canEdit()) { notify("Reopening is locked", "error"); return; }
+    if (!isAdmin) { notify("Only an admin can reopen a month", "error"); return; }
     onMonthFields({ closed:false, ownerTook:0, closedAt:"" });
     notify(`${monthLabel(month)} reopened`);
   };
 
   return (<>
+    <StartingPoint sum={sum} month={month} isMobile={isMobile} isAdmin={isAdmin}
+      isFirstMonth={isFirstMonth} onMonthField={onMonthField} />
+
     <div style={{ display:"grid", gridTemplateColumns:isMobile?"1fr":"1fr 1fr", gap:12 }}>
 
       <div style={card}>
-        <div style={chead}>📦 Inventory value</div>
+        <div style={chead}>📦 Count the shelf <span style={cheadR}>end of {monthLabel(month)}</span></div>
         <div style={{ padding:"15px 16px" }}>
-          <label style={lbl}>Opening — start of {monthLabel(month)}</label>
-          {showOpeningEditor
-            ? <OpeningEditor value={oStock} setValue={setOStock} label="value on the shelf on day one"
-                onSave={v => onMonthField("openStock", v)} onDone={() => setEditOpen(false)} />
-            : <div style={{ ...inp, background:"#f4efe2", ...numF, fontSize:17 }}>{money(sum.openStock)}</div>}
-          <div style={{ fontSize:12, color:C.dim, margin:"5px 0 15px" }}>
-            {showOpeningEditor ? "First month — type what was already on the shelf when you started. After this it carries over on its own."
-              : sum.openStockAuto ? "Carried over automatically from last month's count. Never typed twice."
-              : "Set by hand for this month."}
-            {!showOpeningEditor && (
-              <button onClick={()=>setEditOpen(true)} style={{ background:"none", border:"none", padding:"0 0 0 5px", color:C.maroon, fontWeight:700, cursor:"pointer", fontFamily:"inherit", fontSize:12, textDecoration:"underline" }}>change</button>
-            )}
-          </div>
-          <label style={lbl}>Closing — the manager counts the shelf</label>
+          <label style={lbl}>Total value of everything on the shelf</label>
           <div style={{ display:"flex", gap:8 }}>
             <input type="number" min="0" style={inp} placeholder={sum.closeStockSet ? String(sum.closeStock) : "total value on the shelf"}
               value={stock} onChange={e=>setStock(e.target.value)} onWheel={e=>e.target.blur()} />
             <button style={btn} onClick={() => { if (stock !== "") { onMonthField("closeStock", parseFloat(stock)||0); setStock(""); } }}>Save</button>
           </div>
-          <div style={{ fontSize:12, color:C.dim, marginTop:6 }}>One number — the total value of everything on the shelf.</div>
+          <div style={{ fontSize:12, color:C.dim, marginTop:6 }}>One number. No product list, no quantities.</div>
           {sum.closeStockSet && (
             <div style={{ marginTop:13, paddingTop:12, borderTop:"1px solid "+C.border, fontSize:13.5, display:"flex", justifyContent:"space-between" }}>
               <span>Counted <b style={numF}>{money(sum.closeStock)}</b></span>
@@ -559,18 +676,8 @@ function CloseMonth({ sum, closes, owner, today, month, isMobile, onMonthField, 
       </div>
 
       <div style={card}>
-        <div style={chead}>💵 Cash count</div>
+        <div style={chead}>💵 Count the drawer</div>
         <div style={{ padding:"15px 16px" }}>
-          <label style={lbl}>Opening cash — start of {monthLabel(month)}</label>
-          {showOpeningEditor
-            ? <OpeningEditor value={oCash} setValue={setOCash} label="cash in the drawer on day one"
-                onSave={v => onMonthField("openCash", v)} onDone={() => setEditOpen(false)} />
-            : <div style={{ ...inp, background:"#f4efe2", ...numF, fontSize:17 }}>{money(sum.openCash)}</div>}
-          <div style={{ fontSize:12, color:C.dim, margin:"5px 0 15px" }}>
-            {showOpeningEditor ? "First month — type the cash you started with."
-              : sum.openCashAuto ? "What last month left behind after the owner took their money." : "Set by hand for this month."}
-          </div>
-          <label style={lbl}>Count the drawer</label>
           <div style={{ display:"flex", gap:8, marginBottom:10 }}>
             <input type="date" style={{ ...inp, maxWidth:160 }} value={countDate} onChange={e=>setCountDate(e.target.value)} />
             <input type="number" min="0" style={inp} placeholder="counted" value={cash} onChange={e=>setCash(e.target.value)} onWheel={e=>e.target.blur()} />
@@ -600,29 +707,38 @@ function CloseMonth({ sum, closes, owner, today, month, isMobile, onMonthField, 
             <RowTotal label={`Opened ${monthLabel(nextMonth(month))} with`} value={money(sum.carriesForward)} color={C.green} />
           </tbody></table>
           <div style={{ marginTop:13, display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
-            <button style={btnO} onClick={reopen}>Reopen the month</button>
-            <span style={{ fontSize:12, color:C.dim }}>Use this if the month was closed too early.</span>
+            {isAdmin
+              ? <><button style={btnO} onClick={reopen}>Reopen the month</button>
+                  <span style={{ fontSize:12, color:C.dim }}>Use this if the month was closed too early.</span></>
+              : <><LockPill /><span style={{ fontSize:12, color:C.dim }}>Only an admin can reopen a closed month.</span></>}
           </div>
         </div>
       ) : (
         <div style={{ padding:"15px 16px" }}>
           <table style={{ borderCollapse:"collapse", width:"100%" }}><tbody>
             <RowMain label={sum.countedCash === null ? "Expected in the drawer (not counted yet)" : "Cash counted in the drawer"} value={money(sum.inDrawer)} />
-            <tr>
-              <td style={td}>Owner takes</td>
-              <td style={{ ...tdN, paddingTop:8, paddingBottom:8 }}>
-                <input type="number" min="0" max={sum.inDrawer} style={{ ...inp, maxWidth:170, textAlign:"right", display:"inline-block" }}
-                  placeholder="0" value={took} onChange={e=>setTook(e.target.value)} onWheel={e=>e.target.blur()} />
-              </td>
-            </tr>
-            <RowTotal label={`Stays in the shop → opening cash for ${monthLabel(nextMonth(month))}`}
-              value={money(leaves)} color={leaves >= 0 ? C.green : C.red} />
+            {isAdmin && (
+              <tr>
+                <td style={td}>Owner takes</td>
+                <td style={{ ...tdN, paddingTop:8, paddingBottom:8 }}>
+                  <input type="number" min="0" max={sum.inDrawer} style={{ ...inp, maxWidth:170, textAlign:"right", display:"inline-block" }}
+                    placeholder="0" value={took} onChange={e=>setTook(e.target.value)} onWheel={e=>e.target.blur()} />
+                </td>
+              </tr>
+            )}
+            {isAdmin && (
+              <RowTotal label={`Stays in the shop → opening cash for ${monthLabel(nextMonth(month))}`}
+                value={money(leaves)} color={leaves >= 0 ? C.green : C.red} />
+            )}
           </tbody></table>
           <div style={{ marginTop:13, display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
-            <button style={{ ...btn, background:C.green }} onClick={doClose}>✓ Close {monthLabel(month)} — month complete</button>
-            <span style={{ fontSize:12, color:C.dim }}>Records what the owner took and carries the rest forward on its own.</span>
+            {isAdmin
+              ? <><button style={{ ...btn, background:C.green }} onClick={doClose}>✓ Close {monthLabel(month)} — month complete</button>
+                  <span style={{ fontSize:12, color:C.dim }}>Records what the owner took and carries the rest forward on its own.</span></>
+              : <><LockPill /><span style={{ fontSize:12, color:C.dim }}>
+                  Count the shelf and the drawer above — the admin closes the month and takes the money.</span></>}
           </div>
-          {sum.countedCash === null && (
+          {isAdmin && sum.countedCash === null && (
             <div style={{ marginTop:11, fontSize:12.5, color:"#5c4500", background:"#fff8e6", border:"1px solid "+C.gold, borderRadius:8, padding:"10px 13px", lineHeight:1.6 }}>
               Count the drawer first. Without a count this uses the expected figure, and any cash that went
               missing during the month would be carried into next month as if it were still there.
@@ -687,7 +803,9 @@ function CloseMonth({ sum, closes, owner, today, month, isMobile, onMonthField, 
                 <td style={{ ...td, color:C.dim, fontSize:12.5 }}>{r.note || "—"}</td>
                 <td style={{ ...tdN, ...numF, color:r.dir==="in"?C.green:C.red }}>{r.dir==="in" ? "+" : "−"}{money(r.amount)}</td>
                 <td style={{ ...td, textAlign:"right" }}>
-                  <button style={{ ...btnO, ...btnSm, color:C.red, borderColor:"#e8a49c" }} onClick={()=>onDelOwner(r.id)}>Delete</button>
+                  {isAdmin
+                    ? <button style={{ ...btnO, ...btnSm, color:C.red, borderColor:"#e8a49c" }} onClick={()=>onDelOwner(r.id)}>Delete</button>
+                    : <LockPill />}
                 </td>
               </tr>
             ))}
@@ -699,5 +817,8 @@ function CloseMonth({ sum, closes, owner, today, month, isMobile, onMonthField, 
         box above — that is what sets next month's opening cash.
       </div>
     </div>
+
+    {/* Kept last on the page, well away from anything pressed daily. */}
+    {isAdmin && <DangerZone data={counts} isMobile={isMobile} onReset={onReset} />}
   </>);
 }
