@@ -76,7 +76,7 @@ export default function HallExpenses() {
   const [search, setSearch]   = useState("");
   const [filterCat, setFilterCat] = useState("");
   const [filterType, setFilterType] = useState(""); // "" | "business" | "nonbusiness"
-  const [filterMonth, setFilterMonth] = useState(() => thisMonth);
+  const [filterMonthSel, setFilterMonth] = useState(() => thisMonth);
   const [delTarget, setDelTarget] = useState(null);
   const [delPass, setDelPass] = useState("");
   const [showRecords, setShowRecords] = useState(false);
@@ -87,6 +87,10 @@ export default function HallExpenses() {
 
   const setF = (k,v) => setForm(p => ({ ...p, [k]:v }));
   const isAdmin = curRole === "admin";
+
+  // A manager sees the current month and nothing else — no looking back at
+  // months that are already closed. Admin keeps the full picker.
+  const filterMonth = isAdmin ? filterMonthSel : thisMonth;
 
   // ── Normalize expenses — use separate typesMap so Supabase reloads don't wipe type
   const normalizedExpenses = useMemo(() => expenses.map(e => ({
@@ -258,6 +262,7 @@ export default function HallExpenses() {
           <div style={{ fontSize:12, color:C.dim, marginTop:4 }}>Money overview — {monthLabel}</div>
         </div>
         <div>
+          {isAdmin ? (<>
           <label style={{ fontSize:10, fontWeight:700, color:C.dim, textTransform:"uppercase", letterSpacing:.8, display:"block", marginBottom:4 }}>📅 Report Month</label>
           <select value={filterMonth} onChange={e=>setFilterMonth(e.target.value)}
             style={{ padding:"9px 14px", border:`2px solid ${C.maroon}`, borderRadius:9, fontSize:13, fontWeight:700, fontFamily:"inherit", background:"#fff", color:C.maroon, cursor:"pointer", outline:"none" }}>
@@ -267,6 +272,11 @@ export default function HallExpenses() {
               return <option key={m} value={m}>{MONTHS_LABEL[parseInt(mo)-1]} {y}</option>;
             })}
           </select>
+          </>) : (
+            <div style={{ padding:"9px 14px", border:`2px solid ${C.maroon}22`, borderRadius:9, fontSize:13, fontWeight:700, background:"#fff", color:C.maroon }}>
+              📅 {monthLabel}
+            </div>
+          )}
         </div>
       </div>
 
@@ -468,13 +478,15 @@ export default function HallExpenses() {
           <option value="">All Categories</option>
           {[...BUSINESS_CAT_OPTIONS,...NONBUSINESS_CAT_OPTIONS].map(o=><option key={o.v} value={o.v}>{o.l}</option>)}
         </select>
-        <select value={filterMonth} onChange={e=>setFilterMonth(e.target.value)} style={{ ...inp(), maxWidth:170 }}>
-          <option value="">All Months</option>
-          {allMonths.map(m=>{
-            const [y,mo]=m.split("-");
-            return <option key={m} value={m}>{MONTHS_LABEL[parseInt(mo)-1]} {y}</option>;
-          })}
-        </select>
+        {isAdmin && (
+          <select value={filterMonth} onChange={e=>setFilterMonth(e.target.value)} style={{ ...inp(), maxWidth:170 }}>
+            <option value="">All Months</option>
+            {allMonths.map(m=>{
+              const [y,mo]=m.split("-");
+              return <option key={m} value={m}>{MONTHS_LABEL[parseInt(mo)-1]} {y}</option>;
+            })}
+          </select>
+        )}
         <button onClick={exportCSV} style={{ padding:"9px 14px", borderRadius:8, border:"1.5px solid #e5e3de", background:"#fff", cursor:"pointer", fontFamily:"inherit", fontWeight:700, fontSize:11, whiteSpace:"nowrap" }}>⬇ CSV</button>
       </div>
 
