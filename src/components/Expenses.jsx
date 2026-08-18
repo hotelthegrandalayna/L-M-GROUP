@@ -74,6 +74,7 @@ export default function Expenses() {
   const { expenses, updateExpenses, expTypes, setExpenseType, removeExpenseType, bookings, revenues, curRole, curUser, notify } = useApp();
   const today = todayStr();
   const thisMonth = today.slice(0,7);
+  const isAdmin = curRole === "admin";
 
   const [form, setForm]       = useState(() => blankForm(today));
   const [editId, setEditId]   = useState(null);
@@ -81,7 +82,12 @@ export default function Expenses() {
   const [search, setSearch]   = useState("");
   const [filterCat, setFilterCat] = useState("");
   const [filterType, setFilterType] = useState(""); // "" | "business" | "nonbusiness"
-  const [filterMonth, setFilterMonth] = useState(() => thisMonth);
+  // Choosing a month is an admin tool. A manager always sees THIS month — the
+  // value is forced here rather than merely hiding the dropdown, so every figure
+  // below (revenue, cash in hand, the records list, the CSV export) is locked to
+  // the current month and a past month cannot be reached at all.
+  const [filterMonthSel, setFilterMonth] = useState(() => thisMonth);
+  const filterMonth = isAdmin ? filterMonthSel : thisMonth;
   const [delTarget, setDelTarget] = useState(null);
   const [showRecords, setShowRecords] = useState(false);
   const [showForm,    setShowForm]    = useState(false); // add-record form starts collapsed
@@ -132,7 +138,6 @@ export default function Expenses() {
   }, [bookings, monthBookings, filterMonth]);
 
   const setF = (k,v) => setForm(p => ({ ...p, [k]:v }));
-  const isAdmin = curRole === "admin";
   const isMobile = typeof window !== "undefined" && window.innerWidth < 700;
 
   // ── Normalize expenses with the Supabase-synced type map ─────────────────────
@@ -349,7 +354,13 @@ export default function Expenses() {
             )}
           </div>
         </div>
-        <div style={{ display:"flex", alignItems:"center", gap:7, background:"var(--bg2)", border:"1px solid var(--border)", borderRadius:8, padding:"5px 9px" }}>
+        {/* Picking a month is an admin tool. A manager sees this month only. */}
+        {!isAdmin && (
+          <span style={{ display:"inline-flex", alignItems:"center", gap:7, background:"var(--bg2)", border:"1px solid var(--border)", borderRadius:8, padding:"6px 11px", fontSize:12.5, fontWeight:600, color:"var(--text2)" }}>
+            <i className="ti ti-calendar" style={{ fontSize:14, color:"var(--text3)" }} />{monthLabel}
+          </span>
+        )}
+        {isAdmin && <div style={{ display:"flex", alignItems:"center", gap:7, background:"var(--bg2)", border:"1px solid var(--border)", borderRadius:8, padding:"5px 9px" }}>
           <i className="ti ti-calendar" style={{ fontSize:14, color:"var(--text3)" }} />
           <select value={filterMonth} onChange={e=>setFilterMonth(e.target.value)}
             style={{ padding:0, border:"none", background:"transparent", fontSize:12.5, fontWeight:600, fontFamily:"inherit", color:"var(--text)", cursor:"pointer", outline:"none" }}>
@@ -359,7 +370,7 @@ export default function Expenses() {
               return <option key={m} value={m}>{MONTHS_LABEL[parseInt(mo)-1]} {y}</option>;
             })}
           </select>
-        </div>
+        </div>}
       </div>
 
       {/* ── All seven figures on one compact line ── */}
@@ -546,13 +557,13 @@ export default function Expenses() {
           <option value="">All Categories</option>
           {[...BUSINESS_CAT_OPTIONS,...NONBUSINESS_CAT_OPTIONS].map(o=><option key={o.v} value={o.v}>{o.l}</option>)}
         </select>
-        <select value={filterMonth} onChange={e=>setFilterMonth(e.target.value)} style={{ ...inp(), maxWidth:170 }}>
+        {isAdmin && <select value={filterMonth} onChange={e=>setFilterMonth(e.target.value)} style={{ ...inp(), maxWidth:170 }}>
           <option value="">All Months</option>
           {allMonths.map(m=>{
             const [y,mo]=m.split("-");
             return <option key={m} value={m}>{MONTHS_LABEL[parseInt(mo)-1]} {y}</option>;
           })}
-        </select>
+        </select>}
         <button onClick={exportCSV} style={{ padding:"9px 14px", borderRadius:8, border:"1.5px solid #d5dce6", background:"#fff", cursor:"pointer", fontFamily:"inherit", fontWeight:700, fontSize:11, whiteSpace:"nowrap" }}>⬇ CSV</button>
       </div>
 
