@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import { hasHotelSupabaseConfig, loadHotelBookingsFromSupabase, loadRoomsFromSupabase, saveRoomsToSupabase, persistHotelBookingBundle, deleteHotelBooking } from "../lib/hotelSupabase";
 import { mergeBooking } from "../lib/bookingMerge";
+import { EXTENSIONS_CONFIG_KEY, EXTENSIONS_CACHE_KEY, collectExtensionMap, mergeExtensionMaps, restoreExtensionsAll } from "../lib/hotelExtensions";
 import { hasSupabase, upsertRows, loadRows, saveConfig, loadConfig, deleteRow } from "../utils/supabaseSync";
 import { restoreUserPasswords } from "../utils/userPass";
 import { onRemoteChange } from "../utils/realtimeSync";
@@ -331,6 +332,12 @@ export function AppProvider({ children }) {
           if (needsPush) rePush.push(booking);
           return booking;
         });
+        // The extension log has no Supabase column, so it comes back from
+        // app_config rather than from the booking row. Without this an extension
+        // taken with no money collected was invisible on every other device.
+        const extMapSnap = (() => { try { return JSON.parse(localStorage.getItem(EXTENSIONS_CACHE_KEY) || '{}'); } catch { return {}; } })();
+        const mergedWithExt = restoreExtensionsAll(merged, extMapSnap);
+        merged.length = 0; merged.push(...mergedWithExt);
         rePush.forEach(b => { persistHotelBookingBundle(b).catch(() => {}); });
         // Never drop local bookings that haven't reached Supabase (failed insert) —
         // keep them visible and retry the push, so a save failure can't silently
@@ -417,7 +424,7 @@ export function AppProvider({ children }) {
     const sbUrl = (import.meta.env?.VITE_SUPABASE_URL || '').trim();
     const sbKey = ((import.meta.env?.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env?.VITE_SUPABASE_ANON_KEY) || '').trim();
     if (sbUrl && sbKey) {
-      const configKeys = ['hotel_guest_profiles','hotel_sms_tpl','hotel_pricing','hotel_loyalty_rules','hotel_loyalty_data','hotel_inv_items','hotel_extra_person','hotel_surveys','hotel_staff','hotel_login_monitor','hotel_recovery_emails','hotel_exp_types','hotel_booking_companions','hotel_tasks','hotel_task_done','hotel_dirty_rooms','hotel_cleaning_log','hall_staff_renames','hall_sms_config'];
+      const configKeys = ['hotel_guest_profiles','hotel_sms_tpl','hotel_pricing','hotel_loyalty_rules','hotel_loyalty_data','hotel_inv_items','hotel_extra_person','hotel_surveys','hotel_staff','hotel_login_monitor','hotel_recovery_emails','hotel_exp_types','hotel_booking_companions','hotel_booking_extensions','hotel_tasks','hotel_task_done','hotel_dirty_rooms','hotel_cleaning_log','hall_staff_renames','hall_sms_config'];
       fetch(sbUrl.replace(/\/$/, '') + '/rest/v1/app_config?key=in.(' + configKeys.join(',') + ')', {
         headers: { apikey: sbKey, Authorization: 'Bearer ' + sbKey },
       })
@@ -478,6 +485,17 @@ export function AppProvider({ children }) {
                     localStorage.setItem('ga_companions', JSON.stringify(merged));
                     return merged;
                   });
+                }
+                break;
+              case 'hotel_booking_extensions':
+                // The extension log has no Supabase column. Merged, never
+                // replaced, so two devices extending different rooms of one
+                // booking cannot wipe each other out. See lib/hotelExtensions.js.
+                if (v && typeof v === 'object') {
+                  try {
+                    const cur = JSON.parse(localStorage.getItem(EXTENSIONS_CACHE_KEY) || '{}');
+                    localStorage.setItem(EXTENSIONS_CACHE_KEY, JSON.stringify(mergeExtensionMaps(cur, v)));
+                  } catch { /* quota */ }
                 }
                 break;
               case 'hotel_tasks':
@@ -564,7 +582,10 @@ export function AppProvider({ children }) {
               if (needsPush) persistHotelBookingBundle(booking).catch(() => {});
               return booking;
             });
-            setBookings(mergedRt);
+            // Same reason as the poll: the extension log lives in app_config,
+            // not on the booking row.
+            const extMapRt = (() => { try { return JSON.parse(localStorage.getItem(EXTENSIONS_CACHE_KEY) || '{}'); } catch { return {}; } })();
+            setBookings(restoreExtensionsAll(mergedRt, extMapRt));
             const cutoff = new Date(); cutoff.setMonth(cutoff.getMonth() - 6);
             const cutoffStr = cutoff.toISOString().slice(0, 10);
             try { localStorage.setItem('ga_bookings', JSON.stringify(slimForCache(mergedRt.filter(b => ['confirmed','checked-in'].includes(b.status) || (b.checkout && b.checkout >= cutoffStr))))); } catch {}
@@ -692,6 +713,21 @@ export function AppProvider({ children }) {
     const c = setTimeout(() => cleanupOldTaskPhotos(), 120_000);
     return () => { clearTimeout(t); clearTimeout(c); };
   }, []);
+
+  // Push the stay-extension log to app_config whenever bookings change. There is
+  // no bookings column for it, so without this an extension stayed on the one
+  // device that typed it — the manager saw it, the owner abroad saw nothing.
+  // Merged with what is already stored so a second device never wipes the first.
+  useEffect(() => {
+    const mine = collectExtensionMap(bookings);
+    if (!Object.keys(mine).length) return;
+    let stored = {};
+    try { stored = JSON.parse(localStorage.getItem(EXTENSIONS_CACHE_KEY) || '{}'); } catch { /* corrupt cache */ }
+    const merged = mergeExtensionMaps(stored, mine);
+    if (JSON.stringify(merged) === JSON.stringify(stored)) return;
+    try { localStorage.setItem(EXTENSIONS_CACHE_KEY, JSON.stringify(merged)); } catch { /* quota */ }
+    if (hasSupabase()) saveConfig(EXTENSIONS_CONFIG_KEY, merged).catch(() => {});
+  }, [bookings]);
 
   // Push companion info (spouse/group members) to Supabase app_config whenever
   // bookings change — there's no bookings column for it, and it must reach all devices.

@@ -7,6 +7,7 @@ import { NewBookingModal, InvoicePreviewModal } from "./Bookings";
 import { monthMoney, forfeitedAllocation, bookingPaid } from "../lib/hotelMoney";
 import { receiptEntries, guestRoomNumbers } from "../lib/accounts";
 import { stayExtensions } from "../lib/stayBreakdown";
+import { extendedOn, hasUnsettledExtension } from "../lib/hotelExtensions";
 import { todaysDepartures, hasDeparted } from "../lib/departures";
 import { deviceTz } from "../lib/hotelTime";
 import { logEvent } from "../utils/auditLog";
@@ -1321,7 +1322,15 @@ export default function Desk() {
   // the cloud (there is no column for it), which is why this card kept showing 0
   // on a day a stay had clearly been extended. stayExtensions also recovers them
   // from the payment notes, which are synced.
-  const extensions = bookings.filter(b => stayExtensions(b).some(e => e.at === today));
+  // Extended today, OR extended and still not paid for. An extension taken with
+  // no money collected used to drop off this card at midnight, so the owner
+  // watching from another timezone never saw it at all.
+  const extensions = bookings.filter(b => {
+    const exts = stayExtensions(b);
+    if (!exts.length) return false;
+    if (extendedOn(exts, today)) return true;
+    return hasUnsettledExtension(exts, getHotelDue(b), b.status);
+  });
   const tomorrowStr = addDaysIso(today, 1);
   const upcoming   = bookings
     .filter(b => b.status === "confirmed" && b.checkin > today)
@@ -1832,7 +1841,11 @@ export default function Desk() {
                 roomList = hasMulti ? bk.multiRooms.map(m=>m.number) : hasExtra ? [bk.room, ...bk.extraRooms.map(x=>x.number)] : [bk.room];
                 paid = (parseFloat(bk.advance)||0) + (parseFloat(bk.restPayment)||0) + (parseFloat(bk.extrasAdvance)||0);
                 due  = Math.max(0, (bk.invoiceTotal ?? bk.amount ?? 0) - paid);
-                isExtended = !!(bk.extensions && bk.extensions.length) || (bk.paymentHistory || []).some(p => /extend/i.test(p.note || ""));
+                // stayExtensions() is the one reader that knows about BOTH the log
+                // (restored from app_config) and the payment-note fallback, so the
+                // badge cannot disagree with the invoice about whether a stay was
+                // extended. Reading the raw field alone missed an unpaid extension.
+                isExtended = stayExtensions(bk).length > 0;
               }
               return (
                 <div key={r.id} className={"rm-card" + (isOvf && !bk && ds !== "cleaning" ? " rm-ovf" : "") + (overdue ? " rm-od" : "")} onClick={() => ds === "cleaning" ? setCleanTarget(r) : setSel(r)}>
@@ -1864,7 +1877,7 @@ export default function Desk() {
                         {due > 0
                           ? <span style={{ fontSize:11, background:"#FBD3D3", color:"#8f2323", padding:"2px 9px", borderRadius:20 }}>due {money(due)}</span>
                           : <span style={{ fontSize:11, background:"#D6EEC6", color:"#356010", padding:"2px 9px", borderRadius:20 }}>paid <i className="ti ti-check" style={{ fontSize:11 }} /></span>}
-                        {isExtended && <span style={{ fontSize:11, background:"#DAD4F8", color:"#332b7a", padding:"2px 9px", borderRadius:20 }}><i className="ti ti-arrow-up-right" style={{ fontSize:11 }} /> extended</span>}
+                        {isExtended && <span style={{ fontSize:11, background:due > 0 ? "#F3E3C8" : "#DAD4F8", color:due > 0 ? "#8a5a00" : "#332b7a", padding:"2px 9px", borderRadius:20, fontWeight:due > 0 ? 700 : 400 }}><i className="ti ti-arrow-up-right" style={{ fontSize:11 }} /> extended{due > 0 ? " · unpaid" : ""}</span>}
                       </div>
                       {/* Same one-click checkout the old banner offered. stopPropagation
                           so it does not also open the room modal behind it. */}
