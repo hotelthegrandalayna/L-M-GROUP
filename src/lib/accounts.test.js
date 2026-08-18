@@ -439,3 +439,31 @@ describe("cost by category over months", () => {
     expect(rows.find(r => r.cat === "Miscellaneous").byMonth["2026-08"]).toBe(5520);
   });
 });
+
+describe("a zero-amount row is not money received", () => {
+  it("keeps an unpaid extension out of the receipts", () => {
+    const b = {
+      id: 1, room: "102", checkin: "2026-08-17", status: "checked-in",
+      paymentHistory: [
+        { ts: "2026-08-17T09:00:00.000Z", amount: 1800, note: "advance payment" },
+        { ts: "2026-08-18T16:20:00.000Z", amount: 0, note: "Extend stay +1 night", type: "extension" },
+      ],
+    };
+    const rows = revenueByDay([b], [], "2026-08");
+    expect(rows).toHaveLength(1);
+    expect(rows[0].day).toBe("2026-08-17");
+    expect(rows[0].amount).toBe(1800);
+    // and no phantom 0 on the day of the extension
+    expect(rows.find(r => r.day === "2026-08-18")).toBeUndefined();
+  });
+
+  it("does not fall back to advance when the only rows are zero", () => {
+    const b = { id: 2, room: "103", checkin: "2026-08-17", status: "checked-in",
+      advance: 1800,
+      paymentHistory: [{ ts: "2026-08-18T16:20:00.000Z", amount: 0, type: "extension" }] };
+    // history is empty once zeroes are dropped, so the advance fallback applies
+    const rows = revenueByDay([b], [], "2026-08");
+    expect(rows).toHaveLength(1);
+    expect(rows[0].amount).toBe(1800);
+  });
+});

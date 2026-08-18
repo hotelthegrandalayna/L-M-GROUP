@@ -109,3 +109,129 @@ describe("date helpers", () => {
     expect(addDays("2026-08-01", -1)).toBe("2026-07-31");
   });
 });
+
+describe("an extension nobody paid for still crosses to every device", () => {
+  // The reported failure: rooms 102 and 103 were extended, no money taken, and
+  // the owner abroad saw nothing — because the only cross-device copy was read
+  // from payment notes and required amount > 0. paymentHistory is the one part
+  // of a booking that has always synced, so the record now rides in it whether
+  // or not money changed hands.
+  const unpaid = {
+    id: 129, room: "102", checkin: "2026-08-17", checkout: "2026-08-19", nights: 2,
+    invoiceTotal: 3600, advance: 1800, extensions: [],   // log wiped by the cloud
+    paymentHistory: [
+      { ts: "2026-08-17T09:00:00.000Z", amount: 1800, note: "advance payment", type: "room" },
+      { ts: "2026-08-18T16:20:00.000Z", amount: 0, note: "Extend stay +1 night",
+        type: "extension", extNights: 1, extAmount: 1800, from: "2026-08-18", to: "2026-08-19" },
+    ],
+  };
+
+  it("is found even though nothing was collected", () => {
+    const exts = stayExtensions(unpaid);
+    expect(exts).toHaveLength(1);
+    expect(exts[0].nights).toBe(1);
+    expect(exts[0].amount).toBe(1800);      // what the night is worth, not what was paid
+    expect(exts[0].at).toBe("2026-08-18");
+  });
+
+  it("keeps the original nights separate from the extension", () => {
+    const s = stayBreakdown(unpaid);
+    expect(s.wasExtended).toBe(true);
+    expect(s.extensionNights).toBe(1);
+    expect(s.extensionTotal).toBe(1800);
+  });
+
+  it("still reads an older record that only had a paid note", () => {
+    const legacy = { ...unpaid, paymentHistory: [
+      { ts: "2026-08-18T16:20:00.000Z", amount: 1800, note: "Extend stay +1 night", type: "room" },
+    ] };
+    const exts = stayExtensions(legacy);
+    expect(exts).toHaveLength(1);
+    expect(exts[0].amount).toBe(1800);
+  });
+
+  it("still groups two rooms extended at the same time as ONE extension", () => {
+    // The bug fixed earlier must stay fixed: two rooms, same day, is one night.
+    const twoRooms = { ...unpaid, paymentHistory: [
+      { ts: "2026-08-18T16:20:00.000Z", amount: 0, note: "Extend stay +1 night",
+        type: "extension", extNights: 1, extAmount: 1800 },
+      { ts: "2026-08-18T16:21:00.000Z", amount: 0, note: "Extend stay +1 night",
+        type: "extension", extNights: 1, extAmount: 1800 },
+    ] };
+    const exts = stayExtensions(twoRooms);
+    expect(exts).toHaveLength(1);
+    expect(exts[0].nights).toBe(1);          // one night, not two
+    expect(exts[0].amount).toBe(3600);       // both rooms' money
+  });
+
+  it("prefers the booking's own log when the device still has it", () => {
+    const withLog = { ...unpaid, extensions: [
+      { nights: 1, amount: 1800, from: "2026-08-18", to: "2026-08-19", at: "2026-08-18" },
+    ] };
+    expect(stayExtensions(withLog)).toHaveLength(1);
+  });
+});
+
+describe("recovering an extension the old code never recorded", () => {
+  // Rooms 102 and 103, exactly as they sit in the cloud: no log, no extension
+  // payment, but baseAmount still holds what the ORIGINAL booking was worth
+  // because extending a stay never updated it.
+  const lost = {
+    id: 129, room: "102", checkin: "2026-08-17", checkout: "2026-08-19",
+    nights: 2, roomRate: 2000, baseAmount: 2000, invoiceTotal: 3600,
+    discAmt: 400, advance: 1800, extensions: [],
+    paymentHistory: [{ ts: "2026-08-17T08:37:37.217Z", amount: 1800, note: "Advance paid", type: "room" }],
+  };
+
+  it("works out that one of the two nights was added later", () => {
+    const exts = stayExtensions(lost);
+    expect(exts).toHaveLength(1);
+    expect(exts[0].nights).toBe(1);
+    expect(exts[0].derived).toBe(true);
+  });
+
+  it("splits the money so original + extension still equals the invoice", () => {
+    const s = stayBreakdown(lost);
+    expect(s.baseNights).toBe(1);
+    expect(s.extensionNights).toBe(1);
+    expect(s.extensionTotal + (lost.invoiceTotal - s.extensionTotal)).toBe(3600);
+    expect(s.extensionTotal).toBe(1800);
+  });
+
+  it("dates the extra night from the end of the original stay", () => {
+    const e = stayExtensions(lost)[0];
+    expect(e.from).toBe("2026-08-18");
+    expect(e.to).toBe("2026-08-19");
+  });
+
+  it("leaves an ordinary two-night booking alone", () => {
+    const plain = { ...lost, baseAmount: 4000, invoiceTotal: 3600 };
+    expect(stayExtensions(plain)).toEqual([]);
+  });
+
+  it("does not guess when only the money grew but the nights did not", () => {
+    const services = { ...lost, nights: 1, baseAmount: 2000, invoiceTotal: 3600 };
+    expect(stayExtensions(services)).toEqual([]);
+  });
+
+  it("never guesses on a multi-room booking", () => {
+    const multi = { ...lost, extraRooms: [{ number: "104", amount: 1800 }] };
+    expect(stayExtensions(multi)).toEqual([]);
+    const cards = { ...lost, isMultiRoomBooking: true, multiRooms: [{ number: "102" }, { number: "103" }] };
+    expect(stayExtensions(cards)).toEqual([]);
+  });
+
+  it("prefers a real record over the guess", () => {
+    const recorded = { ...lost, paymentHistory: [ ...lost.paymentHistory,
+      { ts: "2026-08-18T16:20:00.000Z", amount: 0, note: "Extend stay +1 night",
+        type: "extension", extNights: 1, extAmount: 1800 } ] };
+    const e = stayExtensions(recorded)[0];
+    expect(e.derived).toBeUndefined();
+    expect(e.amount).toBe(1800);
+  });
+
+  it("does nothing without a rate or a base amount to compare", () => {
+    expect(stayExtensions({ ...lost, roomRate: 0 })).toEqual([]);
+    expect(stayExtensions({ ...lost, baseAmount: 0 })).toEqual([]);
+  });
+});

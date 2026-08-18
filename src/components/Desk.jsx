@@ -1413,10 +1413,18 @@ export default function Desk() {
     const extraNights = Math.round((new Date(newCheckout) - new Date(b.checkout)) / 86400000);
     const totalNights = (b.nights || 0) + extraNights;
 
-    const extPayEntry = advance > 0 ? [{
+    // ALWAYS recorded, even when nothing is collected. paymentHistory is the one
+    // part of a booking that has always reached every device; the extensions log
+    // has no Supabase column, so an extension the guest had not yet paid for used
+    // to exist only on the phone that typed it. `amount` is what was actually
+    // taken (often 0 — the guest pays at checkout), `extAmount` is what the extra
+    // nights are worth. A zero-amount row is never counted as a receipt.
+    const extPayEntry = [{
       ts: new Date().toISOString(), tz: deviceTz(), amount: advance, method, txnNumber: txn||"",
-      note: `Extend stay +${extraNights} night${extraNights>1?"s":""}`, type: "room", by: curUser||"staff",
-    }] : [];
+      note: `Extend stay +${extraNights} night${extraNights>1?"s":""}`,
+      type: "extension", extNights: extraNights, extAmount: extTotal,
+      from: b.checkout, to: newCheckout, by: curUser||"staff",
+    }];
     const origTotal = b.invoiceTotal ?? b.amount ?? 0;
     const updated = {
       ...b,

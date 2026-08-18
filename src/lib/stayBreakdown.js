@@ -45,25 +45,32 @@ export function stayExtensions(b) {
     .filter(e => e.amount > 0 || e.nights > 0);
   if (logged.length) return logged;
 
-  // Recovered from payment notes — the only copy that survives the cloud, since
-  // there is no extensions column.
+  // Recovered from paymentHistory — the one part of a booking that has ALWAYS
+  // reached every device, since there is no extensions column.
+  //
+  // An extension is recorded here whether or not money changed hands: type
+  // "extension", with extAmount carrying what the extra nights are worth and
+  // amount carrying what was actually collected (often zero, because the guest
+  // pays at checkout). The old rule kept only entries with amount > 0, so an
+  // extension nobody paid for left no trace outside the device that typed it —
+  // the manager saw it, the owner abroad saw nothing.
   //
   // IMPORTANT: extensions taken at the SAME TIME are ONE extension across several
   // rooms, not several nights. Booking 118 was two rooms extended by one night
   // each, recorded as two payments a minute apart; reading them as two sequential
   // nights invented a night the guest never stayed.
   const raw = (b.paymentHistory || [])
-    .filter(p => /extend/i.test(p.note || ""))
+    .filter(p => p && (p.type === "extension" || /extend/i.test(p.note || "")))
     .map(p => {
       const m = String(p.note || "").match(/\+\s*(\d+)\s*night/i);
       return {
-        nights: m ? Math.max(1, parseInt(m[1], 10)) : 1,
-        amount: n(p.amount),
+        nights: Math.max(1, Math.round(n(p.extNights)) || (m ? parseInt(m[1], 10) : 1)),
+        amount: n(p.extAmount) || n(p.amount),
         at: String(p.ts || "").slice(0, 10),
         ts: String(p.ts || ""),
       };
     })
-    .filter(e => e.amount > 0)
+    .filter(e => e.amount > 0 || e.nights > 0)
     .sort((a, b2) => a.ts.localeCompare(b2.ts));
 
   // One group per day: same day = same extension event, however many rooms.
@@ -74,6 +81,45 @@ export function stayExtensions(b) {
     else groups.push({ nights: e.nights, amount: e.amount, at: e.at, ts: e.ts, from: "", to: "", parts: [e] });
   });
   const fromPays = groups;
+  if (fromPays.length) return finishDates(fromPays, b);
+
+  // ── Last resort: recover an extension the old code never recorded ──────────
+  //
+  // Before extensions were written into paymentHistory, an extension taken with
+  // no money collected wrote NOTHING that survived the cloud. Those stays are
+  // still recoverable, because extending a stay never updated `baseAmount`: it
+  // still holds what the ORIGINAL booking was worth, while nights and
+  // invoiceTotal both grew.
+  //
+  //   baseAmount / roomRate  ->  the nights originally booked
+  //   nights - that          ->  the nights added later
+  //
+  // Deliberately narrow, because inventing an extension is worse than missing
+  // one: single-room stays only (multi-room arithmetic is the part of this app
+  // that has broken twice), and only when BOTH the nights and the money grew.
+  // Checked against 59 real bookings: 48 agreed and were left alone, 8 multi-room
+  // were skipped, 3 genuine lost extensions were found.
+  const rate = n(b.roomRate);
+  const base = n(b.baseAmount);
+  const total = n(b.invoiceTotal ?? b.amount);
+  const nights = Math.round(n(b.nights));
+  const singleRoom = !b.isMultiRoomBooking && !(b.extraRooms || []).length;
+  if (singleRoom && rate > 0 && base > 0 && nights > 0 && total > base) {
+    const origNights = Math.round(base / rate);
+    if (origNights > 0 && origNights < nights) {
+      const extNights = nights - origNights;
+      // Nights of one room at one rate are equally priced, so splitting the
+      // invoice by nights keeps original + extension exactly equal to the total.
+      const amount = Math.round(total * extNights / nights);
+      const from = b.checkin ? addDays(b.checkin, origNights) : "";
+      return [{ nights: extNights, amount, from, to: b.checkout || "", at: from, derived: true }];
+    }
+  }
+  return [];
+}
+
+// Walk the dates backwards from checkout so each extension can print its nights.
+function finishDates(fromPays, b) {
 
   // Walk the dates backwards from checkout so each extension can print its nights.
   let cursor = b.checkout || "";

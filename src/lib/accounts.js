@@ -413,7 +413,10 @@ export function receiptEntries(bookings = []) {
       }));
       return;
     }
-    const history = b.paymentHistory || [];
+    // A zero-amount row is a record of something happening (an extension taken
+    // with nothing collected), not money received. Counting it would print a
+    // phantom 0 receipt on every screen that lists takings.
+    const history = (b.paymentHistory || []).filter(p => (parseFloat(p && p.amount) || 0) !== 0);
     if (history.length) {
       history.forEach(p => entries.push({
         date: p.ts ? String(p.ts).slice(0, 10) : b.checkin,
