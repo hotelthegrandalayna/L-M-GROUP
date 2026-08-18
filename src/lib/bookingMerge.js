@@ -73,8 +73,13 @@ export function mergeBooking(cloudBooking, localBooking, companion) {
       ? [...(Array.isArray(sb.paymentHistory) ? sb.paymentHistory : []), ...extra]
           .sort((a, b) => ts(a).localeCompare(ts(b)))
       : (Array.isArray(sb.paymentHistory) ? sb.paymentHistory : []),
-    // The extension log has no cloud column, so it lives in app_config and is
-    // restored by the caller. Keep whichever copy has entries.
+    // The extension log has no cloud column. This comment used to claim it
+    // "lives in app_config and is restored by the caller" — that mechanism did
+    // not exist, and believing it cost three separate rounds of debugging. It
+    // now genuinely has three homes: paymentHistory entries of type
+    // "extension" (a real column), app_config hotel_booking_extensions, and a
+    // last-resort recovery from baseAmount vs nights. Keep whichever copy has
+    // entries. See lib/bookingRoundTrip.test.js.
     extensions: (Array.isArray(sb.extensions) && sb.extensions.length)
       ? sb.extensions
       : (Array.isArray(l.extensions) ? l.extensions : []),

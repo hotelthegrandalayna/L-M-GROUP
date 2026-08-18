@@ -101,6 +101,23 @@ Invariant: `sum(room gross) − total discount === accommodation sub-total === t
 - **Local-only fields must be preserved in the sync merge** (`AppContext.jsx`), e.g.
   `extensions`, `invoiceExtras`, `paymentHistory`, `guestType`. They have no Supabase
   column and are lost on every sync if not explicitly restored.
+- **A field with no Supabase column vanishes SILENTLY on the next sync.** No
+  error, no warning — it is simply gone the next time any device syncs, and the
+  device that typed it still shows it, so the two disagree and nobody can see why.
+  This cost three separate rounds of debugging on stay extensions alone: fixed on
+  the reading side each time, while the real fault was that nothing ever saved it.
+
+  **Before adding any field to a booking, decide where it survives.**
+  `src/lib/bookingRoundTrip.test.js` enforces this: it runs a fully-populated
+  booking through the real Supabase mappers and fails if any field is in neither
+  `MUST_SURVIVE` nor `LIVES_ELSEWHERE`. If that test fails, the field you just
+  added would have disappeared in production. Do not delete it from the list to
+  make it pass — give the field a home.
+
+  Homes that exist today: a real column; `paymentHistory` (a real column, and
+  where stay extensions now ride); `app_config` (companions, extensions);
+  a `[_marker:]` inside `notes`; or genuinely local-only and cosmetic.
+
 - Dates: never use `toISOString().slice(0,10)` for local dates — it shifts the day
   across timezones. Use a local formatter (`y-m-d` from `getFullYear/Month/Date`).
 

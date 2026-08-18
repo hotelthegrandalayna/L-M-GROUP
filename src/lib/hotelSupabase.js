@@ -86,7 +86,7 @@ function firstImage(val) {
   return val || null;
 }
 
-function buildGuestRow(booking) {
+export function buildGuestRow(booking) {
   const row = {
     // full_name and phone are NOT-NULL columns — never send null, use "" so a
     // guest without a phone (e.g. restored bookings) can still be saved/checked out.
@@ -114,7 +114,7 @@ function buildGuestRow(booking) {
   return row;
 }
 
-function buildBookingRow(booking, guestId) {
+export function buildBookingRow(booking, guestId) {
   const total = toNum(booking.invoiceTotal ?? booking.amount, 0);
   const advance = toNum(booking.advance, 0);
   const restPayment = toNum(booking.restPayment, 0);
@@ -175,7 +175,7 @@ function buildBookingRow(booking, guestId) {
   };
 }
 
-function fromDbBooking(row, guest) {
+export function fromDbBooking(row, guest) {
   const booking = {
     id: Number(row.id),
     guest_id: row.guest_id,
