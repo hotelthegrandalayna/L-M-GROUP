@@ -8,6 +8,7 @@ import { syncNtfyConfigFromSupabase } from "../utils/ntfy";
 import { runDailyBackup } from "../utils/dailyBackup";
 import { supabase } from "../lib/supabaseClient";
 import { emptyRestaurant, normalise as normaliseRestaurant, mergeRestaurant } from "./lib/restaurantMoney";
+import { AMENDMENTS_CONFIG_KEY, AMENDMENTS_CACHE_KEY, mergeAmendmentMaps, addAmendment } from "./lib/invoiceAmend";
 
 const Ctx = createContext(null);
 
@@ -145,6 +146,10 @@ export function HallProvider({ children }) {
   // Coffee house books. One JSON document in app_config, so it reaches every
   // device without needing its own tables. localStorage is the offline cache.
   const [restaurant, setRestaurantRaw] = useState(() => loadLS("a_restaurant", null) || emptyRestaurant());
+  // Corrections made to confirmed invoices. No column on the invoice row, and
+  // the audit_log table is write-only in this app, so it lives in app_config
+  // or the owner abroad would never see who changed what.
+  const [amendments, setAmendmentsRaw] = useState(() => loadLS(AMENDMENTS_CACHE_KEY, {}));
   const [activeTab, setActiveTab] = useState("invoice");
   const [notification, setNotification] = useState(null);
   const [invoiceJumpSignal, setInvoiceJumpSignal] = useState(0);
@@ -212,18 +217,26 @@ export function HallProvider({ children }) {
     // Sync hall config items from app_config
     try {
       const { loadConfig } = await import("../utils/supabaseSync");
-      const [cutlery, renames, smsConfig, expTypesCfg, restaurantCfg] = await Promise.all([
+      const [cutlery, renames, smsConfig, expTypesCfg, restaurantCfg, amendCfg] = await Promise.all([
         loadConfig("hall_cutlery"),
         loadConfig("hall_staff_renames"),
         loadConfig("hall_sms_config"),
         loadConfig("hall_exp_types"),
         loadConfig("hall_restaurant"),
+        loadConfig(AMENDMENTS_CONFIG_KEY),
       ]);
       // The cloud is the truth for the coffee house books — but a row typed
       // seconds ago may not have reached it yet, and replacing local state
       // outright would make that row vanish in front of whoever just typed it.
       // mergeRestaurant keeps anything this device has that the cloud has not
       // seen; everything else comes from the cloud.
+      if (amendCfg && typeof amendCfg === "object") {
+        setAmendmentsRaw(prev => {
+          const merged = mergeAmendmentMaps(prev, amendCfg);
+          localStorage.setItem(AMENDMENTS_CACHE_KEY, JSON.stringify(merged));
+          return merged;
+        });
+      }
       if (restaurantCfg && typeof restaurantCfg === "object") {
         setRestaurantRaw(prev => {
           const v = mergeRestaurant(restaurantCfg, prev);
@@ -415,6 +428,20 @@ export function HallProvider({ children }) {
   // ── Coffee house books — source of truth is Supabase app_config ────────────
   // Saved as one document so a day's sales, its purchases and the drawer count
   // can never reach the cloud half-written and disagree with each other.
+  // Record a correction to a confirmed invoice. Merged into what is already
+  // stored, so two admins correcting two invoices cannot overwrite each other.
+  const recordAmendment = useCallback((invoiceId, entry) => {
+    if (!invoiceId || !entry) return;
+    setAmendmentsRaw(prev => {
+      const merged = addAmendment(prev, invoiceId, entry);
+      localStorage.setItem(AMENDMENTS_CACHE_KEY, JSON.stringify(merged));
+      if (hasSupabase()) {
+        import("../utils/supabaseSync").then(({ saveConfig }) => saveConfig(AMENDMENTS_CONFIG_KEY, merged)).catch(() => {});
+      }
+      return merged;
+    });
+  }, []);
+
   const setRestaurant = useCallback(next => {
     setRestaurantRaw(prev => {
       const v = normaliseRestaurant(typeof next === "function" ? next(prev) : next);
@@ -460,7 +487,7 @@ export function HallProvider({ children }) {
   }, []);
 
   return (
-    <Ctx.Provider value={{ curUser, curRole, login, logout, invoices, setInvoices, expenses, setExpenses, deleteExpense, expTypes, setExpenseType, removeExpenseType, revenues, setRevenues, leads, setLeads, restaurant, setRestaurant, activeTab, setActiveTab, notification, notify, invoiceJumpSignal, bumpInvoiceJump }}>
+    <Ctx.Provider value={{ curUser, curRole, login, logout, invoices, setInvoices, expenses, setExpenses, deleteExpense, expTypes, setExpenseType, removeExpenseType, revenues, setRevenues, leads, setLeads, restaurant, setRestaurant, amendments, recordAmendment, activeTab, setActiveTab, notification, notify, invoiceJumpSignal, bumpInvoiceJump }}>
       {children}
     </Ctx.Provider>
   );

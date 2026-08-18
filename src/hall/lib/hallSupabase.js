@@ -142,7 +142,7 @@ function buildBaseInvoiceRow(invoice, idOverride) {
   };
 }
 
-function buildEventDetailRows(invoice, invoiceId) {
+export function buildEventDetailRows(invoice, invoiceId) {
   const rows = [];
 
   const common = {
@@ -258,7 +258,7 @@ function buildServiceRows(invoice, invoiceId) {
   });
 }
 
-function applyDetailToInvoice(target, detail) {
+export function applyDetailToInvoice(target, detail) {
   const section = String(detail.event_section || "").toLowerCase();
   const prefix = section.includes("holud")
     ? "h"
@@ -318,6 +318,13 @@ function applyDetailToInvoice(target, detail) {
     target.wTables = detail.tables_count ?? target.wTables ?? "";
     target.genTitle = detail.custom_event_name || target.genTitle || "";
     target.wVenue = detail.venue || target.wVenue || "";
+    // Generic events write these too (see buildEventDetailRows) but used to
+    // drop them on the way back, so every non-wedding invoice came back with
+    // no rental in its parts while the stored total was still correct.
+    // Opening one and saving it then recomputed the total as zero.
+    target.wWaiters = detail.waiters ?? target.wWaiters ?? "";
+    target.wWaiterPrice = detail.waiter_price ?? target.wWaiterPrice ?? "";
+    target.wRental = detail.hall_rental ?? target.wRental ?? "";
   }
 }
 

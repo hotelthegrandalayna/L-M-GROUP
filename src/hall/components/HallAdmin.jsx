@@ -1,6 +1,7 @@
 
 import { useState, useMemo, useEffect } from "react";
 import { useHall, EV_TYPES, checkHallAdminPass, invBilled, invCollected, invOutstanding, invInMonth, sumBy, businessExpensesOnly, recordDeletedId } from "../HallContext";
+import { allAmendments } from "../lib/invoiceAmend";
 import useIsMobile from "../useIsMobile";
 import { loadWaConfig, saveWaConfig, sendWhatsAppAlert } from "../../utils/whatsapp";
 import { loadNtfyConfig, saveNtfyConfig, sendNtfyAlert } from "../../utils/ntfy";
@@ -64,7 +65,7 @@ const subTabStyle = (active) => ({
 });
 
 export default function HallAdmin() {
-  const { curRole, invoices, setInvoices, expenses, setExpenses, expTypes, revenues, setRevenues, leads, setLeads, notify } = useHall();
+  const { curRole, invoices, setInvoices, expenses, setExpenses, expTypes, revenues, setRevenues, leads, setLeads, notify, amendments } = useHall();
   const isMobile = useIsMobile();
   const [tab, setTab] = useState("overview");
   const isAdmin = curRole === "admin";
@@ -356,6 +357,7 @@ export default function HallAdmin() {
     ...(isAdmin ? [
       { id:"pricing",  label:"💰 Pricing Rules" },
       { id:"sms",      label:"📱 SMS"      },
+      { id:"amend",    label:"🔒 Invoice Amendments" },
       { id:"audit",    label:"🕵 Audit Log" },
       { id:"loginlog", label:"🔍 Login Activity" },
       { id:"sync",     label:"☁️ Sync to Cloud" },
@@ -892,6 +894,7 @@ export default function HallAdmin() {
       {tab==="insights" && <InsightsPanel invoices={invoices} expenses={expenses} expTypes={expTypes} leads={leads} />}
       {tab==="pricing" && isAdmin && <PricingRulesPanel notify={notify} />}
       {tab==="sms" && isAdmin && <SmsPanel notify={notify} isMobile={isMobile} invoices={invoices} />}
+      {tab==="amend" && isAdmin && <AmendmentsList rows={allAmendments(amendments, invoices)} />}
       {tab==="audit" && isAdmin && <AuditLogViewer scope="hall" title="Hall — Activity Audit Log" checkPassword={checkHallAdminPass} notify={notify} />}
       {tab==="loginlog" && isAdmin && <LoginActivityPanel notify={notify} />}
       {tab==="sync" && isAdmin && <SyncPanel notify={notify} invoices={invoices} expenses={expenses} revenues={revenues} leads={leads} />}
@@ -2177,6 +2180,69 @@ function SmsPanel({ notify, isMobile, invoices }) {
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ── Every correction made to a confirmed invoice, newest first ───────────────
+// The per-invoice history lives on the invoice itself; this is the one place to
+// see them all, which is what you want when a month's total has moved and you
+// need to know why.
+function AmendmentsList({ rows }) {
+  const C2 = { maroon:"#7B1212", dim:"#666", bd:"#e0d0b0", green:"#1a7040", red:"#c0392b" };
+  const MON = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+  const monthLbl = m => (/^\d{4}-\d{2}$/.test(m || "") ? MON[parseInt(m.slice(5,7),10)-1] + " " + m.slice(0,4) : m || "");
+  const th = { padding:"10px 13px", textAlign:"left", fontSize:10, textTransform:"uppercase", letterSpacing:.8,
+    color:C2.dim, fontWeight:800, background:"#fbf8f1", borderBottom:"1px solid "+C2.bd, whiteSpace:"nowrap" };
+  const td = { padding:"11px 13px", borderBottom:"1px solid #efe6d4", fontSize:13, verticalAlign:"top" };
+
+  return (
+    <div style={{ background:"#fff", border:"1px solid "+C2.bd, borderRadius:12, overflow:"hidden" }}>
+      <div style={{ padding:"13px 16px", borderBottom:"1px solid "+C2.bd, display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
+        <span style={{ fontSize:11, fontWeight:800, letterSpacing:1, textTransform:"uppercase", color:C2.maroon }}>Invoice amendments</span>
+        <span style={{ fontSize:11.5, color:C2.dim }}>{rows.length} recorded</span>
+        <span style={{ marginLeft:"auto", fontSize:11, color:C2.dim }}>confirmed invoices corrected by an admin</span>
+      </div>
+      {rows.length === 0 ? (
+        <div style={{ padding:"26px 16px", textAlign:"center", color:C2.dim, fontSize:13 }}>
+          No confirmed invoice has been amended yet.
+        </div>
+      ) : (
+        <div style={{ overflowX:"auto" }}>
+          <table style={{ borderCollapse:"collapse", width:"100%", minWidth:660 }}>
+            <thead><tr>
+              <th style={th}>When</th><th style={th}>Invoice</th><th style={th}>Client</th>
+              <th style={th}>By</th><th style={th}>Changed</th>
+            </tr></thead>
+            <tbody>
+              {rows.map((r, i) => (
+                <tr key={r.invoiceId + "-" + i}>
+                  <td style={{ ...td, whiteSpace:"nowrap", color:C2.dim, fontSize:12 }}>
+                    {String(r.ts || "").slice(0,10)}<br />{String(r.ts || "").slice(11,16)}
+                  </td>
+                  <td style={{ ...td, fontWeight:700, whiteSpace:"nowrap" }}>{r.num}</td>
+                  <td style={td}>{r.client || "—"}</td>
+                  <td style={{ ...td, whiteSpace:"nowrap" }}>{r.by || "admin"}</td>
+                  <td style={td}>
+                    {(r.changes || []).map(c => (
+                      <div key={c.field} style={{ lineHeight:1.7 }}>
+                        {c.label}: <span style={{ color:C2.red, textDecoration:"line-through" }}>{c.was}</span>
+                        {" → "}<span style={{ color:C2.green, fontWeight:700 }}>{c.now}</span>
+                      </div>
+                    ))}
+                    {r.move && (
+                      <div style={{ marginTop:5, fontSize:11.5, color:"#5c4500", background:"#fff8e6",
+                        border:"1px solid #c9a84c", borderRadius:6, padding:"5px 9px", display:"inline-block" }}>
+                        money moved {monthLbl(r.move.from)} → {monthLbl(r.move.to)}
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

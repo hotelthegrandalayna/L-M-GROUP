@@ -1,5 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { useHall, EV_TYPES, checkHallAdminPass, invBilled, invCollected, invOutstanding, invInMonth, sumBy, recordDeletedId } from "../HallContext";
+import { buildAmendment, diffInvoice, monthMove } from "../lib/invoiceAmend";
 import useIsMobile from "../useIsMobile";
 import { sendSmsForInvoice } from "./HallAdmin";
 import { sendWhatsAppAlert, buildHallWaMessage } from "../../utils/whatsapp";
@@ -90,6 +91,12 @@ const SVC_ICONS = {
     color: "#fff",
   },
 };
+
+function fmtMonthLabel(m) {
+  if (!/^d{4}-d{2}$/.test(m || "")) return m || "";
+  const names = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+  return names[parseInt(m.slice(5, 7), 10) - 1] + " " + m.slice(0, 4);
+}
 
 function DateInput({ value, onChange, min, style }) {
   const display = value ? value.split('-').reverse().join('/') : '';
@@ -276,7 +283,7 @@ function newInvObj(num) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 export default function HallInvoice() {
-  const { invoices, setInvoices, leads = [], setLeads, notify, invoiceJumpSignal, curUser } =
+  const { invoices, setInvoices, leads = [], setLeads, notify, invoiceJumpSignal, curUser, curRole, amendments, recordAmendment } =
     useHall();
   const isMobile = useIsMobile();
   const [view, setView] = useState("form");
@@ -293,6 +300,14 @@ export default function HallInvoice() {
     return eventDate && eventDate <= yesterday;
   });
   const [editInv, setEditInv] = useState(() => null); // will init in effect
+  const isHallAdmin = curRole === "admin";
+  // Correcting a CONFIRMED invoice. Kept separate from ordinary editing so a
+  // draft and a correction can never be confused: it needs the admin password,
+  // it allows past dates, and it always leaves a record.
+  const [amendGate, setAmendGate] = useState(null);   // invoice awaiting the password
+  const [amendPass, setAmendPass] = useState("");
+  const [amendOrigin, setAmendOrigin] = useState(null); // the invoice as it was before edits
+  const [amendConfirm, setAmendConfirm] = useState(null); // { before, after, changes, move }
   const [detailInv, setDetailInv] = useState(null);
   const [search, setSearch] = useState("");
   const [filterType, setFilterType] = useState("");
@@ -341,6 +356,41 @@ export default function HallInvoice() {
     setView("form");
     setFormKey((k) => k + 1);
   }
+  function startAmend(inv) { setAmendGate(inv); setAmendPass(""); }
+
+  // Amending never writes straight away: the admin is shown exactly what will
+  // change, and — because the hall groups money by EVENT date — which months the
+  // money moves between. Nothing is saved until that is confirmed.
+  function requestAmendConfirm(draft, lead, andView) {
+    const before = amendOrigin;
+    const final = finalizeInvoice(draft, lead, true);
+    const changes = diffInvoice(before, final);
+    if (!changes.length) {
+      notify("Nothing changed", "error");
+      return;
+    }
+    setAmendConfirm({ before, draft, final, lead, andView, changes, move: monthMove(before, final) });
+  }
+
+  function applyAmendment() {
+    if (!amendConfirm) return;
+    const { before, draft, final, lead, andView } = amendConfirm;
+    const entry = buildAmendment(before, final, curUser || "admin");
+    setAmendConfirm(null);
+    setAmendOrigin(null);
+    if (entry) recordAmendment(before.id, entry);
+    computeAndSave(draft, lead, !!andView, true);
+    notify("Invoice " + (before.num || "") + " amended", "success");
+  }
+  function confirmAmendGate() {
+    if (!checkHallAdminPass(amendPass)) { notify("Incorrect password", "error"); return; }
+    const inv = amendGate;
+    setAmendGate(null);
+    setAmendPass("");
+    setAmendOrigin(inv);      // remember the invoice as it was, to diff against
+    openEdit(inv);
+  }
+
   function openEdit(inv) {
     setEditInv({
       ...newInvObj(inv.num),
@@ -379,14 +429,20 @@ export default function HallInvoice() {
     setFormKey((k) => k + 1);
   }
 
-  function computeAndSave(inv, isLead, andView) {
+  // The record exactly as it will be stored. Split out of computeAndSave so an
+  // amendment diffs against what is ACTUALLY written rather than the raw form
+  // draft: the totals are recomputed in here, and a change nobody is shown is a
+  // change nobody agreed to.
+  function finalizeInvoice(inv, isLead, amending) {
     // Apply smart AM/PM to any time fields that the user typed as plain numbers
     const nightMode = (inv.wTod || "") === "night";
     const today = new Date().toISOString().split("T")[0];
     inv = {
       ...inv,
       // Refresh invoice date to today when converting a lead to a full invoice
-      invDate: isLead ? (inv.invDate || today) : today,
+      // Amending an existing invoice keeps its original invoice date —
+      // only a lead becoming a real invoice gets today's date.
+      invDate: (isLead || amending) ? (inv.invDate || today) : today,
       hStart: smartTime(inv.hStart, "holud-start") || inv.hStart,
       hEnd:   smartTime(inv.hEnd,   "holud-end")   || inv.hEnd,
       wStart: smartTime(inv.wStart, nightMode ? "night-start" : "day") || inv.wStart,
@@ -425,6 +481,11 @@ export default function HallInvoice() {
       waiterPayStatus,
       isLead: isLead || false,
     };
+    return final;
+  }
+
+  function computeAndSave(inv, isLead, andView, amending) {
+    const final = finalizeInvoice(inv, isLead, amending);
     const isExistingRecord = invoices.some((i) => i.id === inv.id);
     const id = isUuidLike(inv.id) ? inv.id : crypto.randomUUID();
 
@@ -581,9 +642,93 @@ export default function HallInvoice() {
     return list;
   }, [invoices, search, filterType, filterStatus, filterMonth]);
 
+  // Both dialogs render in every branch. The gate is raised from the list, but
+  // the confirmation only appears once the form is open, so keeping them in one
+  // branch meant the confirmation could never be seen.
+  const amendModals = (
+    <>
+        {/* ── Amend gate: the admin password, the same one that guards deleting ── */}
+        {amendGate && (
+          <div className="modal-overlay open" onClick={(e) => e.target === e.currentTarget && setAmendGate(null)}>
+            <div className="modal-box" style={{ maxWidth: 420 }}>
+              <div className="modal-header">
+                <div className="modal-title">🔒 Amend {amendGate.num}</div>
+                <button className="modal-close" onClick={() => setAmendGate(null)}>✕</button>
+              </div>
+              <div style={{ padding: "4px 2px 12px", fontSize: 13, lineHeight: 1.65, color: "#4a4a4a" }}>
+                This invoice is confirmed. Correcting it can move money between months,
+                so it needs the admin password and the change will be recorded against
+                your name. <b>The invoice number will not change.</b>
+              </div>
+              <input
+                type="password" autoFocus value={amendPass}
+                onChange={(e) => setAmendPass(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && confirmAmendGate()}
+                placeholder="Admin password"
+                style={{ width: "100%", padding: "10px 12px", border: "1.5px solid #e0d0b0", borderRadius: 8, fontSize: 14, fontFamily: "inherit", boxSizing: "border-box" }}
+              />
+              <div className="modal-actions" style={{ marginTop: 14 }}>
+                <button className="btn" onClick={() => setAmendGate(null)}>Cancel</button>
+                <button className="btn primary" onClick={confirmAmendGate}>Unlock</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── What this amendment actually changes, before anything is written ── */}
+        {amendConfirm && (
+          <div className="modal-overlay open" onClick={(e) => e.target === e.currentTarget && setAmendConfirm(null)}>
+            <div className="modal-box" style={{ maxWidth: 560, maxHeight: "88vh", overflowY: "auto" }}>
+              <div className="modal-header">
+                <div className="modal-title">⚠ Confirm this amendment</div>
+                <button className="modal-close" onClick={() => setAmendConfirm(null)}>✕</button>
+              </div>
+              <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 13 }}>
+                <thead>
+                  <tr>
+                    {["Field", "Was", "Becomes"].map((h) => (
+                      <th key={h} style={{ padding: "9px 12px", textAlign: "left", fontSize: 10, textTransform: "uppercase", letterSpacing: 0.8, color: "#666", fontWeight: 800, background: "#fbf8f1", borderBottom: "1px solid #e0d0b0" }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {amendConfirm.changes.map((c) => (
+                    <tr key={c.field}>
+                      <td style={{ padding: "10px 12px", borderBottom: "1px solid #efe6d4" }}>{c.label}</td>
+                      <td style={{ padding: "10px 12px", borderBottom: "1px solid #efe6d4", color: "#c0392b", textDecoration: "line-through" }}>{c.was}</td>
+                      <td style={{ padding: "10px 12px", borderBottom: "1px solid #efe6d4", color: "#1a7040", fontWeight: 700 }}>{c.now}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              {amendConfirm.move && (
+                <div style={{ background: "#fff8e6", border: "1px solid #c9a84c", borderRadius: 9, padding: "12px 14px", fontSize: 12.5, color: "#5c4500", lineHeight: 1.65, marginTop: 13 }}>
+                  <b>This moves ৳{Math.round(amendConfirm.move.billed).toLocaleString("en-US")} out of{" "}
+                  {fmtMonthLabel(amendConfirm.move.from)} and into {fmtMonthLabel(amendConfirm.move.to)}.</b>{" "}
+                  Both months' billed, collected and outstanding figures will change.
+                </div>
+              )}
+
+              <div style={{ fontSize: 12, color: "#666", marginTop: 12, lineHeight: 1.6 }}>
+                Recorded against invoice <b>{amendConfirm.before.num}</b> as {curUser || "admin"}.
+                Payments already taken are not altered.
+              </div>
+
+              <div className="modal-actions" style={{ marginTop: 14 }}>
+                <button className="btn" onClick={() => setAmendConfirm(null)}>Cancel</button>
+                <button className="btn primary" onClick={applyAmendment}>✓ Save the amendment</button>
+              </div>
+            </div>
+          </div>
+        )}
+    </>
+  );
+
   if (view === "form")
     return (
       <>
+        {amendModals}
         {/* ── Unpaid Past Events Alert ── */}
         {unpaidPastEvents.length > 0 && (
           <div style={{
@@ -646,14 +791,15 @@ export default function HallInvoice() {
         <InvForm
           key={formKey}
           inv={currentForm}
-          onSave={(d, lead) => computeAndSave(d, lead, false)}
-          onSavePreview={(d, lead) => computeAndSave(d, lead, true)}
+          onSave={(d, lead) => amendOrigin ? requestAmendConfirm(d, lead, false) : computeAndSave(d, lead, false)}
+          onSavePreview={(d, lead) => amendOrigin ? requestAmendConfirm(d, lead, true) : computeAndSave(d, lead, true)}
           onCancel={requestClear}
           onViewHistory={openHistory}
           notify={notify}
           isMobile={isMobile}
           invoices={invoices}
           invoiceCount={invoices.length}
+          amending={!!amendOrigin}
         />
         {clearConfirm && (
           <div
@@ -699,6 +845,9 @@ export default function HallInvoice() {
         inv={detailInv}
         setDetailInv={setDetailInv}
         onEdit={() => openEdit(detailInv)}
+        onAmend={() => startAmend(detailInv)}
+        canAmend={isHallAdmin}
+        amendHistory={(amendments || {})[String(detailInv?.id)] || []}
         onBack={() => setView("list")}
         onDelete={() => startDelete(detailInv)}
         deleteModal={deleteModal}
@@ -958,10 +1107,23 @@ export default function HallInvoice() {
                   ✏️
                 </button>
               )}
+              {/* A confirmed invoice can only be corrected by an admin, and only
+                  through the amend flow — password, preview, and a record kept. */}
+              {inv.confirmed && !inv.isLead && isHallAdmin && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); startAmend(inv); }}
+                  title="Amend this confirmed invoice"
+                  style={btnStyle("sm")}
+                >
+                  🔒✏️
+                </button>
+              )}
             </div>
           );
         })}
       </div>
+
+      {amendModals}
 
       {deleteModal && (
         <DeleteModal
@@ -1004,6 +1166,7 @@ function InvForm({
   invoiceCount,
   isMobile,
   invoices,
+  amending,
 }) {
   const [d, setD] = useState(() => ({ ...inv }));
   const imgRef = useRef();
@@ -1653,11 +1816,18 @@ function InvForm({
             />
           </Field>
           <Field label="Invoice Date">
+            {/* Locked in normal use — the issue date is not something to retype
+                by accident. An admin amending a confirmed invoice can correct it,
+                which is the whole point of an amendment. */}
             <input
-              readOnly
-              value={fmtDate(d.invDate)}
+              readOnly={!amending}
+              type={amending ? "date" : "text"}
+              value={amending ? (d.invDate || "") : fmtDate(d.invDate)}
+              onChange={
+                amending ? (e) => set("invDate", e.target.value) : undefined
+              }
               style={inputStyle({
-                background: "#fffdf0",
+                background: amending ? "#fff" : "#fffdf0",
                 borderColor: "#d4a800",
               })}
             />
@@ -1761,7 +1931,7 @@ function InvForm({
                 <div style={{ fontSize:11, fontWeight:800, color:"#8a6200", marginBottom:10, letterSpacing:1, textTransform:"uppercase" }}>🌼 Holud Date & Time</div>
                 <ConflictWarning conflict={hDateConflict} field="h" />
                 <Field label="Holud Date *">
-                  <DateInput min={todayStr} value={d.hDate || ""}
+                  <DateInput min={amending ? undefined : todayStr} value={d.hDate || ""}
                     onChange={e => set("hDate", e.target.value)}
                     style={inputStyle(hDateConflict ? { borderColor:"#f0b429" } : {})} />
                   {d.hDate && <div style={{ fontSize:11, color:"#8a6200", marginTop:3, fontWeight:600 }}>📅 {new Date(d.hDate+"T00:00:00").toLocaleDateString("en-GB",{weekday:"long"})}</div>}
@@ -1780,7 +1950,7 @@ function InvForm({
                 <div style={{ fontSize:11, fontWeight:800, color:"#7B1212", marginBottom:10, letterSpacing:1, textTransform:"uppercase" }}>💒 Wedding Date & Time</div>
                 <ConflictWarning conflict={evDateConflict} field="ev" />
                 <Field label="Wedding Date *">
-                  <DateInput min={todayStr} value={d.evDate || ""}
+                  <DateInput min={amending ? undefined : todayStr} value={d.evDate || ""}
                     onChange={e => set("evDate", e.target.value)}
                     style={inputStyle(fieldErrors.evDate ? { borderColor:"#c0392b", background:"#fff5f5" } : evDateConflict ? { borderColor:"#f0b429" } : {})} />
                   {d.evDate && <div style={{ fontSize:11, color:"#7B1212", marginTop:3, fontWeight:600 }}>📅 {new Date(d.evDate+"T00:00:00").toLocaleDateString("en-GB",{weekday:"long"})}</div>}
@@ -1814,7 +1984,7 @@ function InvForm({
               <ConflictWarning conflict={hDateConflict} field="h" />
               <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))", gap:12 }}>
                 <Field label="Holud Date *">
-                  <DateInput min={todayStr} value={d.hDate || ""}
+                  <DateInput min={amending ? undefined : todayStr} value={d.hDate || ""}
                     onChange={e => set("hDate", e.target.value)}
                     style={inputStyle(hDateConflict ? { borderColor:"#f0b429" } : {})} />
                   {d.hDate && <div style={{ fontSize:11, color:"#8a6200", marginTop:3, fontWeight:600 }}>📅 {new Date(d.hDate+"T00:00:00").toLocaleDateString("en-GB",{weekday:"long"})}</div>}
@@ -1834,7 +2004,7 @@ function InvForm({
               <ConflictWarning conflict={evDateConflict} field="ev" />
               <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))", gap:12 }}>
                 <Field label="Event Date *">
-                  <DateInput min={todayStr} value={d.evDate || ""}
+                  <DateInput min={amending ? undefined : todayStr} value={d.evDate || ""}
                     onChange={e => set("evDate", e.target.value)}
                     style={inputStyle(fieldErrors.evDate ? { borderColor:"#c0392b", background:"#fff5f5" } : evDateConflict ? { borderColor:"#f0b429" } : {})} />
                   {d.evDate && <div style={{ fontSize:11, color:"#7B1212", marginTop:3, fontWeight:600 }}>📅 {new Date(d.evDate+"T00:00:00").toLocaleDateString("en-GB",{weekday:"long"})}</div>}
@@ -1866,7 +2036,7 @@ function InvForm({
               <ConflictWarning conflict={evDateConflict} field="ev" />
               <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))", gap:12 }}>
                 <Field label="Event Date *">
-                  <DateInput min={todayStr} value={d.evDate || ""}
+                  <DateInput min={amending ? undefined : todayStr} value={d.evDate || ""}
                     onChange={e => set("evDate", e.target.value)}
                     style={inputStyle(fieldErrors.evDate ? { borderColor:"#c0392b", background:"#fff5f5" } : evDateConflict ? { borderColor:"#f0b429" } : {})} />
                   {d.evDate && <div style={{ fontSize:11, color:"#1a7040", marginTop:3, fontWeight:600 }}>📅 {new Date(d.evDate+"T00:00:00").toLocaleDateString("en-GB",{weekday:"long"})}</div>}
@@ -3483,6 +3653,7 @@ function InvForm({
               <button type="button" onClick={onCancel} style={btnStyle()}>
                 Clear
               </button>
+              {!amending && (
               <button
                 type="button"
                 onClick={() => {
@@ -3505,6 +3676,7 @@ function InvForm({
               >
                 🤝 Save as Lead
               </button>
+              )}
               <button
                 type="button"
                 onClick={() => {
@@ -3576,6 +3748,9 @@ function InvDetail({
   inv,
   setDetailInv,
   onEdit,
+  onAmend,
+  canAmend,
+  amendHistory,
   onBack,
   onDelete,
   deleteModal,
@@ -4182,6 +4357,11 @@ function InvDetail({
               ✏️ Edit
             </button>
           )}
+          {inv.confirmed && !inv.isLead && canAmend && (
+            <button onClick={onAmend} style={btnStyle("", "sm")}>
+              🔒 Amend
+            </button>
+          )}
           {!inv.confirmed && !inv.isLead && (
             <button
               onClick={confirmAndPrint}
@@ -4225,6 +4405,33 @@ function InvDetail({
           )}
         </div>
       </div>
+      {/* What has been corrected on this invoice, and by whom. Shown in the app
+          only — it never appears on the copy the client is given. */}
+      {(amendHistory || []).length > 0 && (
+        <div style={{ margin: "14px 0 0", border: "1px solid #e0d0b0", borderRadius: 10, overflow: "hidden", background: "#fff" }}>
+          <div style={{ padding: "10px 14px", borderBottom: "1px solid #e0d0b0", fontSize: 10.5, fontWeight: 800, letterSpacing: 0.9, textTransform: "uppercase", color: "#7B1212" }}>
+            🔒 Amendment history · {amendHistory.length}
+          </div>
+          {amendHistory.slice().reverse().map((a, i) => (
+            <div key={i} style={{ padding: "10px 14px", borderTop: i ? "1px solid #efe6d4" : "none", fontSize: 12.5 }}>
+              <div style={{ color: "#666", fontSize: 11, marginBottom: 4 }}>
+                {String(a.ts || "").slice(0, 10)} · {String(a.ts || "").slice(11, 16)} · {a.by || "admin"}
+              </div>
+              {(a.changes || []).map((c) => (
+                <div key={c.field} style={{ lineHeight: 1.7 }}>
+                  {c.label}: <span style={{ color: "#c0392b", textDecoration: "line-through" }}>{c.was}</span>
+                  {" → "}<span style={{ color: "#1a7040", fontWeight: 700 }}>{c.now}</span>
+                </div>
+              ))}
+              {a.move && (
+                <div style={{ marginTop: 5, fontSize: 11.5, color: "#5c4500" }}>
+                  Moved money from {fmtMonthLabel(a.move.from)} to {fmtMonthLabel(a.move.to)}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
 
       {!inv.confirmed && !inv.isLead && (
         <div
