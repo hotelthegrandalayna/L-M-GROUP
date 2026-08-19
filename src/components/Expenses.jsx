@@ -7,6 +7,8 @@ import { deleteRow, hasSupabase } from "../utils/supabaseSync";
 import { gaRecordDeleted } from "../context/AppContext";
 import { hotelExpenseType } from "../utils/expenseType";
 import CostAnalysis from "./CostAnalysis";
+import CategoryChips from "./CategoryChips";
+import { toggleCat, filterByCats, totalsByCat } from "../lib/catFilter";
 
 // Hotel theme: navy primary (vs hall maroon) so the two sides are easy to tell apart
 const C = { navy:"#1e3a5f", gold:"#c9a84c", dim:"#666", border:"#cdd7e4", green:"#1a7040", red:"#c0392b", orange:"#e67e22" };
@@ -80,7 +82,9 @@ export default function Expenses() {
   const [editId, setEditId]   = useState(null);
   const [errors, setErrors]   = useState({});
   const [search, setSearch]   = useState("");
-  const [filterCat, setFilterCat] = useState("");
+  // Several categories at once. An EMPTY list means every category, exactly as
+  // "All Categories" did — so clearing the filter never blanks the screen.
+  const [filterCats, setFilterCats] = useState([]);
   const [filterType, setFilterType] = useState(""); // "" | "business" | "nonbusiness"
   // Choosing a month is an admin tool. A manager always sees THIS month — the
   // value is forced here rather than merely hiding the dropdown, so every figure
@@ -221,14 +225,23 @@ export default function Expenses() {
   [allBizItems, filterMonth]);
 
   // ── Filtered list ─────────────────────────────────────────────────────────────
+  // The amount on each chip covers the month and type already on screen, so it
+  // always agrees with the total underneath.
+  const catTotals = useMemo(() => {
+    let list = [...normalizedExpenses];
+    if (filterType)  list = list.filter(e => e.expType === filterType);
+    if (filterMonth) list = list.filter(e => (e.date||"").startsWith(filterMonth));
+    return totalsByCat(list, e => e.category, e => e.amount);
+  }, [normalizedExpenses, filterType, filterMonth]);
+
   const filtered = useMemo(() => {
     let list = [...normalizedExpenses];
     if (search)      list = list.filter(e => (e.category||"").toLowerCase().includes(search.toLowerCase()) || (e.note||"").toLowerCase().includes(search.toLowerCase()) || (e.empName||"").toLowerCase().includes(search.toLowerCase()));
-    if (filterCat)   list = list.filter(e => e.category === filterCat);
+    list = filterByCats(list, filterCats, e => e.category);
     if (filterType)  list = list.filter(e => e.expType === filterType);
     if (filterMonth) list = list.filter(e => (e.date||"").startsWith(filterMonth));
     return list.sort((a,b) => (b.date||"") > (a.date||"") ? 1 : -1);
-  }, [normalizedExpenses, search, filterCat, filterType, filterMonth]);
+  }, [normalizedExpenses, search, filterCats, filterType, filterMonth]);
 
   const filteredTotal = filtered.reduce((s,e)=>s+(e.amount||0),0);
 
@@ -399,7 +412,7 @@ export default function Expenses() {
         monthLabel={monthLabel}
         catEmoji={CAT_EMOJI}
         accent={C.navy}
-        onPickCategory={cat => { setFilterCat(prev => prev === cat ? "" : cat); setShowRecords(true); }}
+        onPickCategory={cat => { setFilterCats(prev => toggleCat(prev, cat)); setShowRecords(true); }}
       />
 
       {/* ── Record Expense Form — whole panel tints with the selected type ── */}
@@ -553,10 +566,6 @@ export default function Expenses() {
           <option value="business">🏨 Business</option>
           <option value="nonbusiness">💸 Non-Business</option>
         </select>
-        <select value={filterCat} onChange={e=>setFilterCat(e.target.value)} style={{ ...inp(), maxWidth:200 }}>
-          <option value="">All Categories</option>
-          {[...BUSINESS_CAT_OPTIONS,...NONBUSINESS_CAT_OPTIONS].map(o=><option key={o.v} value={o.v}>{o.l}</option>)}
-        </select>
         {isAdmin && <select value={filterMonth} onChange={e=>setFilterMonth(e.target.value)} style={{ ...inp(), maxWidth:170 }}>
           <option value="">All Months</option>
           {allMonths.map(m=>{
@@ -566,6 +575,19 @@ export default function Expenses() {
         </select>}
         <button onClick={exportCSV} style={{ padding:"9px 14px", borderRadius:8, border:"1.5px solid #d5dce6", background:"#fff", cursor:"pointer", fontFamily:"inherit", fontWeight:700, fontSize:11, whiteSpace:"nowrap" }}>⬇ CSV</button>
       </div>
+
+      <CategoryChips
+        groups={[
+          { name: "Business",     options: BUSINESS_CAT_OPTIONS },
+          { name: "Non-business", options: NONBUSINESS_CAT_OPTIONS },
+        ]}
+        selected={filterCats}
+        onToggle={cat => setFilterCats(prev => toggleCat(prev, cat))}
+        onSelectAll={() => setFilterCats([...BUSINESS_CAT_OPTIONS, ...NONBUSINESS_CAT_OPTIONS].map(o => o.v))}
+        onClear={() => setFilterCats([])}
+        totals={catTotals}
+        accent={C.navy}
+      />
 
       {/* ── Filtered total bar ── */}
       <div style={{ display:"flex", gap:12, marginBottom:10, flexWrap:"wrap" }}>

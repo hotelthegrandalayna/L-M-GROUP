@@ -3,6 +3,8 @@ import { useState, useMemo, useRef } from "react";
 import { useHall, EXP_CATS, checkHallAdminPass, invBilled, invCollected, invOutstanding, invInMonth, sumBy, expenseType } from "../HallContext";
 import useIsMobile from "../useIsMobile";
 import CostAnalysis from "../../components/CostAnalysis";
+import CategoryChips from "../../components/CategoryChips";
+import { toggleCat, filterByCats, totalsByCat } from "../../lib/catFilter";
 
 // Emoji per category for the cost analysis panel (EXP_CATS icons + non-business cats)
 const HALL_CAT_EMOJI = {
@@ -74,7 +76,9 @@ export default function HallExpenses() {
   const [editId, setEditId]   = useState(null);
   const [errors, setErrors]   = useState({});
   const [search, setSearch]   = useState("");
-  const [filterCat, setFilterCat] = useState("");
+  // Several categories at once. An EMPTY list means every category, exactly as
+  // "All Categories" did — so clearing the filter never blanks the screen.
+  const [filterCats, setFilterCats] = useState([]);
   const [filterType, setFilterType] = useState(""); // "" | "business" | "nonbusiness"
   const [filterMonthSel, setFilterMonth] = useState(() => thisMonth);
   const [delTarget, setDelTarget] = useState(null);
@@ -130,14 +134,23 @@ export default function HallExpenses() {
   [allBizItems, filterMonth, thisMonth]);
 
   // ── Filtered list ─────────────────────────────────────────────────────────────
+  // The amount on each chip covers the month and type already on screen, so it
+  // always agrees with the total underneath.
+  const catTotals = useMemo(() => {
+    let list = [...normalizedExpenses];
+    if (filterType)  list = list.filter(e => e.expType === filterType);
+    if (filterMonth) list = list.filter(e => (e.date||"").startsWith(filterMonth));
+    return totalsByCat(list, e => e.cat, e => e.amount);
+  }, [normalizedExpenses, filterType, filterMonth]);
+
   const filtered = useMemo(() => {
     let list = [...normalizedExpenses];
     if (search)      list = list.filter(e => (e.cat||"").toLowerCase().includes(search.toLowerCase()) || (e.desc||"").toLowerCase().includes(search.toLowerCase()) || (e.empName||"").toLowerCase().includes(search.toLowerCase()));
-    if (filterCat)   list = list.filter(e => e.cat === filterCat);
+    list = filterByCats(list, filterCats, e => e.cat);
     if (filterType)  list = list.filter(e => e.expType === filterType);
     if (filterMonth) list = list.filter(e => (e.date||"").startsWith(filterMonth));
     return list.slice().reverse();
-  }, [normalizedExpenses, search, filterCat, filterType, filterMonth]);
+  }, [normalizedExpenses, search, filterCats, filterType, filterMonth]);
 
   const filteredTotal = filtered.reduce((s,e)=>s+(e.amount||0),0);
 
@@ -336,7 +349,7 @@ export default function HallExpenses() {
         monthLabel={monthLabel}
         catEmoji={HALL_CAT_EMOJI}
         accent={C.maroon}
-        onPickCategory={cat => { setFilterCat(prev => prev === cat ? "" : cat); setShowRecords(true); }}
+        onPickCategory={cat => { setFilterCats(prev => toggleCat(prev, cat)); setShowRecords(true); }}
       />
 
       {/* ── Record Expense Form — whole panel tints with the selected type ── */}
@@ -474,10 +487,6 @@ export default function HallExpenses() {
           <option value="business">🏢 Business</option>
           <option value="nonbusiness">💸 Non-Business</option>
         </select>
-        <select value={filterCat} onChange={e=>setFilterCat(e.target.value)} style={{ ...inp(), maxWidth:200 }}>
-          <option value="">All Categories</option>
-          {[...BUSINESS_CAT_OPTIONS,...NONBUSINESS_CAT_OPTIONS].map(o=><option key={o.v} value={o.v}>{o.l}</option>)}
-        </select>
         {isAdmin && (
           <select value={filterMonth} onChange={e=>setFilterMonth(e.target.value)} style={{ ...inp(), maxWidth:170 }}>
             <option value="">All Months</option>
@@ -489,6 +498,19 @@ export default function HallExpenses() {
         )}
         <button onClick={exportCSV} style={{ padding:"9px 14px", borderRadius:8, border:"1.5px solid #e5e3de", background:"#fff", cursor:"pointer", fontFamily:"inherit", fontWeight:700, fontSize:11, whiteSpace:"nowrap" }}>⬇ CSV</button>
       </div>
+
+      <CategoryChips
+        groups={[
+          { name: "Business",     options: BUSINESS_CAT_OPTIONS },
+          { name: "Non-business", options: NONBUSINESS_CAT_OPTIONS },
+        ]}
+        selected={filterCats}
+        onToggle={cat => setFilterCats(prev => toggleCat(prev, cat))}
+        onSelectAll={() => setFilterCats([...BUSINESS_CAT_OPTIONS, ...NONBUSINESS_CAT_OPTIONS].map(o => o.v))}
+        onClear={() => setFilterCats([])}
+        totals={catTotals}
+        accent={C.maroon}
+      />
 
       {/* ── Filtered total bar ── */}
       <div style={{ display:"flex", gap:12, marginBottom:10, flexWrap:"wrap" }}>
