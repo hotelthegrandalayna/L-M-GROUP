@@ -1,36 +1,19 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { useApp } from "../context/AppContext";
 import { todayStr } from "../utils/helpers";
 import { pendingTasks, freqLabel } from "../utils/tasks";
-import { sendNtfyAlert } from "../utils/ntfy";
 
 const C = { navy:"#1e3a5f", dim:"#666", green:"#1a7040", red:"#c0392b" };
 
 // Pops up when the app opens if any task is due/overdue, so it can't be missed.
-// Also fires one daily push notification when tasks are pending.
+// Tasks and cleaning are reminded on screen only — the owner asked for no ntfy
+// push for them, since they fire every day and drown the alerts that matter.
 export default function TaskReminderPopup() {
   const { tasks, taskDone, setTaskDone, curUser, setActiveTab } = useApp();
   const today = todayStr();
   const [dismissed, setDismissed] = useState(false);
 
   const pending = useMemo(() => pendingTasks(tasks, taskDone, today), [tasks, taskDone, today]);
-
-  // One push per day when there are pending tasks
-  useEffect(() => {
-    if (!pending.length) return;
-    const key = "ga_task_notified_" + today;
-    if (localStorage.getItem(key)) return;
-    localStorage.setItem(key, "1");
-    const overdue = pending.filter(p => p.overdue).length;
-    sendNtfyAlert(
-      `TASKS DUE — ${pending.length} pending`,
-      pending.slice(0, 6).map(p => (p.overdue ? "⚠ " : "• ") + p.task.title).join("\n")
-        + (pending.length > 6 ? `\n…and ${pending.length - 6} more` : "")
-        + (overdue ? `\n\n${overdue} OVERDUE` : ""),
-      undefined,
-      { tags: overdue ? "red_circle" : "clipboard", priority: overdue ? "high" : "default" }
-    ).catch(() => {});
-  }, [pending, today]);
 
   if (dismissed || !pending.length) return null;
 
