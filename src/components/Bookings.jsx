@@ -17,6 +17,7 @@ function DateInput({ value, onChange, min, style, className }) {
   );
 }
 import { todayStr, money, nightsBetween, bookingConflicts, maxId, newLocalId, formatDate } from "../utils/helpers";
+import { paymentTs } from "../lib/paymentDate";
 import { sendWhatsAppAlert, buildHotelWaMessage } from "../utils/whatsapp";
 import { sendNtfyAlert } from "../utils/ntfy";
 import { logEvent } from "../utils/auditLog";
@@ -790,7 +791,7 @@ export function NewBookingModal({ onClose, prefill, editBooking }) {
     const a   = isEdit ? (priorPaid + newPay) : adv;
     const t   = needsTxn ? txnNum.trim() : "";
     const priorHistory = isEdit ? (eb.paymentHistory || []) : [];
-    const newHistoryEntry = newPay > 0 ? [{ ts: new Date().toISOString(), tz: deviceTz(), amount: newPay, method, txnNumber: t, note: isEdit ? "Payment at check-in" : "Advance paid", type: "room", by: curUser || "staff" }] : [];
+    const newHistoryEntry = newPay > 0 ? [{ ts: paymentTs({ isEdit, stayDate: eb && eb.checkin }), tz: deviceTz(), amount: newPay, method, txnNumber: t, note: isEdit ? "Payment at check-in" : "Advance paid", type: "room", by: curUser || "staff" }] : [];
     return {
       id, guest: name.trim(), phone: phone.trim(), email: "",
       room: selRoom.number, type: selRoom.type,
@@ -853,7 +854,7 @@ export function NewBookingModal({ onClose, prefill, editBooking }) {
     const a  = isEdit ? (priorPaid + newPay) : multiAdv;
     const t  = needsTxn ? txnNum.trim() : "";
     const priorHistory = isEdit ? (eb.paymentHistory || []) : [];
-    const newHistoryEntry = newPay > 0 ? [{ ts: new Date().toISOString(), tz: deviceTz(), amount: newPay, method, txnNumber: t, note: isEdit ? "Payment at check-in" : "Advance paid", type: "room", by: curUser || "staff" }] : [];
+    const newHistoryEntry = newPay > 0 ? [{ ts: paymentTs({ isEdit, stayDate: eb && eb.checkin }), tz: deviceTz(), amount: newPay, method, txnNumber: t, note: isEdit ? "Payment at check-in" : "Advance paid", type: "room", by: curUser || "staff" }] : [];
     const minCi = multiRoomData.reduce((mn, c) => c.ci < mn ? c.ci : mn, multiRoomData[0].ci);
     const maxCo = multiRoomData.reduce((mx, c) => c.co > mx ? c.co : mx, "");
     const maxNights = multiRoomData.reduce((mx, c) => c.nights > mx ? c.nights : mx, 0);
