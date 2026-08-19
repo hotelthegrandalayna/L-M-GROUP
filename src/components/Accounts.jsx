@@ -9,7 +9,6 @@ import { hotelBusinessOnly } from "../utils/expenseType";
 import { monthMoney, bookingMonthlyParts } from "../lib/hotelMoney";
 import { hasHotelSupabaseConfig, loadHotelBookingsForRange } from "../lib/hotelSupabase";
 import AdminRooms from "./Admin/AdminRooms";
-import ManualIncome from "./ManualIncome";
 import {
   roomStats, acStats, occupancy, discountStats, patternStats,
   revenueByDay, revenueByWeek, revenueByMonth, costByCategoryOverMonths, salaryStats,
@@ -309,7 +308,7 @@ function AreaChart({ data, height = 200 }) {
 }
 
 export default function Accounts() {
-  const { curRole, curUser, bookings, revenues, updateRevenues, expenses, expTypes, rooms } = useApp();
+  const { curRole, bookings, revenues, expenses, expTypes, rooms } = useApp();
   const isMobile = useIsMobile();
   const thisMonth = new Date().toISOString().slice(0, 7);
   const [tab, setTab] = useState("overview");
@@ -643,16 +642,6 @@ export default function Accounts() {
       {/* ── OVERVIEW ── */}
       {tab==="overview" && (<>
         <FullHousePanel stats={fullHouse} month={month} />
-        <ManualIncome
-          month={month}
-          revenues={revenues}
-          updateRevenues={updateRevenues}
-          curUser={curUser}
-          isAdmin={curRole === "admin"}
-          card={card}
-          capLbl={capLbl}
-          num={num}
-        />
 
         {/* Revenue trend — was its own tab, now lives here */}
         <div style={{ ...card, marginBottom:12 }}>
